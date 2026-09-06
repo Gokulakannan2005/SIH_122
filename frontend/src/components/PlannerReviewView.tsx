@@ -11,7 +11,16 @@ import {
   Check,
   RotateCcw,
   ArrowRight,
-  Camera
+  Camera,
+  Layers,
+  FileText,
+  Eye,
+  ShieldCheck,
+  AlertOctagon,
+  ChevronRight,
+  Sparkle,
+  Calendar,
+  ExternalLink
 } from 'lucide-react';
 import { PlannerActionType } from '../types';
 
@@ -24,6 +33,8 @@ export const PlannerReviewView: React.FC = () => {
     handlePlannerAction,
     selectedReviewUpdateId,
     setSelectedReviewUpdateId,
+    setSelectedInspectorUpdateId,
+    setActiveTab,
   } = useProject();
 
   // Search & Filter in the left queue
@@ -68,12 +79,16 @@ export const PlannerReviewView: React.FC = () => {
       });
   }, [siteUpdates, matchResults, plannerDecisions, queueFilter, queueSearch]);
 
-  // Selected item
-  const activeUpdateId =
-    selectedReviewUpdateId ||
-    (queueItems.length > 0 ? queueItems[0].id : siteUpdates[0]?.id);
+  // Robust active update resolution: ensures no stale selection if queue item is completed
+  const currentUpdate = useMemo(() => {
+    if (queueItems.length === 0) return null;
+    if (selectedReviewUpdateId) {
+      const found = queueItems.find(item => item.id === selectedReviewUpdateId);
+      if (found) return found;
+    }
+    return queueItems[0];
+  }, [queueItems, selectedReviewUpdateId]);
 
-  const currentUpdate = siteUpdates.find(u => u.id === activeUpdateId);
   const currentMatch = currentUpdate ? matchResults[currentUpdate.id] : null;
   const currentDecision = currentUpdate ? plannerDecisions[currentUpdate.id] : null;
 
@@ -91,8 +106,11 @@ export const PlannerReviewView: React.FC = () => {
       setSelectedActivityId(decision?.linkedActivityId || match?.candidateActivityId || null);
       setPlannerNote(decision?.plannerNote || '');
       setActionSuccessMessage(null);
+    } else {
+      setSelectedActivityId(null);
+      setPlannerNote('');
     }
-  }, [activeUpdateId, matchResults, plannerDecisions]);
+  }, [currentUpdate?.id, matchResults, plannerDecisions]);
 
   // Filtered schedule activities for linking
   const filteredSchedule = useMemo(() => {
@@ -114,8 +132,26 @@ export const PlannerReviewView: React.FC = () => {
   }, [schedule, searchScheduleQuery]);
 
   const selectedActivityObj = schedule.find(a => a.activityId === selectedActivityId);
+  const recommendedActivityObj = schedule.find(a => a.activityId === currentMatch?.candidateActivityId);
   const isSelectedDifferentFromRecommended =
     selectedActivityId !== (currentMatch?.candidateActivityId || null);
+
+  // AI Suggestions: Top candidates for this update
+  const suggestedCandidates = useMemo(() => {
+    if (!currentUpdate) return [];
+    if (currentMatch?.suggestedActivities && currentMatch.suggestedActivities.length > 0) {
+      return currentMatch.suggestedActivities;
+    }
+    // Fallback: Pick top matching activities by discipline and area
+    const matchingDiscipline = schedule.filter(
+      a => a.discipline.toLowerCase() === currentUpdate.discipline.toLowerCase()
+    );
+    return matchingDiscipline.slice(0, 3).map(a => ({
+      activity: a,
+      score: a.activityId === currentMatch?.candidateActivityId ? (currentMatch?.confidenceScore || 80) : 55,
+      reasons: [a.discipline, a.area],
+    }));
+  }, [currentUpdate, currentMatch, schedule]);
 
   // Action dispatcher with feedback toast & auto-advance
   const executeAction = (
@@ -129,9 +165,10 @@ export const PlannerReviewView: React.FC = () => {
 
     // Determine next queue item to select
     const currentIndex = queueItems.findIndex(item => item.id === updateIdToProcess);
-    let nextItem = null;
-    if (currentIndex !== -1 && queueItems.length > 1) {
-      nextItem = currentIndex < queueItems.length - 1 ? queueItems[currentIndex + 1] : queueItems[0];
+    let nextItemId: string | null = null;
+    if (queueItems.length > 1) {
+      const nextIndex = currentIndex < queueItems.length - 1 ? currentIndex + 1 : 0;
+      nextItemId = queueItems[nextIndex].id;
     }
 
     handlePlannerAction(updateIdToProcess, type, targetId, finalNote);
@@ -143,59 +180,78 @@ export const PlannerReviewView: React.FC = () => {
     else if (type === 'reject') msg = 'Site update rejected';
 
     setActionSuccessMessage(msg);
-    if (nextItem && nextItem.id !== updateIdToProcess) {
-      setSelectedReviewUpdateId(nextItem.id);
-    }
+    setSelectedReviewUpdateId(nextItemId);
+
     setTimeout(() => {
       setActionSuccessMessage(null);
     }, 4000);
   };
 
+  const pendingReviewTotal = siteUpdates.filter(
+    u => matchResults[u.id]?.category === 'review' && !plannerDecisions[u.id]
+  ).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Top Banner */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Top Banner Header */}
       <div className="banner-card">
         <div>
-          <h2 className="banner-title">
-            <AlertTriangle size={20} style={{ color: 'var(--brand-primary)' }} />
-            Planner Review & Schedule Alignment Workbench
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+            <span className="brand-badge" style={{ background: '#e9f2ff', color: '#0c66e4', borderColor: '#cce0ff' }}>
+              Planner Reconciliation Center
+            </span>
+            <span
+              className="mono-pill"
+              style={{
+                background: pendingReviewTotal > 0 ? '#fffbeb' : '#ecfdf5',
+                color: pendingReviewTotal > 0 ? '#92400e' : '#047857',
+                borderColor: pendingReviewTotal > 0 ? '#fcd34d' : '#6ee7b7',
+                fontWeight: 700,
+              }}
+            >
+              {pendingReviewTotal} Items Pending Review
+            </span>
+          </div>
+          <h1 className="banner-title">
+            <Sparkles size={22} style={{ color: 'var(--brand-primary)' }} />
+            <span>AI Auto-Match Matrix & Task Approval</span>
+          </h1>
           <p className="banner-desc">
-            Verify ambiguous supervisor reports, inspect confidence breakdowns, and link or relink site evidence to L5/L6 schedule items.
+            Review site supervisor reports, inspect AI confidence scores, and confirm or re-assign progress to L5/L6 milestone activities.
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span
-            className="mono-pill"
-            style={{
-              background: 'var(--status-review-bg)',
-              color: 'var(--status-review-fg)',
-              borderColor: 'var(--status-review-border)',
-              fontWeight: 700,
-              padding: '0.3rem 0.65rem',
-            }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setActiveTab('site-updates')}
           >
-            {siteUpdates.filter(u => matchResults[u.id]?.category === 'review' && !plannerDecisions[u.id]).length} Items Need Review
-          </span>
+            <span>View All Field Updates</span>
+            <ArrowRight size={14} />
+          </button>
         </div>
       </div>
 
-      {/* Dual Pane Layout */}
-      <div className="review-container">
-        {/* Left Pane: Queue List */}
+      {/* Dual Pane Workbench Layout */}
+      <div className="review-container" style={{ gridTemplateColumns: '340px minmax(0, 1fr)', gap: '1.5rem' }}>
+        
+        {/* Left Pane: Queue List with Filters */}
         <div className="review-queue-pane">
           <div className="review-queue-header">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Review Queue ({queueItems.length})
+                Queue ({queueItems.length})
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Sorted by Confidence
               </span>
             </div>
 
-            {/* Filter pills */}
-            <div style={{ display: 'flex', gap: 3, marginBottom: '0.65rem' }}>
+            {/* Filter Pills */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '0.65rem' }}>
               {([
-                { id: 'review', label: 'Review' },
+                { id: 'review', label: 'Needs Review' },
                 { id: 'unplanned', label: 'Unplanned' },
                 { id: 'approved', label: 'Approved' },
                 { id: 'all', label: 'All' },
@@ -203,7 +259,12 @@ export const PlannerReviewView: React.FC = () => {
                 <button
                   key={tab.id}
                   className={`btn btn-sm ${queueFilter === tab.id ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ padding: '2px 8px', fontSize: '0.725rem' }}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '0.725rem',
+                    flex: 1,
+                    fontWeight: queueFilter === tab.id ? 700 : 500,
+                  }}
                   onClick={() => setQueueFilter(tab.id)}
                   type="button"
                 >
@@ -214,29 +275,33 @@ export const PlannerReviewView: React.FC = () => {
 
             {/* Search Input */}
             <div className="search-input-box">
-              <Search size={13} className="search-icon" />
+              <Search size={14} className="search-icon" />
               <input
                 type="text"
                 className="form-input"
-                style={{ width: '100%', fontSize: '0.775rem', padding: '0.35rem 0.6rem 0.35rem 1.9rem' }}
-                placeholder="Filter queue items..."
+                style={{ width: '100%', fontSize: '0.8rem' }}
+                placeholder="Search queue updates..."
                 value={queueSearch}
                 onChange={e => setQueueSearch(e.target.value)}
               />
             </div>
           </div>
 
-          {/* Items List */}
-          <div className="review-queue-list">
+          {/* Queue Items List */}
+          <div className="review-queue-list" style={{ maxHeight: '720px' }}>
             {queueItems.length === 0 ? (
-              <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.825rem' }}>
-                No updates match this queue filter.
+              <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                <CheckCircle2 size={32} style={{ color: '#047857', margin: '0 auto 0.5rem' }} />
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>No Items In Queue</div>
+                <div style={{ fontSize: '0.775rem', marginTop: 4 }}>
+                  All updates in the &ldquo;{queueFilter}&rdquo; filter have been processed!
+                </div>
               </div>
             ) : (
               queueItems.map(item => {
                 const match = matchResults[item.id];
                 const decision = plannerDecisions[item.id];
-                const isActive = item.id === activeUpdateId;
+                const isActive = item.id === currentUpdate?.id;
 
                 const score = match?.confidenceScore || 0;
                 const scoreClass = score >= 75 ? 'ready' : score >= 50 ? 'review' : 'unplanned';
@@ -246,28 +311,34 @@ export const PlannerReviewView: React.FC = () => {
                     key={item.id}
                     className={`review-queue-item ${isActive ? 'active' : ''}`}
                     onClick={() => setSelectedReviewUpdateId(item.id)}
+                    style={{
+                      padding: '0.85rem 1rem',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      background: isActive ? 'var(--brand-surface)' : 'transparent',
+                      borderLeft: isActive ? '3px solid var(--brand-primary)' : '3px solid transparent',
+                    }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--brand-primary)' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.775rem', fontWeight: 800, color: 'var(--brand-primary)' }}>
                         {item.id}
                       </span>
-                      <span className={`status-badge ${scoreClass}`} style={{ fontSize: '0.675rem' }}>
+                      <span className={`status-badge ${scoreClass}`} style={{ fontSize: '0.7rem' }}>
                         {score}% Conf
                       </span>
                     </div>
 
                     <div style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.35, marginBottom: 4 }}>
-                      {item.extractedDescription}
+                      {item.extractedDescription || item.rawText}
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                      <span className="mono-pill" style={{ fontSize: '0.65rem' }}>{item.discipline}</span>
-                      <span>{item.sourceFile}</span>
+                      <span className="mono-pill" style={{ fontSize: '0.675rem' }}>{item.discipline}</span>
+                      <span>Area: {item.area || 'General'}</span>
                     </div>
 
                     {decision && (
-                      <div style={{ marginTop: 5, paddingTop: 4, borderTop: '1px dashed var(--border-subtle)', fontSize: '0.7rem', color: 'var(--status-ready-fg)', fontWeight: 600 }}>
-                        &bull; Action: {decision.status.toUpperCase()} ({decision.linkedActivityId || 'UNPLANNED'})
+                      <div style={{ marginTop: 6, paddingTop: 4, borderTop: '1px dashed var(--border-subtle)', fontSize: '0.725rem', color: '#047857', fontWeight: 700 }}>
+                        ✓ {decision.status.toUpperCase()} ({decision.linkedActivityId || 'UNPLANNED'})
                       </div>
                     )}
                   </div>
@@ -277,340 +348,467 @@ export const PlannerReviewView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Pane: Review & Linker Workbench */}
+        {/* Right Pane: Review & Approval Workbench */}
         {currentUpdate && currentMatch ? (
-          <div className="review-detail-pane">
-            {/* Workbench Header */}
-            <div className="review-detail-header">
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div className="review-detail-pane" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', background: 'transparent', border: 'none', boxShadow: 'none' }}>
+            
+            {/* Success Toast */}
+            {actionSuccessMessage && (
+              <div
+                style={{
+                  background: 'var(--status-ready-bg)',
+                  border: '1px solid var(--status-ready-border)',
+                  color: 'var(--status-ready-fg)',
+                  padding: '0.85rem 1.15rem',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.6rem',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  boxShadow: 'var(--shadow-xs)',
+                }}
+              >
+                <CheckCircle2 size={18} />
+                <span>{actionSuccessMessage}</span>
+              </div>
+            )}
+
+            {/* SECTION 1: WHAT ARE WE LOOKING AT? (Field Event Details) */}
+            <div className="card">
+              <div className="card-header" style={{ background: '#f8fafc' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                    1. Field Event (Source of Truth)
+                  </span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)', fontSize: '0.95rem' }}>
                     {currentUpdate.id}
                   </span>
                   <span className="mono-pill">{currentUpdate.discipline}</span>
                   <span className="mono-pill">{currentUpdate.area}</span>
                   <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-                    Report Date: {currentUpdate.reportDate}
+                    📅 {currentUpdate.reportDate}
                   </span>
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 3 }}>
-                  Source: <strong>{currentUpdate.sourceFile}</strong> {currentUpdate.lineEvidence ? `(Line/Row #${currentUpdate.lineEvidence})` : ''}
-                  {currentUpdate.supervisor ? ` | Supervisor: ${currentUpdate.supervisor}` : ''}
+
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setSelectedInspectorUpdateId(currentUpdate.id)}
+                    title="Open side drawer to inspect full metadata and hash provenance"
+                  >
+                    <Eye size={13} />
+                    <span>Inspect Full Metadata</span>
+                  </button>
                 </div>
               </div>
 
-              <div>
-                <span
-                  className={`status-badge ${
-                    currentMatch.confidenceScore >= 75 ? 'ready' : currentMatch.confidenceScore >= 50 ? 'review' : 'unplanned'
-                  }`}
-                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem' }}
-                >
-                  {currentMatch.confidenceScore}% Match ({currentMatch.category.toUpperCase()})
-                </span>
-              </div>
-            </div>
-
-            {/* Workbench Body */}
-            <div className="review-detail-body">
-              {/* Success Notification Alert */}
-              {actionSuccessMessage && (
-                <div
-                  style={{
-                    background: 'var(--status-ready-bg)',
-                    border: '1px solid var(--status-ready-border)',
-                    color: 'var(--status-ready-fg)',
-                    padding: '0.65rem 0.85rem',
-                    borderRadius: 'var(--radius-sm)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.45rem',
-                    fontWeight: 600,
-                    fontSize: '0.825rem',
-                  }}
-                >
-                  <Check size={15} />
-                  <span>{actionSuccessMessage}</span>
-                </div>
-              )}
-
-              {/* Photo Evidence and Issue Blocker Display in Review Workbench */}
-              {currentUpdate.images && currentUpdate.images.length > 0 && (
-                <div className="card" style={{ padding: '0.85rem 1rem', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.775rem', fontWeight: 800, color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <Camera size={14} /> Attached Supervisor Photo Evidence
-                    </span>
-                    <span className="mono-pill" style={{ textTransform: 'capitalize' }}>{currentUpdate.images[0].type}</span>
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 2 }}>
+                    SUPERVISOR NOTE:
                   </div>
-                  <div style={{ borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: '#0f172a', maxHeight: 180, display: 'flex', justifyContent: 'center' }}>
-                    <img src={currentUpdate.images[0].url} alt="Photo Evidence" style={{ maxHeight: 180, width: '100%', objectFit: 'contain' }} />
-                  </div>
-                  <div style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                    &ldquo;{currentUpdate.images[0].caption}&rdquo; &bull; {currentUpdate.images[0].timestamp} ({currentUpdate.images[0].supervisor})
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                    {currentUpdate.extractedDescription}
                   </div>
                 </div>
-              )}
 
-              {currentUpdate.issueFlag && (
-                <div style={{ background: 'var(--status-unplanned-bg)', border: '1px solid var(--status-unplanned-border)', borderRadius: 'var(--radius-sm)', padding: '0.75rem', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.8rem', color: 'var(--status-unplanned-fg)' }}>
-                    ⚠ REPORTED SITE BLOCKER: {currentUpdate.issueFlag} ({currentUpdate.issueSeverity?.toUpperCase() || 'MEDIUM'} SEVERITY)
-                  </div>
-                </div>
-              )}
-
-              {/* Source Text Evidence Card */}
-              <div className="card" style={{ padding: '0.85rem 1rem' }}>
-                <h4 style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
-                  Raw Supervisor Field Evidence & Extracted Task
-                </h4>
-                <div className="raw-code-box" style={{ marginBottom: '0.65rem' }}>
+                <div className="raw-code-box" style={{ padding: '0.65rem 0.85rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 2, fontWeight: 700 }}>VERBATIM LOG TEXT:</div>
                   &ldquo;{currentUpdate.rawText}&rdquo;
                 </div>
-                <div style={{ display: 'flex', gap: '1.25rem', fontSize: '0.775rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-                  <span><strong>Extracted Activity:</strong> {currentUpdate.extractedDescription}</span>
-                  <span><strong>Status:</strong> {currentUpdate.eventStatus}</span>
-                  {currentUpdate.quantity && (
-                    <span><strong>Quantity:</strong> {currentUpdate.quantity} {currentUpdate.unit || ''}</span>
-                  )}
-                </div>
-              </div>
 
-              {/* Confidence Score Breakdown */}
-              <div className="card" style={{ padding: '0.85rem 1rem', background: 'var(--bg-subtle)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
-                  <h4 style={{ fontSize: '0.825rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <Sparkles size={14} style={{ color: 'var(--brand-primary)' }} />
-                    Multi-Factor Alignment Score (Total: {currentMatch.confidenceScore} / 100)
-                  </h4>
-                </div>
-
-                <div className="score-breakdown-grid" style={{ marginBottom: '0.75rem' }}>
-                  <div className="score-chip">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600, marginBottom: 3 }}>
-                      <span>Keyword Match</span>
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.keywordScore}/50</span>
-                    </div>
-                    <div className="progress-bar-container">
-                      <div
-                        className="progress-bar-fill blue"
-                        style={{ width: `${(currentMatch.scoreBreakdown.keywordScore / 50) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="score-chip">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600, marginBottom: 3 }}>
-                      <span>Discipline Match</span>
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.disciplineScore}/20</span>
-                    </div>
-                    <div className="progress-bar-container">
-                      <div
-                        className="progress-bar-fill green"
-                        style={{ width: `${(currentMatch.scoreBreakdown.disciplineScore / 20) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="score-chip">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600, marginBottom: 3 }}>
-                      <span>Area Match</span>
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.areaScore}/15</span>
-                    </div>
-                    <div className="progress-bar-container">
-                      <div
-                        className="progress-bar-fill amber"
-                        style={{ width: `${(currentMatch.scoreBreakdown.areaScore / 15) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="score-chip">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600, marginBottom: 3 }}>
-                      <span>Fuzzy Similarity</span>
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.fuzzyScore}/15</span>
-                    </div>
-                    <div className="progress-bar-container">
-                      <div
-                        className="progress-bar-fill blue"
-                        style={{ width: `${(currentMatch.scoreBreakdown.fuzzyScore / 15) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Match Reasons */}
-                {currentMatch.matchReasons && currentMatch.matchReasons.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                    {currentMatch.matchReasons.map((reason, idx) => (
-                      <span key={idx} className="mono-pill" style={{ background: '#ffffff', fontSize: '0.7rem' }}>
-                        ✓ {reason}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* L5/L6 Schedule Search and Interactive Linker */}
-              <div className="card" style={{ padding: '0.85rem 1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
-                  <h4 style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <LinkIcon size={15} style={{ color: 'var(--brand-primary)' }} />
-                    Target Baseline Schedule Activity
-                  </h4>
-                  {selectedActivityObj && (
-                    <span
-                      className="mono-pill"
+                {/* Evidence Chips: Photo & Blocker */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                  {currentUpdate.images && currentUpdate.images.length > 0 && (
+                    <div
                       style={{
-                        background: 'var(--status-ready-bg)',
-                        color: 'var(--status-ready-fg)',
-                        borderColor: 'var(--status-ready-border)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        background: '#e9f2ff',
+                        border: '1px solid #cce0ff',
+                        color: '#0c66e4',
+                        padding: '4px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => setSelectedInspectorUpdateId(currentUpdate.id)}
+                    >
+                      <Camera size={14} />
+                      <span>{currentUpdate.images.length} Photo Proof Attached (View)</span>
+                    </div>
+                  )}
+
+                  {currentUpdate.issueFlag && (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        background: '#fef2f2',
+                        border: '1px solid #fca5a5',
+                        color: '#991b1b',
+                        padding: '4px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.75rem',
                         fontWeight: 700,
                       }}
                     >
-                      Selected: {selectedActivityObj.activityId}
+                      <AlertOctagon size={14} />
+                      <span>Blocker Flagged: {currentUpdate.issueFlag}</span>
+                    </div>
+                  )}
+
+                  {currentUpdate.supervisor && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                      Reported by: <strong>{currentUpdate.supervisor}</strong>
                     </span>
                   )}
                 </div>
+              </div>
+            </div>
 
-                {/* Interactive Search Bar */}
-                <div className="search-input-box" style={{ marginBottom: '0.65rem' }}>
-                  <Search size={14} className="search-icon" />
-                  <input
-                    type="text"
-                    className="form-input"
-                    style={{ width: '100%' }}
-                    placeholder="Search activities by ID, name, WBS, area, or alias..."
-                    value={searchScheduleQuery}
-                    onChange={e => setSearchScheduleQuery(e.target.value)}
-                  />
+            {/* SECTION 2: WHAT IS IT ASSIGNED TO? (AI Alignment & Suggestions) */}
+            <div className="card">
+              <div className="card-header" style={{ background: '#f8fafc' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                    2. AI Match & Milestone Assignment
+                  </span>
                 </div>
-
-                {/* Schedule Activity Selectable List */}
-                <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5, paddingRight: 3 }}>
-                  {filteredSchedule.slice(0, 15).map(act => {
-                    const isSelected = act.activityId === selectedActivityId;
-                    const isRecommended = currentMatch.candidateActivityId === act.activityId;
-
-                    return (
-                      <div
-                        key={act.activityId}
-                        className={`schedule-select-item ${isSelected ? 'selected' : ''}`}
-                        onClick={() => setSelectedActivityId(act.activityId)}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)', fontSize: '0.825rem' }}>
-                              {act.activityId}
-                            </span>
-                            <span className="mono-pill" style={{ fontSize: '0.675rem' }}>WBS {act.wbs}</span>
-                            <span className="mono-pill" style={{ fontSize: '0.675rem' }}>{act.discipline}</span>
-                            {isRecommended && (
-                              <span style={{ background: 'var(--status-ready-bg)', color: 'var(--status-ready-fg)', border: '1px solid var(--status-ready-border)', fontWeight: 700, fontSize: '0.65rem', padding: '1px 5px', borderRadius: 3 }}>
-                                ★ Algorithmic Match
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ fontWeight: 600, fontSize: '0.825rem', color: 'var(--text-primary)' }}>
-                            {act.activityName}
-                          </div>
-                          <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                            Area: {act.area} | Window: {act.plannedStart} to {act.plannedFinish}
-                          </div>
-                        </div>
-
-                        <input
-                          type="radio"
-                          name="selectedSchedule"
-                          checked={isSelected}
-                          onChange={() => setSelectedActivityId(act.activityId)}
-                          style={{ width: 15, height: 15, cursor: 'pointer' }}
-                        />
-                      </div>
-                    );
-                  })}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span
+                    className="status-badge"
+                    style={{
+                      background: currentMatch.confidenceScore >= 75 ? 'var(--status-ready-bg)' : 'var(--status-review-bg)',
+                      color: currentMatch.confidenceScore >= 75 ? 'var(--status-ready-fg)' : 'var(--status-review-fg)',
+                      borderColor: currentMatch.confidenceScore >= 75 ? 'var(--status-ready-border)' : 'var(--status-review-border)',
+                      fontSize: '0.75rem',
+                      padding: '3px 8px',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {currentMatch.confidenceScore}% AI Confidence ({currentMatch.category.toUpperCase()})
+                  </span>
                 </div>
               </div>
 
-              {/* Planner Decision & Audit Justification */}
-              <div className="card" style={{ padding: '0.85rem 1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.3rem' }}>
-                  Planner Audit Note (Optional Justification):
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                
+                {/* Algorithmic Recommended Candidate Card */}
+                {recommendedActivityObj ? (
+                  <div
+                    style={{
+                      border: selectedActivityId === recommendedActivityObj.activityId ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '0.85rem 1rem',
+                      background: selectedActivityId === recommendedActivityObj.activityId ? '#f0f7ff' : '#ffffff',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '1rem',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => setSelectedActivityId(recommendedActivityObj.activityId)}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 3 }}>
+                        <span style={{ background: '#047857', color: '#ffffff', fontSize: '0.675rem', fontWeight: 800, padding: '1px 6px', borderRadius: 'var(--radius-xs)' }}>
+                          ★ AI Top Recommendation
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)', fontSize: '0.9rem' }}>
+                          {recommendedActivityObj.activityId}
+                        </span>
+                        <span className="mono-pill">WBS {recommendedActivityObj.wbs}</span>
+                        <span className="mono-pill">{recommendedActivityObj.discipline}</span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                        {recommendedActivityObj.activityName}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                        Area: <strong>{recommendedActivityObj.area}</strong> | Window: {recommendedActivityObj.plannedStart} to {recommendedActivityObj.plannedFinish}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="radio"
+                        name="activeMatch"
+                        checked={selectedActivityId === recommendedActivityObj.activityId}
+                        onChange={() => setSelectedActivityId(recommendedActivityObj.activityId)}
+                        style={{ width: 18, height: 18, cursor: 'pointer' }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding: '0.85rem', background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 'var(--radius-md)', color: '#991b1b', fontSize: '0.825rem' }}>
+                    <strong>No deterministic match found.</strong> Choose a suggested alternative below or search the schedule baseline.
+                  </div>
+                )}
+
+                {/* AI Alternative Suggestions (1-Click Switch) */}
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.45rem', textTransform: 'uppercase' }}>
+                    Alternative Candidate Suggestions (1-Click Select):
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.5rem' }}>
+                    {suggestedCandidates.map((cand, idx) => {
+                      const isSelected = selectedActivityId === cand.activity.activityId;
+                      return (
+                        <div
+                          key={cand.activity.activityId}
+                          onClick={() => setSelectedActivityId(cand.activity.activityId)}
+                          style={{
+                            border: isSelected ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: '0.55rem 0.75rem',
+                            background: isSelected ? '#f0f7ff' : '#ffffff',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.775rem', color: 'var(--brand-primary)' }}>
+                              {cand.activity.activityId}
+                            </span>
+                            <span className="mono-pill" style={{ fontSize: '0.65rem' }}>
+                              {cand.score}% match
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {cand.activity.activityName}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            {cand.activity.area}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Schedule Activity Manual Search Box */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      Browse Full Milestone Schedule (L5/L6):
+                    </span>
+                    {searchScheduleQuery && (
+                      <span style={{ fontSize: '0.7rem', color: 'var(--brand-primary)', cursor: 'pointer' }} onClick={() => setSearchScheduleQuery('')}>
+                        Clear Search
+                      </span>
+                    )}
+                  </div>
+                  <div className="search-input-box" style={{ marginBottom: '0.5rem' }}>
+                    <Search size={14} className="search-icon" />
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ width: '100%', fontSize: '0.8rem' }}
+                      placeholder="Type activity ID, name, WBS or area to search all activities..."
+                      value={searchScheduleQuery}
+                      onChange={e => setSearchScheduleQuery(e.target.value)}
+                    />
+                  </div>
+
+                  {searchScheduleQuery && (
+                    <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '4px' }}>
+                      {filteredSchedule.map(act => (
+                        <div
+                          key={act.activityId}
+                          onClick={() => setSelectedActivityId(act.activityId)}
+                          style={{
+                            padding: '0.45rem 0.65rem',
+                            borderRadius: 'var(--radius-xs)',
+                            background: selectedActivityId === act.activityId ? 'var(--brand-surface)' : 'transparent',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <div>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.75rem', color: 'var(--brand-primary)', marginRight: 6 }}>
+                              {act.activityId}
+                            </span>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              {act.activityName}
+                            </span>
+                          </div>
+                          <span className="mono-pill" style={{ fontSize: '0.65rem' }}>{act.area}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 3: PROMINENT ACTION BAR */}
+            <div className="card" style={{ padding: '1.15rem 1.35rem', background: '#ffffff' }}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontSize: '0.775rem' }}>
+                  <span>Planner Verification Note / Justification (Logged to Audit Trail):</span>
                 </label>
                 <input
                   type="text"
                   className="form-input"
-                  style={{ width: '100%', marginBottom: '0.85rem', paddingLeft: '0.75rem' }}
-                  placeholder="e.g. Verified site supervisor log corresponds to Line CW spool in pump bay..."
+                  placeholder="e.g. Verified pipe spool tag matches isometric drawing CW-017..."
                   value={plannerNote}
                   onChange={e => setPlannerNote(e.target.value)}
                 />
+              </div>
 
-                {/* 4 Working Action Buttons */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.65rem', justifyContent: 'flex-end' }}>
-                  {/* Action 1 & 2: Approve / Relink */}
-                  {selectedActivityObj && (
-                    <button
-                      className="btn btn-primary"
-                      onClick={() =>
-                        executeAction(
-                          isSelectedDifferentFromRecommended ? 'relink' : 'approve',
-                          selectedActivityObj.activityId,
-                          isSelectedDifferentFromRecommended
-                            ? `Planner manually re-linked to ${selectedActivityObj.activityId}`
-                            : `Planner approved link to ${selectedActivityObj.activityId}`
-                        )
-                      }
-                      type="button"
-                    >
-                      <CheckCircle2 size={15} />
-                      <span>
-                        {isSelectedDifferentFromRecommended
-                          ? `Relink to ${selectedActivityObj.activityId}`
-                          : `Approve Link to ${selectedActivityObj.activityId}`}
-                      </span>
-                    </button>
-                  )}
-
-                  {/* Action 3: Mark as Unplanned */}
+              {/* Action Buttons with High-Contrast Colors */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+                
+                {/* Approve / Relink Button */}
+                {selectedActivityObj && (
                   <button
-                    className="btn btn-warning"
-                    onClick={() =>
-                      executeAction('mark_unplanned', null, 'Planner classified update as unplanned / out-of-scope work')
-                    }
                     type="button"
+                    className="btn btn-primary"
+                    style={{
+                      background: isSelectedDifferentFromRecommended ? '#0c66e4' : '#059669',
+                      borderColor: isSelectedDifferentFromRecommended ? '#0052cc' : '#047857',
+                      padding: '0.65rem 1.25rem',
+                      fontWeight: 800,
+                      fontSize: '0.875rem',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    }}
+                    onClick={() =>
+                      executeAction(
+                        isSelectedDifferentFromRecommended ? 'relink' : 'approve',
+                        selectedActivityObj.activityId,
+                        isSelectedDifferentFromRecommended
+                          ? `Planner manually re-linked to ${selectedActivityObj.activityId}`
+                          : `Planner approved link to ${selectedActivityObj.activityId}`
+                      )
+                    }
                   >
-                    <HelpCircle size={15} />
-                    <span>Mark as Unplanned Work</span>
+                    <CheckCircle2 size={16} />
+                    <span>
+                      {isSelectedDifferentFromRecommended
+                        ? `Confirm Re-Link to ${selectedActivityObj.activityId}`
+                        : `Approve Match to ${selectedActivityObj.activityId}`}
+                    </span>
                   </button>
+                )}
 
-                  {/* Action 4: Reject Report */}
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() =>
-                      executeAction('reject', null, 'Planner rejected duplicate or invalid site update')
-                    }
-                    type="button"
-                  >
-                    <XCircle size={15} />
-                    <span>Reject Report</span>
-                  </button>
-                </div>
+                {/* Mark as Unplanned Button */}
+                <button
+                  type="button"
+                  className="btn"
+                  style={{
+                    background: '#d97706',
+                    color: '#ffffff',
+                    borderColor: '#b45309',
+                    padding: '0.65rem 1.15rem',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                  }}
+                  onClick={() =>
+                    executeAction('mark_unplanned', null, 'Planner classified update as unplanned / out-of-scope work')
+                  }
+                >
+                  <HelpCircle size={16} />
+                  <span>Mark Unplanned Work</span>
+                </button>
+
+                {/* Reject Button */}
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{
+                    color: '#b91c1c',
+                    borderColor: '#fca5a5',
+                    padding: '0.65rem 1.15rem',
+                    fontWeight: 600,
+                    fontSize: '0.85rem',
+                  }}
+                  onClick={() =>
+                    executeAction('reject', null, 'Planner rejected duplicate or invalid site update')
+                  }
+                >
+                  <XCircle size={16} />
+                  <span>Reject Log</span>
+                </button>
               </div>
             </div>
+
           </div>
         ) : (
-          <div className="review-detail-pane" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 360 }}>
-            <div className="empty-state">
-              <CheckCircle2 size={36} style={{ color: 'var(--status-ready-fg)' }} />
-              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                No Update Selected
-              </div>
-              <p style={{ fontSize: '0.825rem' }}>Select an update item on the left queue to review.</p>
+          /* Empty / All Reconciled State (NO STALE DATA BUG) */
+          <div
+            className="card"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 420,
+              padding: '3rem 2rem',
+              textAlign: 'center',
+              gap: '1rem',
+            }}
+          >
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                background: '#ecfdf5',
+                border: '2px solid #6ee7b7',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#047857',
+              }}
+            >
+              <CheckCircle2 size={36} />
+            </div>
+
+            <div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                All Tasks in This Queue Reconciled! 🎉
+              </h3>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.35rem', maxWidth: 460 }}>
+                There are currently zero pending review items in the &ldquo;{queueFilter}&rdquo; filter. You can switch filters to review other items or return to the Project Control Center.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setQueueFilter('approved')}
+              >
+                <span>View Approved Items</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setQueueFilter('unplanned')}
+              >
+                <span>View Unplanned Work</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setActiveTab('dashboard')}
+              >
+                <span>Go to Control Center</span>
+                <ArrowRight size={14} />
+              </button>
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

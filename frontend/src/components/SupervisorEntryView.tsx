@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
 import { runLocalOCR, calculateImageFingerprint, normalizeEquipmentTag, OCRScanResult } from '../utils/ocrService';
-import { speechService, SAMPLE_VOICE_PRESETS, SpeechLanguage, VoicePreset } from '../utils/speechService';
+import { speechService, SAMPLE_VOICE_PRESETS, SpeechLanguage, VoicePreset, isOperaBrowser } from '../utils/speechService';
 import { parseSpokenUpdate } from '../utils/speechParser';
 import { SpokenParseResult } from '../types';
 
@@ -62,14 +62,17 @@ export const SupervisorEntryView: React.FC = () => {
   const [quantity, setQuantity] = useState('100%');
   const [supervisorName, setSupervisorName] = useState('R. Sharma (Lead Piping Supv)');
 
-  // Voice Dictation State
+  // Voice Dictation & Audio Engine State
   const [showVoiceCard, setShowVoiceCard] = useState<boolean>(true);
   const [voiceLang, setVoiceLang] = useState<SpeechLanguage>('en-IN');
   const [isVoiceRecording, setIsVoiceRecording] = useState<boolean>(false);
+  const [isMicActive, setIsMicActive] = useState<boolean>(false);
+  const [audioLevel, setAudioLevel] = useState<number>(0);
   const [voiceTranscript, setVoiceTranscript] = useState<string>('');
   const [interimVoiceText, setInterimVoiceText] = useState<string>('');
   const [parsedVoiceResult, setParsedVoiceResult] = useState<SpokenParseResult | null>(null);
   const [voiceErrorMsg, setVoiceErrorMsg] = useState<string | null>(null);
+  const isOpera = isOperaBrowser();
 
   // Photo Evidence State
   const [imagePreview, setImagePreview] = useState<string | null>(SAMPLE_EVIDENCE_IMAGES.pipeWeld);
@@ -105,11 +108,13 @@ export const SupervisorEntryView: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchCsvRef = useRef<HTMLInputElement>(null);
 
-  // Voice Recording Toggle
-  const handleToggleVoiceRecording = (lang: SpeechLanguage = voiceLang) => {
-    if (isVoiceRecording) {
+  // Voice Recording Toggle (with Hardware Mic Stream & Audio Analyzer)
+  const handleToggleVoiceRecording = async (lang: SpeechLanguage = voiceLang) => {
+    if (isVoiceRecording || isMicActive) {
       speechService.stop();
       setIsVoiceRecording(false);
+      setIsMicActive(false);
+      setAudioLevel(0);
       return;
     }
 
@@ -118,7 +123,13 @@ export const SupervisorEntryView: React.FC = () => {
     setInterimVoiceText('');
     setParsedVoiceResult(null);
 
-    const started = speechService.start(lang, {
+    const started = await speechService.start(lang, {
+      onAudioLevel: lvl => {
+        setAudioLevel(lvl);
+      },
+      onMicConnected: connected => {
+        setIsMicActive(connected);
+      },
       onInterimTranscript: text => {
         setInterimVoiceText(text);
         const parsed = parseSpokenUpdate(text, lang);
@@ -133,21 +144,39 @@ export const SupervisorEntryView: React.FC = () => {
       },
       onStateChange: state => {
         setIsVoiceRecording(state === 'listening');
+        if (state !== 'listening' && !isMicActive) {
+          setAudioLevel(0);
+        }
       },
       onError: err => {
         setVoiceErrorMsg(err);
-        setIsVoiceRecording(false);
+        // Note: Keep micActive if audio stream is alive
       },
     });
 
     if (!started) {
       setIsVoiceRecording(false);
+      setIsMicActive(false);
+      setAudioLevel(0);
+    }
+  };
+
+  const handleVoiceTextChange = (newText: string) => {
+    setVoiceTranscript(newText);
+    setInterimVoiceText('');
+    if (newText.trim()) {
+      const parsed = parseSpokenUpdate(newText, voiceLang);
+      setParsedVoiceResult(parsed);
+    } else {
+      setParsedVoiceResult(null);
     }
   };
 
   const handleSelectVoicePreset = (preset: VoicePreset) => {
     speechService.stop();
     setIsVoiceRecording(false);
+    setIsMicActive(false);
+    setAudioLevel(0);
     setVoiceLang(preset.language);
     setVoiceTranscript(preset.transcript);
     setInterimVoiceText('');
@@ -604,15 +633,15 @@ export const SupervisorEntryView: React.FC = () => {
               </div>
 
               <div className="card-body">
-                {/* Multilingual Voice Dictation Assistant (Web Speech API) */}
+                {/* Multilingual Voice Dictation Assistant (Web Speech API + Hardware Audio Meter) */}
                 <div
                   style={{
                     marginBottom: '1.25rem',
-                    background: isVoiceRecording ? '#f0f9ff' : '#f8fafc',
+                    background: (isVoiceRecording || isMicActive) ? '#f0f9ff' : '#f8fafc',
                     padding: '1rem 1.15rem',
                     borderRadius: 'var(--radius-md)',
-                    border: isVoiceRecording ? '2px solid var(--brand-primary)' : '1px solid #bae6fd',
-                    boxShadow: isVoiceRecording ? '0 0 15px rgba(2, 132, 199, 0.2)' : 'none',
+                    border: (isVoiceRecording || isMicActive) ? '2px solid var(--brand-primary)' : '1px solid #bae6fd',
+                    boxShadow: (isVoiceRecording || isMicActive) ? '0 0 16px rgba(2, 132, 199, 0.25)' : 'none',
                     transition: 'all 0.2s ease-out',
                   }}
                 >
@@ -620,7 +649,7 @@ export const SupervisorEntryView: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span
                         style={{
-                          background: isVoiceRecording ? '#ef4444' : 'var(--brand-primary)',
+                          background: isVoiceRecording ? '#ef4444' : isMicActive ? '#0284c7' : 'var(--brand-primary)',
                           color: '#ffffff',
                           padding: '3px 8px',
                           borderRadius: '4px',
@@ -632,11 +661,25 @@ export const SupervisorEntryView: React.FC = () => {
                         }}
                       >
                         <Mic size={13} />
-                        <span>{isVoiceRecording ? 'RECORDING LIVE' : 'VOICE DICTATION'}</span>
+                        <span>{isVoiceRecording ? 'MIC LIVE & RECORDING' : isMicActive ? 'MIC CONNECTED' : 'VOICE DICTATION'}</span>
                       </span>
                       <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                         Native Multilingual Speech-to-Field Dictation
                       </span>
+                      {isOpera && (
+                        <span
+                          className="mono-pill"
+                          style={{
+                            fontSize: '0.675rem',
+                            background: '#fef3c7',
+                            color: '#92400e',
+                            borderColor: '#fde68a',
+                            fontWeight: 700,
+                          }}
+                        >
+                          Opera Mode Active
+                        </span>
+                      )}
                     </div>
 
                     {/* Language Selector Chips */}
@@ -682,7 +725,7 @@ export const SupervisorEntryView: React.FC = () => {
                       onClick={() => handleToggleVoiceRecording(voiceLang)}
                       className="btn"
                       style={{
-                        background: isVoiceRecording ? '#dc2626' : 'var(--brand-primary)',
+                        background: isVoiceRecording ? '#dc2626' : isMicActive ? '#0284c7' : 'var(--brand-primary)',
                         color: '#ffffff',
                         padding: '0.6rem 1.1rem',
                         fontSize: '0.85rem',
@@ -691,32 +734,44 @@ export const SupervisorEntryView: React.FC = () => {
                         display: 'flex',
                         alignItems: 'center',
                         gap: 6,
-                        boxShadow: isVoiceRecording ? '0 0 12px rgba(220, 38, 38, 0.5)' : 'none',
+                        boxShadow: isVoiceRecording ? '0 0 12px rgba(220, 38, 38, 0.5)' : isMicActive ? '0 0 10px rgba(2, 132, 199, 0.4)' : 'none',
                         cursor: 'pointer',
                       }}
                       title="Click to start/stop live microphone dictation"
                     >
-                      {isVoiceRecording ? <MicOff size={16} /> : <Mic size={16} />}
-                      <span>{isVoiceRecording ? 'Stop Recording' : 'Tap to Speak'}</span>
+                      {isVoiceRecording || isMicActive ? <MicOff size={16} /> : <Mic size={16} />}
+                      <span>{isVoiceRecording ? 'Stop Recording' : isMicActive ? 'Disconnect Mic' : 'Tap to Speak'}</span>
                     </button>
 
-                    {/* Status Feedback & Audio Waveform Simulator */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 200 }}>
-                      {isVoiceRecording ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span style={{ fontSize: '0.75rem', color: '#0284c7', fontWeight: 700 }}>
-                            Listening in {voiceLang === 'en-IN' ? 'Indian English' : voiceLang === 'hi-IN' ? 'Hindi' : 'Tamil'}...
+                    {/* Status Feedback & Dynamic Real-Time Audio Level VU Meter */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 220 }}>
+                      {(isVoiceRecording || isMicActive) ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#0284c7', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            {isMicActive ? `Mic Active (Level: ${audioLevel}%)` : `Listening in ${voiceLang === 'en-IN' ? 'English' : voiceLang === 'hi-IN' ? 'Hindi' : 'Tamil'}...`}
                           </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 6 }}>
-                            <span style={{ width: 3, height: 14, background: '#0284c7', borderRadius: 2, animation: 'pulse 0.6s infinite alternate' }} />
-                            <span style={{ width: 3, height: 22, background: '#0284c7', borderRadius: 2, animation: 'pulse 0.4s infinite alternate' }} />
-                            <span style={{ width: 3, height: 10, background: '#0284c7', borderRadius: 2, animation: 'pulse 0.7s infinite alternate' }} />
-                            <span style={{ width: 3, height: 18, background: '#0284c7', borderRadius: 2, animation: 'pulse 0.5s infinite alternate' }} />
+                          {/* Live Dynamic Audio VU Visualizer Bars */}
+                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 26, paddingBottom: 2 }}>
+                            {[20, 45, 75, 100, 85, 60, 40, 90, 65, 30].map((barWeight, i) => {
+                              const dynamicHeight = Math.max(4, Math.min(24, Math.round((audioLevel / 100) * barWeight * 0.28) + 4));
+                              return (
+                                <span
+                                  key={i}
+                                  style={{
+                                    width: 3,
+                                    height: isMicActive && audioLevel > 0 ? `${dynamicHeight}px` : isVoiceRecording ? `${Math.max(6, (i % 4 + 1) * 5)}px` : '4px',
+                                    background: audioLevel > 40 ? '#10b981' : audioLevel > 15 ? '#0284c7' : '#94a3b8',
+                                    borderRadius: 2,
+                                    transition: 'height 0.08s ease-out',
+                                  }}
+                                />
+                              );
+                            })}
                           </div>
                         </div>
                       ) : (
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          Speak naturally or select a test scenario below to automatically structure fields.
+                          Speak naturally, edit prompt text, or click a 1-click test scenario below.
                         </span>
                       )}
                     </div>
@@ -735,8 +790,8 @@ export const SupervisorEntryView: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Error Notification if mic is blocked */}
-                  {voiceErrorMsg && (
+                  {/* Opera Guidance Tip / Speech Notice */}
+                  {voiceErrorMsg ? (
                     <div
                       style={{
                         padding: '0.5rem 0.75rem',
@@ -751,29 +806,93 @@ export const SupervisorEntryView: React.FC = () => {
                     >
                       <strong>Speech Notice:</strong> {voiceErrorMsg}
                     </div>
-                  )}
-
-                  {/* Live Streaming Transcript Box */}
-                  {(voiceTranscript || interimVoiceText) && (
+                  ) : isOpera && (
                     <div
                       style={{
-                        background: '#ffffff',
-                        border: '1px solid var(--border-subtle)',
+                        padding: '0.45rem 0.75rem',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        color: '#1e40af',
                         borderRadius: 'var(--radius-xs)',
-                        padding: '0.6rem 0.85rem',
+                        fontSize: '0.725rem',
                         marginBottom: '0.65rem',
-                        fontSize: '0.8rem',
-                        color: 'var(--text-primary)',
-                        lineHeight: 1.4,
+                        lineHeight: 1.35,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
                       }}
                     >
-                      <div style={{ fontSize: '0.675rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 2 }}>
-                        SPOKEN DICTATION TRANSCRIPT:
-                      </div>
-                      <span>{voiceTranscript}</span>
-                      {interimVoiceText && <span style={{ color: 'var(--brand-primary)', fontStyle: 'italic' }}> {interimVoiceText}...</span>}
+                      <Info size={14} style={{ flexShrink: 0, color: '#2563eb' }} />
+                      <span>
+                        <strong>Opera Browser Compatibility:</strong> Web Audio hardware mic stream is fully active. You can speak into your mic, edit the spoken log box below, or click any quick preset to trigger real-time AI field structuring.
+                      </span>
                     </div>
                   )}
+
+                  {/* Interactive Editable Spoken Log Box */}
+                  <div
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-xs)',
+                      padding: '0.6rem 0.85rem',
+                      marginBottom: '0.65rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <div style={{ fontSize: '0.675rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                        SPOKEN DICTATION & PROMPT BUFFER:
+                      </div>
+                      {(voiceTranscript || interimVoiceText) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVoiceTranscript('');
+                            setInterimVoiceText('');
+                            setParsedVoiceResult(null);
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#ef4444',
+                            fontSize: '0.675rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 2,
+                            padding: 0,
+                          }}
+                        >
+                          <X size={12} />
+                          <span>Clear Text</span>
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      value={voiceTranscript}
+                      onChange={e => handleVoiceTextChange(e.target.value)}
+                      placeholder="Spoken words stream here in real time. You can also type or edit speech transcript directly..."
+                      rows={2}
+                      style={{
+                        width: '100%',
+                        border: 'none',
+                        outline: 'none',
+                        resize: 'vertical',
+                        fontSize: '0.8rem',
+                        color: 'var(--text-primary)',
+                        fontFamily: 'inherit',
+                        lineHeight: 1.4,
+                        padding: 0,
+                        background: 'transparent',
+                      }}
+                    />
+                    {interimVoiceText && (
+                      <div style={{ color: 'var(--brand-primary)', fontStyle: 'italic', fontSize: '0.75rem', marginTop: 2 }}>
+                        Streaming: {interimVoiceText}...
+                      </div>
+                    )}
+                  </div>
 
                   {/* Real-Time Parsed Entity Chips */}
                   {parsedVoiceResult && (

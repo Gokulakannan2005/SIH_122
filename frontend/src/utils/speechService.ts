@@ -1,7 +1,10 @@
 /**
- * Datum Speech Service: Browser-Native Multilingual Web Speech API Client
- * Wraps SpeechRecognition with streaming interim updates, error management,
- * and seamless fallback presets for Opera, Firefox, and offline testing.
+ * Datum Speech Service: Browser-Native Multilingual Voice & Audio Stream Engine
+ * Features:
+ *  1. Hardware Microphone Stream via navigator.mediaDevices.getUserMedia (Works in Opera, Chrome, Edge, Firefox).
+ *  2. Real-Time Web Audio API VU / Frequency Level Analyzer for responsive visual feedback.
+ *  3. Dual Web Speech API (SpeechRecognition / webkitSpeechRecognition) with multilingual profiles.
+ *  4. Graceful Opera & restricted-environment detection and fallback handling.
  */
 
 export type SpeechLanguage = 'en-IN' | 'hi-IN' | 'ta-IN';
@@ -11,6 +14,14 @@ export interface SpeechRecognitionHandlers {
   onFinalTranscript?: (text: string) => void;
   onError?: (error: string) => void;
   onStateChange?: (state: 'idle' | 'listening' | 'processing' | 'error') => void;
+  onAudioLevel?: (level: number) => void; // 0 to 100 volume level
+  onMicConnected?: (connected: boolean) => void;
+}
+
+// Check if browser is Opera / Opera GX
+export function isOperaBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /OPR\//i.test(navigator.userAgent) || /Opera/i.test(navigator.userAgent);
 }
 
 // Check if browser supports Web Speech API
@@ -70,26 +81,63 @@ export const SAMPLE_VOICE_PRESETS: VoicePreset[] = [
 class SpeechService {
   private recognition: any = null;
   private isListening = false;
+  private mediaStream: MediaStream | null = null;
+  private audioContext: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private animFrameId: number | null = null;
 
-  public start(
+  /**
+   * Start hardware microphone and speech recognition
+   */
+  public async start(
     language: SpeechLanguage = 'en-IN',
     handlers: SpeechRecognitionHandlers
-  ): boolean {
+  ): Promise<boolean> {
+    this.stop(); // Clean up any active session
+
+    const isOpera = isOperaBrowser();
+    let micOk = false;
+
+    // 1. Request hardware microphone access (works on Opera, Chrome, Edge, Safari, Firefox)
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        handlers.onMicConnected?.(true);
+        micOk = true;
+        this.startAudioAnalyzer(handlers.onAudioLevel);
+      } catch (err: any) {
+        handlers.onMicConnected?.(false);
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          handlers.onError?.(
+            'Microphone access was denied in browser permissions. Please allow microphone access in Opera site settings.'
+          );
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          handlers.onError?.('No hardware microphone found on this device.');
+        } else {
+          handlers.onError?.(`Microphone initialization error: ${err.message || err.name}`);
+        }
+      }
+    }
+
+    // 2. Initialize Web Speech API
     const SpeechRecognitionClass =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognitionClass) {
-      if (handlers.onError) {
-        handlers.onError(
-          'Web Speech API is not natively enabled in this browser. You can use the Quick Voice Presets below to test instant voice structuring.'
-        );
+      this.isListening = micOk;
+      if (micOk) {
+        handlers.onStateChange?.('listening');
       }
-      return false;
+      handlers.onError?.(
+        isOpera
+          ? 'Opera Browser Notice: Native WebSpeech cloud recognition is restricted in Opera. Microphone audio is live, and you can dictate/test using the quick voice presets below.'
+          : 'Web Speech API is not supported in this browser. You can use the Quick Voice Presets below to test instant voice structuring.'
+      );
+      return micOk;
     }
 
     try {
-      this.stop(); // Stop any previous session
       this.recognition = new SpeechRecognitionClass();
       this.recognition.continuous = true;
       this.recognition.interimResults = true;
@@ -121,7 +169,6 @@ class SpeechService {
 
       this.recognition.onerror = (event: any) => {
         const err = event.error;
-        this.isListening = false;
         handlers.onStateChange?.('error');
 
         let message = 'Voice capture error occurred.';
@@ -130,7 +177,9 @@ class SpeechService {
         } else if (err === 'no-speech') {
           message = 'No speech detected. Please speak closer to the microphone.';
         } else if (err === 'network') {
-          message = 'Network speech recognition endpoint unavailable in this browser session. You can click any Voice Preset below to test the full pipeline.';
+          message = isOpera
+            ? 'Opera Speech Cloud Endpoint: Opera disables Google Cloud STT keys by default. Hardware mic is active; you can dictate with live presets or edit the voice prompt below.'
+            : 'Speech recognition network service unavailable. You can click any Voice Preset below to test the full pipeline.';
         } else if (err === 'audio-capture') {
           message = 'No microphone device found on system.';
         }
@@ -139,21 +188,91 @@ class SpeechService {
       };
 
       this.recognition.onend = () => {
-        this.isListening = false;
-        handlers.onStateChange?.('idle');
+        if (this.isListening) {
+          // If ended unexpectedly while still marked active, reset state
+          this.isListening = false;
+          handlers.onStateChange?.('idle');
+        }
       };
 
       this.recognition.start();
       return true;
     } catch (err: any) {
-      this.isListening = false;
-      handlers.onStateChange?.('error');
-      handlers.onError?.(err?.message || 'Failed to initialize speech recognition.');
-      return false;
+      if (!micOk) {
+        this.isListening = false;
+        handlers.onStateChange?.('error');
+        handlers.onError?.(err?.message || 'Failed to initialize speech recognition.');
+        return false;
+      }
+      return true;
     }
   }
 
+  /**
+   * Real-time audio volume level analyzer using Web Audio API
+   */
+  private startAudioAnalyzer(onAudioLevel?: (level: number) => void): void {
+    if (!this.mediaStream || !onAudioLevel) return;
+
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+
+      this.audioContext = new AudioCtx();
+      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 256;
+      this.analyser.smoothingTimeConstant = 0.5;
+      source.connect(this.analyser);
+
+      const bufferLength = this.analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const tick = () => {
+        if (!this.analyser) return;
+        this.analyser.getByteFrequencyData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / bufferLength;
+        // Normalize to 0-100 scale
+        const level = Math.min(100, Math.round((average / 128) * 100));
+        onAudioLevel(level);
+
+        this.animFrameId = requestAnimationFrame(tick);
+      };
+
+      tick();
+    } catch (e) {
+      console.warn('Audio analyzer could not be initialized:', e);
+    }
+  }
+
+  /**
+   * Stop both recognition and media stream
+   */
   public stop(): void {
+    if (this.animFrameId) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
+
+    if (this.audioContext) {
+      try {
+        this.audioContext.close();
+      } catch (e) {
+        // ignore
+      }
+      this.audioContext = null;
+    }
+
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(track => track.stop());
+      this.mediaStream = null;
+    }
+
     if (this.recognition) {
       try {
         this.recognition.stop();
@@ -162,6 +281,7 @@ class SpeechService {
       }
       this.recognition = null;
     }
+
     this.isListening = false;
   }
 

@@ -6,9 +6,7 @@ import {
   ShieldCheck,
   HardHat,
   ChevronRight,
-  Database,
-  Sparkles,
-  CheckCircle2
+  CheckCircle2,
 } from 'lucide-react';
 import { NavigationTab } from '../types';
 
@@ -20,8 +18,6 @@ export const AppHeader: React.FC = () => {
     setActiveTab,
     exportAlignmentCSV,
     loadDemoData,
-    siteUpdates,
-    matchResults,
   } = useProject();
 
   const [resetSuccess, setResetSuccess] = useState<string | null>(null);
@@ -63,11 +59,6 @@ export const AppHeader: React.FC = () => {
     }
   };
 
-  // Compute live match stats
-  const totalCount = siteUpdates.length;
-  const readyCount = siteUpdates.filter(u => matchResults[u.id]?.category === 'ready').length;
-  const highConfPct = totalCount > 0 ? Math.round((readyCount / totalCount) * 100) : 0;
-
   return (
     <>
       <header className="app-header">
@@ -101,26 +92,6 @@ export const AppHeader: React.FC = () => {
             {currentRole === 'admin' ? <ShieldCheck size={13} /> : <HardHat size={13} />}
             <span>{currentRole === 'admin' ? 'Lead Planner Mode' : 'Supervisor Mode'}</span>
           </button>
-
-          {/* Live Confidence Index */}
-          <div
-            className="mono-pill"
-            style={{
-              background: '#f8fafc',
-              color: 'var(--text-secondary)',
-              borderColor: 'var(--border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '4px 10px',
-            }}
-          >
-            <CheckCircle2 size={13} style={{ color: '#047857' }} />
-            <span>Auto-Match: </span>
-            <strong style={{ color: '#047857' }}>
-              {highConfPct}% High Conf
-            </strong>
-          </div>
 
           {/* Export CSV */}
           <button

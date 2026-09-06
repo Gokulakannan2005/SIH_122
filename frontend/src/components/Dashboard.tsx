@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import {
   CheckCircle2,
@@ -9,7 +9,12 @@ import {
   ShieldCheck,
   Layers,
   TrendingDown,
-  CalendarCheck
+  Info,
+  Calendar,
+  ExternalLink,
+  ChevronRight,
+  HelpCircle,
+  FileText
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
@@ -22,7 +27,12 @@ export const Dashboard: React.FC = () => {
     setActiveTab,
     setSelectedScheduleActivityId,
     setSelectedInspectorUpdateId,
+    setSelectedAuditUpdateId,
+    navigateToSiteUpdatesWithFilter,
+    navigateToPlannerReviewWithFilter,
   } = useProject();
+
+  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
   // 1. Calculations for KPIs
   const totalSiteUpdates = siteUpdates.length;
@@ -108,8 +118,9 @@ export const Dashboard: React.FC = () => {
           </div>
           <button
             className="btn btn-warning"
-            onClick={() => setActiveTab('planner-review')}
+            onClick={() => navigateToPlannerReviewWithFilter('review')}
             type="button"
+            title="Jump directly to Planner Review Queue filtered for items needing confirmation"
           >
             <span>Open Review Queue</span>
             <ArrowRight size={14} />
@@ -136,10 +147,10 @@ export const Dashboard: React.FC = () => {
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                All Site Updates Verified & Aligned
+                All Site Updates Reconciled & Aligned
               </div>
               <div style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                All extracted supervisor reports and Excel progress rows have been linked to L5/L6 activities or classified.
+                All extracted supervisor reports and Excel progress rows have been confirmed to L5/L6 activities or classified.
               </div>
             </div>
           </div>
@@ -148,62 +159,162 @@ export const Dashboard: React.FC = () => {
             onClick={() => setActiveTab('schedule-activities')}
             type="button"
           >
-            <span>View Schedule</span>
+            <span>View Master Schedule</span>
             <ArrowRight size={13} />
           </button>
         </div>
       )}
 
-      {/* 5 Core Metric Cards */}
+      {/* 5 Actionable KPI Metric Cards with Interactive Drilldowns */}
       <div className="grid-kpi">
-        <div className="card kpi-card">
-          <div className="kpi-icon" style={{ background: '#f1f5f9', color: '#2b4360' }}>
+        {/* KPI 1: Extracted Updates */}
+        <div
+          className="card kpi-card clickable"
+          onClick={() => navigateToSiteUpdatesWithFilter({ discipline: 'ALL', status: 'ALL', source: 'ALL', search: '' })}
+          title="Click to view all Daily Field Reports in the Feed"
+          style={{ cursor: 'pointer', position: 'relative' }}
+        >
+          <div className="kpi-icon" style={{ background: '#f0f7fc', color: '#0284c7' }}>
             <Layers size={20} />
           </div>
-          <div>
-            <div className="kpi-title">Extracted Updates</div>
+          <div style={{ flex: 1 }}>
+            <div className="kpi-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Extracted Updates</span>
+              <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+            </div>
             <div className="kpi-value">{totalSiteUpdates}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
+              Across TXT, XLSX & Mobile
+            </div>
           </div>
         </div>
 
-        <div className="card kpi-card">
+        {/* KPI 2: Verified & Linked */}
+        <div
+          className="card kpi-card clickable"
+          onClick={() => navigateToSiteUpdatesWithFilter({ status: 'approved' })}
+          title="Click to view verified & linked site updates"
+          style={{ cursor: 'pointer', position: 'relative' }}
+        >
           <div className="kpi-icon" style={{ background: 'var(--status-ready-bg)', color: 'var(--status-ready-fg)' }}>
             <CheckCircle2 size={20} />
           </div>
-          <div>
-            <div className="kpi-title">Verified & Linked</div>
+          <div style={{ flex: 1 }}>
+            <div className="kpi-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Verified & Linked</span>
+              <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+            </div>
             <div className="kpi-value" style={{ color: 'var(--status-ready-fg)' }}>{linkedCount}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
+              Aligned to L5/L6 Milestones
+            </div>
           </div>
         </div>
 
-        <div className="card kpi-card">
+        {/* KPI 3: Pending Review */}
+        <div
+          className="card kpi-card clickable"
+          onClick={() => navigateToPlannerReviewWithFilter('review')}
+          title="Click to open the Planner Review Queue"
+          style={{ cursor: 'pointer', position: 'relative' }}
+        >
           <div className="kpi-icon" style={{ background: 'var(--status-review-bg)', color: 'var(--status-review-fg)' }}>
             <Clock size={20} />
           </div>
-          <div>
-            <div className="kpi-title">Pending Review</div>
+          <div style={{ flex: 1 }}>
+            <div className="kpi-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Pending Review</span>
+              <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+            </div>
             <div className="kpi-value" style={{ color: 'var(--status-review-fg)' }}>{pendingReviewCount}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
+              Requires Planner Approval
+            </div>
           </div>
         </div>
 
-        <div className="card kpi-card">
+        {/* KPI 4: Unplanned Work */}
+        <div
+          className="card kpi-card clickable"
+          onClick={() => navigateToPlannerReviewWithFilter('unplanned')}
+          title="Click to view Unplanned site updates in Planner Matrix"
+          style={{ cursor: 'pointer', position: 'relative' }}
+        >
           <div className="kpi-icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
             <Flame size={20} />
           </div>
-          <div>
-            <div className="kpi-title">Unplanned Work</div>
+          <div style={{ flex: 1 }}>
+            <div className="kpi-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Unplanned Work</span>
+              <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+            </div>
             <div className="kpi-value" style={{ color: '#b91c1c' }}>{unplannedCount}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
+              No Direct WBS Milestone
+            </div>
           </div>
         </div>
 
-        <div className="card kpi-card">
+        {/* KPI 5: Schedule Delays */}
+        <div
+          className="card kpi-card clickable"
+          onClick={() => setActiveTab('schedule-activities')}
+          title="Click to inspect Schedule Activity variance & critical path"
+          style={{ cursor: 'pointer', position: 'relative' }}
+        >
           <div className="kpi-icon" style={{ background: '#fff1f2', color: '#991b1b' }}>
             <TrendingDown size={20} />
           </div>
-          <div>
-            <div className="kpi-title">Schedule Delays</div>
+          <div style={{ flex: 1 }}>
+            <div className="kpi-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Schedule Delays</span>
+              <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+            </div>
             <div className="kpi-value" style={{ color: '#991b1b' }}>{delayedCount}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
+              Behind Baseline Finish
+            </div>
           </div>
+        </div>
+      </div>
+
+      {/* Domain Insights Helper Banner (Explains Confidence & Industrial Logic) */}
+      <div
+        className="card"
+        style={{
+          padding: '0.9rem 1.15rem',
+          background: '#f8fafc',
+          border: '1px solid var(--border-subtle)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <Info size={16} style={{ color: 'var(--brand-primary)', flexShrink: 0 }} />
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            <strong>Deterministic Alignment Standard:</strong> AI Match Confidence = Keywords (50%) + Discipline (20%) + Workfront Area (15%) + Fuzzy Alias (15%).
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => navigateToSiteUpdatesWithFilter({ discipline: 'Piping' })}
+            style={{ fontSize: '0.725rem', padding: '3px 8px' }}
+          >
+            Piping Progress (XLSX)
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => navigateToSiteUpdatesWithFilter({ discipline: 'Civil' })}
+            style={{ fontSize: '0.725rem', padding: '3px 8px' }}
+          >
+            Civil Works (TXT)
+          </button>
         </div>
       </div>
 
@@ -225,12 +336,17 @@ export const Dashboard: React.FC = () => {
           {disciplineStats.map(stat => (
             <div
               key={stat.discipline}
+              onClick={() => navigateToSiteUpdatesWithFilter({ discipline: stat.discipline })}
               style={{
                 padding: '0.75rem 0.85rem',
                 background: 'var(--bg-subtle)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease-out',
               }}
+              title={`Click to filter Daily Field Reports for ${stat.discipline}`}
+              className="clickable"
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
                 <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{stat.discipline}</span>
@@ -257,7 +373,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 2-Column Section: Delayed Activities & Recent Audit Trail */}
+      {/* 2-Column Section: Delayed Activities Watchlist & Live Audit Trail */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.25rem' }}>
         {/* Delayed Activities Watchlist */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -299,6 +415,7 @@ export const Dashboard: React.FC = () => {
                       key={act.activityId}
                       onClick={() => setSelectedScheduleActivityId(act.activityId)}
                       title="Click to inspect activity details & linked site updates"
+                      style={{ cursor: 'pointer' }}
                     >
                       <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>
                         {act.activityId}
@@ -352,7 +469,7 @@ export const Dashboard: React.FC = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 2,
-                    transition: 'all 0.1s ease',
+                    transition: 'all 0.15s ease-out',
                   }}
                   title="Click to view update details in inspector drawer"
                 >

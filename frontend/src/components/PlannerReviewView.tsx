@@ -35,11 +35,12 @@ export const PlannerReviewView: React.FC = () => {
     setSelectedReviewUpdateId,
     setSelectedInspectorUpdateId,
     setActiveTab,
+    plannerQueueFilter,
+    setPlannerQueueFilter,
   } = useProject();
 
   // Search & Filter in the left queue
   const [queueSearch, setQueueSearch] = useState('');
-  const [queueFilter, setQueueFilter] = useState<'review' | 'unplanned' | 'approved' | 'all'>('review');
 
   // Filtered review queue items
   const queueItems = useMemo(() => {
@@ -53,9 +54,9 @@ export const PlannerReviewView: React.FC = () => {
         const isUnplanned = decision?.status === 'unplanned' || (!decision && match?.category === 'unplanned');
         const isReview = !isApproved && !isUnplanned && match?.category === 'review';
 
-        if (queueFilter === 'review' && !isReview) return false;
-        if (queueFilter === 'unplanned' && !isUnplanned) return false;
-        if (queueFilter === 'approved' && !isApproved) return false;
+        if (plannerQueueFilter === 'review' && !isReview) return false;
+        if (plannerQueueFilter === 'unplanned' && !isUnplanned) return false;
+        if (plannerQueueFilter === 'approved' && !isApproved) return false;
 
         // Search text
         if (queueSearch.trim()) {
@@ -77,7 +78,7 @@ export const PlannerReviewView: React.FC = () => {
         const matchB = matchResults[b.id];
         return (matchA?.confidenceScore || 0) - (matchB?.confidenceScore || 0);
       });
-  }, [siteUpdates, matchResults, plannerDecisions, queueFilter, queueSearch]);
+  }, [siteUpdates, matchResults, plannerDecisions, plannerQueueFilter, queueSearch]);
 
   // Robust active update resolution: ensures no stale selection if queue item is completed
   const currentUpdate = useMemo(() => {
@@ -96,7 +97,6 @@ export const PlannerReviewView: React.FC = () => {
   const [searchScheduleQuery, setSearchScheduleQuery] = useState('');
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [plannerNote, setPlannerNote] = useState('');
-  const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
   // Sync state when active update changes
   useEffect(() => {
@@ -105,7 +105,6 @@ export const PlannerReviewView: React.FC = () => {
       const decision = plannerDecisions[currentUpdate.id];
       setSelectedActivityId(decision?.linkedActivityId || match?.candidateActivityId || null);
       setPlannerNote(decision?.plannerNote || '');
-      setActionSuccessMessage(null);
     } else {
       setSelectedActivityId(null);
       setPlannerNote('');
@@ -153,7 +152,7 @@ export const PlannerReviewView: React.FC = () => {
     }));
   }, [currentUpdate, currentMatch, schedule]);
 
-  // Action dispatcher with feedback toast & auto-advance
+  // Action dispatcher with feedback toast & smooth auto-advance
   const executeAction = (
     type: PlannerActionType,
     targetId: string | null = null,
@@ -163,28 +162,18 @@ export const PlannerReviewView: React.FC = () => {
     const finalNote = plannerNote.trim() || defaultNote;
     const updateIdToProcess = currentUpdate.id;
 
-    // Determine next queue item to select
+    // Determine next queue item to advance focus without disorientation
     const currentIndex = queueItems.findIndex(item => item.id === updateIdToProcess);
     let nextItemId: string | null = null;
     if (queueItems.length > 1) {
-      const nextIndex = currentIndex < queueItems.length - 1 ? currentIndex + 1 : 0;
-      nextItemId = queueItems[nextIndex].id;
+      const nextIndex = currentIndex < queueItems.length - 1 ? currentIndex + 1 : currentIndex > 0 ? currentIndex - 1 : 0;
+      if (queueItems[nextIndex] && queueItems[nextIndex].id !== updateIdToProcess) {
+        nextItemId = queueItems[nextIndex].id;
+      }
     }
 
     handlePlannerAction(updateIdToProcess, type, targetId, finalNote);
-
-    let msg = '';
-    if (type === 'approve') msg = `Link confirmed to activity ${targetId}`;
-    else if (type === 'relink') msg = `Re-linked update to activity ${targetId}`;
-    else if (type === 'mark_unplanned') msg = 'Categorized as unplanned site work';
-    else if (type === 'reject') msg = 'Site update rejected';
-
-    setActionSuccessMessage(msg);
     setSelectedReviewUpdateId(nextItemId);
-
-    setTimeout(() => {
-      setActionSuccessMessage(null);
-    }, 4000);
   };
 
   const pendingReviewTotal = siteUpdates.filter(
@@ -192,20 +181,20 @@ export const PlannerReviewView: React.FC = () => {
   ).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* Top Banner Header */}
       <div className="banner-card">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-            <span className="brand-badge" style={{ background: '#e9f2ff', color: '#0c66e4', borderColor: '#cce0ff' }}>
+            <span className="brand-badge" style={{ background: '#f0f7fc', color: '#0284c7', borderColor: '#bae6fd' }}>
               Planner Reconciliation Center
             </span>
             <span
               className="mono-pill"
               style={{
-                background: pendingReviewTotal > 0 ? '#fffbeb' : '#ecfdf5',
-                color: pendingReviewTotal > 0 ? '#92400e' : '#047857',
-                borderColor: pendingReviewTotal > 0 ? '#fcd34d' : '#6ee7b7',
+                background: pendingReviewTotal > 0 ? 'var(--status-review-bg)' : 'var(--status-ready-bg)',
+                color: pendingReviewTotal > 0 ? 'var(--status-review-fg)' : 'var(--status-ready-fg)',
+                borderColor: pendingReviewTotal > 0 ? 'var(--status-review-border)' : 'var(--status-ready-border)',
                 fontWeight: 700,
               }}
             >
@@ -213,28 +202,28 @@ export const PlannerReviewView: React.FC = () => {
             </span>
           </div>
           <h1 className="banner-title">
-            <Sparkles size={22} style={{ color: 'var(--brand-primary)' }} />
+            <Sparkles size={20} style={{ color: 'var(--brand-primary)' }} />
             <span>AI Auto-Match Matrix & Task Approval</span>
           </h1>
           <p className="banner-desc">
-            Review site supervisor reports, inspect AI confidence scores, and confirm or re-assign progress to L5/L6 milestone activities.
+            Review site supervisor reports, inspect AI confidence breakdown scores, and confirm or re-assign progress to L5/L6 milestones.
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-sm"
             onClick={() => setActiveTab('site-updates')}
           >
             <span>View All Field Updates</span>
-            <ArrowRight size={14} />
+            <ArrowRight size={13} />
           </button>
         </div>
       </div>
 
       {/* Dual Pane Workbench Layout */}
-      <div className="review-container" style={{ gridTemplateColumns: '340px minmax(0, 1fr)', gap: '1.5rem' }}>
+      <div className="review-container" style={{ gridTemplateColumns: '340px minmax(0, 1fr)', gap: '1.25rem' }}>
         
         {/* Left Pane: Queue List with Filters */}
         <div className="review-queue-pane">
@@ -243,7 +232,7 @@ export const PlannerReviewView: React.FC = () => {
               <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Queue ({queueItems.length})
               </span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                 Sorted by Confidence
               </span>
             </div>
@@ -258,14 +247,14 @@ export const PlannerReviewView: React.FC = () => {
               ] as const).map(tab => (
                 <button
                   key={tab.id}
-                  className={`btn btn-sm ${queueFilter === tab.id ? 'btn-primary' : 'btn-secondary'}`}
+                  className={`btn btn-sm ${plannerQueueFilter === tab.id ? 'btn-primary' : 'btn-secondary'}`}
                   style={{
                     padding: '3px 8px',
                     fontSize: '0.725rem',
                     flex: 1,
-                    fontWeight: queueFilter === tab.id ? 700 : 500,
+                    fontWeight: plannerQueueFilter === tab.id ? 700 : 500,
                   }}
-                  onClick={() => setQueueFilter(tab.id)}
+                  onClick={() => setPlannerQueueFilter(tab.id)}
                   type="button"
                 >
                   {tab.label}
@@ -288,13 +277,13 @@ export const PlannerReviewView: React.FC = () => {
           </div>
 
           {/* Queue Items List */}
-          <div className="review-queue-list" style={{ maxHeight: '720px' }}>
+          <div className="review-queue-list" style={{ maxHeight: '700px' }}>
             {queueItems.length === 0 ? (
               <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
                 <CheckCircle2 size={32} style={{ color: '#047857', margin: '0 auto 0.5rem' }} />
                 <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>No Items In Queue</div>
                 <div style={{ fontSize: '0.775rem', marginTop: 4 }}>
-                  All updates in the &ldquo;{queueFilter}&rdquo; filter have been processed!
+                  All updates in the &ldquo;{plannerQueueFilter}&rdquo; filter have been reconciled.
                 </div>
               </div>
             ) : (
@@ -316,6 +305,8 @@ export const PlannerReviewView: React.FC = () => {
                       borderBottom: '1px solid var(--border-subtle)',
                       background: isActive ? 'var(--brand-surface)' : 'transparent',
                       borderLeft: isActive ? '3px solid var(--brand-primary)' : '3px solid transparent',
+                      cursor: 'pointer',
+                      transition: 'background 0.15s ease-out, border-color 0.15s ease-out',
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -352,28 +343,6 @@ export const PlannerReviewView: React.FC = () => {
         {currentUpdate && currentMatch ? (
           <div className="review-detail-pane" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', background: 'transparent', border: 'none', boxShadow: 'none' }}>
             
-            {/* Success Toast */}
-            {actionSuccessMessage && (
-              <div
-                style={{
-                  background: 'var(--status-ready-bg)',
-                  border: '1px solid var(--status-ready-border)',
-                  color: 'var(--status-ready-fg)',
-                  padding: '0.85rem 1.15rem',
-                  borderRadius: 'var(--radius-md)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.6rem',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
-                  boxShadow: 'var(--shadow-xs)',
-                }}
-              >
-                <CheckCircle2 size={18} />
-                <span>{actionSuccessMessage}</span>
-              </div>
-            )}
-
             {/* SECTION 1: WHAT ARE WE LOOKING AT? (Field Event Details) */}
             <div className="card">
               <div className="card-header" style={{ background: '#f8fafc' }}>
@@ -399,7 +368,7 @@ export const PlannerReviewView: React.FC = () => {
                     title="Open side drawer to inspect full metadata and hash provenance"
                   >
                     <Eye size={13} />
-                    <span>Inspect Full Metadata</span>
+                    <span>Inspect Metadata</span>
                   </button>
                 </div>
               </div>
@@ -407,7 +376,7 @@ export const PlannerReviewView: React.FC = () => {
               <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                 <div>
                   <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 2 }}>
-                    SUPERVISOR NOTE:
+                    SUPERVISOR REPORT:
                   </div>
                   <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4 }}>
                     {currentUpdate.extractedDescription}
@@ -427,9 +396,9 @@ export const PlannerReviewView: React.FC = () => {
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '0.4rem',
-                        background: '#e9f2ff',
-                        border: '1px solid #cce0ff',
-                        color: '#0c66e4',
+                        background: '#f0f7fc',
+                        border: '1px solid #bae6fd',
+                        color: '#0284c7',
                         padding: '4px 8px',
                         borderRadius: 'var(--radius-sm)',
                         fontSize: '0.75rem',
@@ -439,7 +408,7 @@ export const PlannerReviewView: React.FC = () => {
                       onClick={() => setSelectedInspectorUpdateId(currentUpdate.id)}
                     >
                       <Camera size={14} />
-                      <span>{currentUpdate.images.length} Photo Proof Attached (View)</span>
+                      <span>{currentUpdate.images.length} Photo Proof Attached (Inspect)</span>
                     </div>
                   )}
 
@@ -465,7 +434,7 @@ export const PlannerReviewView: React.FC = () => {
 
                   {currentUpdate.supervisor && (
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                      Reported by: <strong>{currentUpdate.supervisor}</strong>
+                      Supervisor: <strong>{currentUpdate.supervisor}</strong>
                     </span>
                   )}
                 </div>
@@ -506,12 +475,13 @@ export const PlannerReviewView: React.FC = () => {
                       border: selectedActivityId === recommendedActivityObj.activityId ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
                       borderRadius: 'var(--radius-md)',
                       padding: '0.85rem 1rem',
-                      background: selectedActivityId === recommendedActivityObj.activityId ? '#f0f7ff' : '#ffffff',
+                      background: selectedActivityId === recommendedActivityObj.activityId ? 'var(--brand-surface)' : '#ffffff',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       gap: '1rem',
                       cursor: 'pointer',
+                      transition: 'all 0.15s ease-out',
                     }}
                     onClick={() => setSelectedActivityId(recommendedActivityObj.activityId)}
                   >
@@ -556,7 +526,7 @@ export const PlannerReviewView: React.FC = () => {
                     Alternative Candidate Suggestions (1-Click Select):
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.5rem' }}>
-                    {suggestedCandidates.map((cand, idx) => {
+                    {suggestedCandidates.map((cand) => {
                       const isSelected = selectedActivityId === cand.activity.activityId;
                       return (
                         <div
@@ -566,11 +536,12 @@ export const PlannerReviewView: React.FC = () => {
                             border: isSelected ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
                             borderRadius: 'var(--radius-sm)',
                             padding: '0.55rem 0.75rem',
-                            background: isSelected ? '#f0f7ff' : '#ffffff',
+                            background: isSelected ? 'var(--brand-surface)' : '#ffffff',
                             cursor: 'pointer',
                             display: 'flex',
                             flexDirection: 'column',
                             gap: '2px',
+                            transition: 'all 0.15s ease-out',
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -674,8 +645,8 @@ export const PlannerReviewView: React.FC = () => {
                     type="button"
                     className="btn btn-primary"
                     style={{
-                      background: isSelectedDifferentFromRecommended ? '#0c66e4' : '#059669',
-                      borderColor: isSelectedDifferentFromRecommended ? '#0052cc' : '#047857',
+                      background: isSelectedDifferentFromRecommended ? '#0284c7' : '#059669',
+                      borderColor: isSelectedDifferentFromRecommended ? '#0369a1' : '#047857',
                       padding: '0.65rem 1.25rem',
                       fontWeight: 800,
                       fontSize: '0.875rem',
@@ -759,51 +730,51 @@ export const PlannerReviewView: React.FC = () => {
           >
             <div
               style={{
-                width: 64,
-                height: 64,
+                width: 56,
+                height: 56,
                 borderRadius: '50%',
-                background: '#ecfdf5',
-                border: '2px solid #6ee7b7',
+                background: 'var(--status-ready-bg)',
+                border: '1px solid var(--status-ready-border)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#047857',
+                color: 'var(--status-ready-fg)',
               }}
             >
-              <CheckCircle2 size={36} />
+              <CheckCircle2 size={32} />
             </div>
 
             <div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                All Tasks in This Queue Reconciled! 🎉
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                All Items Reconciled & Aligned
               </h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.35rem', maxWidth: 460 }}>
-                There are currently zero pending review items in the &ldquo;{queueFilter}&rdquo; filter. You can switch filters to review other items or return to the Project Control Center.
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.35rem', maxWidth: 460 }}>
+                There are currently zero pending review items in the &ldquo;{plannerQueueFilter}&rdquo; filter. You can switch filters to review other items or return to the Project Control Center.
               </p>
             </div>
 
             <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.5rem' }}>
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={() => setQueueFilter('approved')}
+                className="btn btn-secondary btn-sm"
+                onClick={() => setPlannerQueueFilter('approved')}
               >
                 <span>View Approved Items</span>
               </button>
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={() => setQueueFilter('unplanned')}
+                className="btn btn-secondary btn-sm"
+                onClick={() => setPlannerQueueFilter('unplanned')}
               >
                 <span>View Unplanned Work</span>
               </button>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-primary btn-sm"
                 onClick={() => setActiveTab('dashboard')}
               >
-                <span>Go to Control Center</span>
-                <ArrowRight size={14} />
+                <span>Go to Dashboard</span>
+                <ArrowRight size={13} />
               </button>
             </div>
           </div>

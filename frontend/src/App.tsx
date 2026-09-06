@@ -12,6 +12,7 @@ import { CopilotView } from './components/CopilotView';
 import { InspectorDrawer } from './components/InspectorDrawer';
 import { ScheduleActivityDrawer } from './components/ScheduleActivityDrawer';
 import { AuditTrailModal } from './components/AuditTrailModal';
+import { ToastContainer } from './components/ToastContainer';
 
 const AppContent: React.FC = () => {
   const { activeTab } = useProject();
@@ -40,6 +41,9 @@ const AppContent: React.FC = () => {
       <InspectorDrawer />
       <ScheduleActivityDrawer />
       <AuditTrailModal />
+
+      {/* Global Toast Action-Feedback System */}
+      <ToastContainer />
     </div>
   );
 };

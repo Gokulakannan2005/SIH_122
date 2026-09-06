@@ -110,3 +110,17 @@ export interface OfflineSyncItem {
   summary: string;
   synced: boolean;
 }
+
+export type ToastType = 'success' | 'warning' | 'error' | 'info';
+
+export interface ToastNotification {
+  id: string;
+  type: ToastType;
+  title: string;
+  message: string;
+  timestamp: string;
+  durationMs?: number;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+

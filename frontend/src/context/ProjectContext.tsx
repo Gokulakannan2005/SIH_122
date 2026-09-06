@@ -12,7 +12,9 @@ import {
   UserRole,
   DensityMode,
   ImageEvidence,
-  OfflineSyncItem
+  OfflineSyncItem,
+  ToastNotification,
+  ToastType,
 } from '../types';
 import { parseScheduleCSV, parseDailyReportTXT, parsePipingProgressXLSX } from '../utils/parsers';
 import { processAllMatches } from '../utils/matchingEngine';
@@ -20,6 +22,13 @@ import { api, HealthResponse } from '../services/api';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
 
 export type BackendConnectionStatus = 'connected' | 'offline' | 'checking';
+
+export interface SiteUpdatesFilterState {
+  discipline: string;
+  status: string;
+  source: string;
+  search: string;
+}
 
 interface ProjectContextType {
   schedule: ScheduleActivity[];
@@ -61,6 +70,19 @@ interface ProjectContextType {
   setSelectedReviewUpdateId: (id: string | null) => void;
   selectedAuditUpdateId: string | null;
   setSelectedAuditUpdateId: (id: string | null) => void;
+
+  // Global Action-Feedback Toast Notifications
+  toasts: ToastNotification[];
+  addToast: (toast: Omit<ToastNotification, 'id' | 'timestamp'>) => void;
+  removeToast: (id: string) => void;
+
+  // Coordinated Filter Drilldowns
+  siteUpdatesFilter: SiteUpdatesFilterState;
+  setSiteUpdatesFilter: React.Dispatch<React.SetStateAction<SiteUpdatesFilterState>>;
+  plannerQueueFilter: 'review' | 'unplanned' | 'approved' | 'all';
+  setPlannerQueueFilter: React.Dispatch<React.SetStateAction<'review' | 'unplanned' | 'approved' | 'all'>>;
+  navigateToSiteUpdatesWithFilter: (filter: Partial<SiteUpdatesFilterState>) => void;
+  navigateToPlannerReviewWithFilter: (filter: 'review' | 'unplanned' | 'approved' | 'all') => void;
 
   isLoading: boolean;
   loadDemoData: () => Promise<void>;
@@ -114,6 +136,51 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedReviewUpdateId, setSelectedReviewUpdateId] = useState<string | null>(null);
   const [selectedAuditUpdateId, setSelectedAuditUpdateId] = useState<string | null>(null);
+
+  // Global Toast Notifications
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
+
+  // Coordinated Filter States
+  const [siteUpdatesFilter, setSiteUpdatesFilter] = useState<SiteUpdatesFilterState>({
+    discipline: 'ALL',
+    status: 'ALL',
+    source: 'ALL',
+    search: '',
+  });
+  const [plannerQueueFilter, setPlannerQueueFilter] = useState<'review' | 'unplanned' | 'approved' | 'all'>('review');
+
+  const addToast = (toast: Omit<ToastNotification, 'id' | 'timestamp'>) => {
+    const id = `TOAST-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const duration = toast.durationMs ?? (toast.type === 'error' || toast.type === 'warning' ? 6000 : 3800);
+    const newToast: ToastNotification = {
+      ...toast,
+      id,
+      timestamp: new Date().toISOString(),
+      durationMs: duration,
+    };
+    setToasts(prev => [newToast, ...prev.slice(0, 4)]);
+
+    setTimeout(() => {
+      setToasts(current => current.filter(t => t.id !== id));
+    }, duration);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  const navigateToSiteUpdatesWithFilter = (filter: Partial<SiteUpdatesFilterState>) => {
+    setSiteUpdatesFilter(prev => ({
+      ...prev,
+      ...filter,
+    }));
+    setActiveTab('site-updates');
+  };
+
+  const navigateToPlannerReviewWithFilter = (filter: 'review' | 'unplanned' | 'approved' | 'all') => {
+    setPlannerQueueFilter(filter);
+    setActiveTab('planner-review');
+  };
 
   // Auto-check backend connection and load dataset on mount
   useEffect(() => {
@@ -302,28 +369,59 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setPlannerDecisions(backendData.plannerDecisions);
           setAuditLogs(backendData.auditLogs);
           setIsLoading(false);
+          addToast({
+            type: 'info',
+            title: 'Demo State Reset',
+            message: 'Baseline schedule, daily reports, and piping tracker reloaded successfully.',
+          });
           return;
         }
       }
       await loadClientDemoData();
+      addToast({
+        type: 'info',
+        title: 'Demo State Reset',
+        message: 'Loaded master baseline dataset with 34 milestone activities and verified field logs.',
+      });
     } catch (err) {
       console.error('Failed to reset demo dataset:', err);
+      addToast({
+        type: 'error',
+        title: 'Reset Failed',
+        message: 'Unable to restore demo state. Please check network connection.',
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
   const toggleOfflineMode = () => {
-    setOfflineMode(prev => !prev);
+    setOfflineMode(prev => {
+      const next = !prev;
+      addToast({
+        type: next ? 'warning' : 'success',
+        title: next ? 'Offline Mode Active' : 'Online Sync Active',
+        message: next
+          ? 'Network requests queued locally in IndexedDB cache.'
+          : 'Reconnected to Datum industrial project server.',
+      });
+      return next;
+    });
   };
 
   const syncOfflineQueue = async () => {
     if (offlineSyncQueue.length === 0) return;
+    const count = offlineSyncQueue.length;
     setIsLoading(true);
     // Simulate synchronizing local queue with server
     await new Promise(resolve => setTimeout(resolve, 800));
     setOfflineSyncQueue([]);
     setIsLoading(false);
+    addToast({
+      type: 'success',
+      title: 'Offline Queue Synchronized',
+      message: `Pushed ${count} local field changes to central project controls database.`,
+    });
   };
 
   // Add new field entry submitted by site supervisor
@@ -335,7 +433,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     eventStatus: 'Started' | 'Completed' | 'In Progress';
     quantity?: string;
     supervisor?: string;
-    imageFile?: string;
+    imageFile?: string; // base64 / svg
     imageType?: 'completion' | 'issue' | 'progress';
     caption?: string;
     issueFlag?: string;
@@ -412,6 +510,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     setAuditLogs(prev => [newAuditLog, ...prev]);
+
+    addToast({
+      type: entry.issueFlag ? 'warning' : 'success',
+      title: entry.issueFlag ? 'Report Logged with Blocker' : 'Field Report Ingested',
+      message: `Report ${newId} created (${entry.discipline} • ${entry.area}).${entry.issueFlag ? ` Flagged: ${entry.issueFlag}` : ''}`,
+    });
   };
 
   const handleCustomUpload = async (files: {
@@ -432,6 +536,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setPlannerDecisions(backendData.plannerDecisions);
             setAuditLogs(backendData.auditLogs);
             setIsLoading(false);
+            addToast({
+              type: 'success',
+              title: 'Batch Ingestion Complete',
+              message: 'Processed project files and updated execution baseline.',
+            });
             return;
           }
         }
@@ -498,8 +607,19 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       setPlannerDecisions(newDecisions);
       setAuditLogs(newAuditLogs);
+
+      addToast({
+        type: 'success',
+        title: 'Batch Files Ingested',
+        message: `Parsed ${newUpdates.length} updates against ${currentSchedule.length} schedule activities.`,
+      });
     } catch (err) {
       console.error('Error handling custom upload:', err);
+      addToast({
+        type: 'error',
+        title: 'Upload Processing Failed',
+        message: 'Could not parse execution files. Ensure standard CSV/TXT/XLSX structure.',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -591,6 +711,33 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           [updateId]: backendRes.decision,
         }));
         setAuditLogs(prev => [backendRes.auditLog, ...prev]);
+
+        // Trigger toast
+        if (actionType === 'approve') {
+          addToast({
+            type: 'success',
+            title: 'Match Approved',
+            message: `Linked ${updateId} to milestone ${backendRes.decision.linkedActivityId}.`,
+          });
+        } else if (actionType === 'relink') {
+          addToast({
+            type: 'info',
+            title: 'Activity Re-Linked',
+            message: `Re-linked ${updateId} to ${backendRes.decision.linkedActivityId}.`,
+          });
+        } else if (actionType === 'mark_unplanned') {
+          addToast({
+            type: 'warning',
+            title: 'Marked Unplanned',
+            message: `Classified ${updateId} as unplanned field activity.`,
+          });
+        } else if (actionType === 'reject') {
+          addToast({
+            type: 'error',
+            title: 'Update Rejected',
+            message: `Rejected site update ${updateId}.`,
+          });
+        }
         return;
       }
     }
@@ -605,26 +752,51 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         finalActivityId = targetActivityId || match.candidateActivityId;
         statusStr = 'approved';
         actionDesc = `Planner Approved link to ${finalActivityId}`;
+        addToast({
+          type: 'success',
+          title: 'Match Approved & Linked',
+          message: `Linked ${updateId} to ${finalActivityId}.`,
+        });
         break;
       case 'relink':
         finalActivityId = targetActivityId || null;
         statusStr = 'modified';
         actionDesc = `Planner Manual Re-linked to ${finalActivityId}`;
+        addToast({
+          type: 'info',
+          title: 'Activity Re-Linked',
+          message: `Re-linked ${updateId} to milestone ${finalActivityId}.`,
+        });
         break;
       case 'mark_unplanned':
         finalActivityId = null;
         statusStr = 'unplanned';
         actionDesc = 'Planner Categorized as Unplanned Work';
+        addToast({
+          type: 'warning',
+          title: 'Classified as Unplanned',
+          message: `Classified ${updateId} as unplanned site work.`,
+        });
         break;
       case 'reject':
         finalActivityId = null;
         statusStr = 'rejected';
         actionDesc = 'Planner Rejected site update';
+        addToast({
+          type: 'error',
+          title: 'Update Rejected',
+          message: `Rejected site update ${updateId}.`,
+        });
         break;
       case 'edit_update':
         finalActivityId = targetActivityId || match.candidateActivityId;
         statusStr = 'modified';
         actionDesc = 'Planner Modified site update parameters';
+        addToast({
+          type: 'info',
+          title: 'Parameters Updated',
+          message: `Modified field parameters for ${updateId}.`,
+        });
         break;
     }
 
@@ -678,6 +850,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (res) {
         setSiteUpdates(prev => prev.map(u => (u.id === updateId ? res.siteUpdate : u)));
         setMatchResults(prev => ({ ...prev, [updateId]: res.matchResult }));
+        addToast({
+          type: 'info',
+          title: 'Update Saved',
+          message: `Saved changes to site update ${updateId}.`,
+        });
         return;
       }
     }
@@ -698,6 +875,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }));
       }
     }
+
+    addToast({
+      type: 'info',
+      title: 'Update Saved',
+      message: `Saved evidence modifications for ${updateId}.`,
+    });
   };
 
   /**
@@ -756,6 +939,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+
+    addToast({
+      type: 'success',
+      title: 'Alignment Export Complete',
+      message: `Exported alignment matrix with ${siteUpdates.length} verified records.`,
+    });
   };
 
   return (
@@ -791,6 +980,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setSelectedReviewUpdateId,
         selectedAuditUpdateId,
         setSelectedAuditUpdateId,
+        toasts,
+        addToast,
+        removeToast,
+        siteUpdatesFilter,
+        setSiteUpdatesFilter,
+        plannerQueueFilter,
+        setPlannerQueueFilter,
+        navigateToSiteUpdatesWithFilter,
+        navigateToPlannerReviewWithFilter,
         isLoading,
         loadDemoData,
         handleCustomUpload,

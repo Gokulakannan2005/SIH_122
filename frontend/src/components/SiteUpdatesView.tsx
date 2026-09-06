@@ -11,7 +11,12 @@ import {
   Clock,
   HelpCircle,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Camera,
+  AlertTriangle,
+  X,
+  SlidersHorizontal,
+  ExternalLink
 } from 'lucide-react';
 
 export const SiteUpdatesView: React.FC = () => {
@@ -21,20 +26,21 @@ export const SiteUpdatesView: React.FC = () => {
     plannerDecisions,
     setSelectedInspectorUpdateId,
     setSelectedReviewUpdateId,
-    handlePlannerAction,
     setActiveTab,
     currentRole,
+    siteUpdatesFilter,
+    setSiteUpdatesFilter,
+    navigateToPlannerReviewWithFilter,
   } = useProject();
 
   // View Mode: 'table' vs 'kanban'
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('kanban');
 
-  // Filter & Search states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDiscipline, setSelectedDiscipline] = useState('ALL');
-  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
-  const [selectedSource, setSelectedSource] = useState('ALL');
+  // Sorting state
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'confidence-desc' | 'confidence-asc'>('date-desc');
+
+  // Active filter state from context (persists across drawer/tab visits)
+  const { discipline: selectedDiscipline, status: selectedStatus, source: selectedSource, search: searchQuery } = siteUpdatesFilter;
 
   const isFiltered =
     searchQuery.trim() !== '' ||
@@ -43,10 +49,12 @@ export const SiteUpdatesView: React.FC = () => {
     selectedSource !== 'ALL';
 
   const handleResetFilters = () => {
-    setSearchQuery('');
-    setSelectedDiscipline('ALL');
-    setSelectedStatus('ALL');
-    setSelectedSource('ALL');
+    setSiteUpdatesFilter({
+      discipline: 'ALL',
+      status: 'ALL',
+      source: 'ALL',
+      search: '',
+    });
     setSortBy('date-desc');
   };
 
@@ -63,7 +71,7 @@ export const SiteUpdatesView: React.FC = () => {
     return Array.from(set).sort();
   }, [siteUpdates]);
 
-  // Discipline Color Map for Trello-style Label Chips
+  // Discipline Color Map for industrial badge chips
   const getDisciplineColor = (disc: string) => {
     switch (disc) {
       case 'Civil':
@@ -88,7 +96,7 @@ export const SiteUpdatesView: React.FC = () => {
         const match = matchResults[update.id];
         const decision = plannerDecisions[update.id];
 
-        // Search text matching
+        // Search text matching across multi-fields
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
           const matchesQuery =
@@ -96,8 +104,10 @@ export const SiteUpdatesView: React.FC = () => {
             update.extractedDescription.toLowerCase().includes(q) ||
             update.rawText.toLowerCase().includes(q) ||
             update.discipline.toLowerCase().includes(q) ||
-            update.area.toLowerCase().includes(q) ||
+            (update.area && update.area.toLowerCase().includes(q)) ||
             (update.supervisor && update.supervisor.toLowerCase().includes(q)) ||
+            (update.sourceFile && update.sourceFile.toLowerCase().includes(q)) ||
+            (update.issueFlag && update.issueFlag.toLowerCase().includes(q)) ||
             (match?.candidateActivityId && match.candidateActivityId.toLowerCase().includes(q)) ||
             (decision?.linkedActivityId && decision.linkedActivityId.toLowerCase().includes(q));
 
@@ -184,10 +194,10 @@ export const SiteUpdatesView: React.FC = () => {
         <div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
             <FileText size={20} style={{ color: 'var(--brand-primary)' }} />
-            Site Progress Updates
+            Daily Field Reports & Execution Feed
           </h2>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
-            Supervisor progress reports and discipline trackers parsed for L5/L6 schedule alignment.
+            Extracted supervisor reports, Excel progress records, and mobile logs aligned with schedule milestones.
           </p>
         </div>
 
@@ -198,6 +208,7 @@ export const SiteUpdatesView: React.FC = () => {
               className={`view-mode-btn ${viewMode === 'kanban' ? 'active' : ''}`}
               onClick={() => setViewMode('kanban')}
               type="button"
+              title="Kanban Board view"
             >
               <LayoutGrid size={13} />
               <span>Board</span>
@@ -206,6 +217,7 @@ export const SiteUpdatesView: React.FC = () => {
               className={`view-mode-btn ${viewMode === 'table' ? 'active' : ''}`}
               onClick={() => setViewMode('table')}
               type="button"
+              title="Table List view"
             >
               <List size={13} />
               <span>List</span>
@@ -213,27 +225,37 @@ export const SiteUpdatesView: React.FC = () => {
           </div>
 
           <span className="mono-pill" style={{ fontSize: '0.725rem', padding: '0.3rem 0.6rem' }}>
-            <strong>{filteredUpdates.length}</strong> of <strong>{siteUpdates.length}</strong>
+            Showing <strong>{filteredUpdates.length}</strong> of <strong>{siteUpdates.length}</strong>
           </span>
         </div>
       </div>
 
       {/* Filter Toolbar & Quick Filter Pills */}
       <div className="toolbar-card">
-        {/* Live Search Input */}
-        <div className="search-input-box" style={{ maxWidth: 300 }}>
+        {/* Live Multi-Field Search Input */}
+        <div className="search-input-box" style={{ maxWidth: 320 }}>
           <Search size={14} className="search-icon" />
           <input
             type="text"
             className="form-input"
             style={{ width: '100%' }}
-            placeholder="Search keywords, areas, supervisors..."
+            placeholder="Search ID, desc, area, supervisor..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={e => setSiteUpdatesFilter(prev => ({ ...prev, search: e.target.value }))}
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, search: '' }))}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px', color: 'var(--text-muted)' }}
+              title="Clear search"
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
 
-        {/* Quick Filter Pill Buttons (Trello/Jira style) */}
+        {/* Quick Filter Pill Buttons */}
         <div className="filter-pill-group">
           <button
             className={`filter-pill ${selectedDiscipline === 'ALL' && selectedStatus === 'ALL' ? 'active' : ''}`}
@@ -246,7 +268,7 @@ export const SiteUpdatesView: React.FC = () => {
             <button
               key={d}
               className={`filter-pill ${selectedDiscipline === d ? 'active' : ''}`}
-              onClick={() => setSelectedDiscipline(selectedDiscipline === d ? 'ALL' : d)}
+              onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, discipline: prev.discipline === d ? 'ALL' : d }))}
               type="button"
             >
               {d}
@@ -254,14 +276,14 @@ export const SiteUpdatesView: React.FC = () => {
           ))}
           <button
             className={`filter-pill ${selectedStatus === 'review' ? 'active' : ''}`}
-            onClick={() => setSelectedStatus(selectedStatus === 'review' ? 'ALL' : 'review')}
+            onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, status: prev.status === 'review' ? 'ALL' : 'review' }))}
             type="button"
           >
             Needs Review
           </button>
           <button
             className={`filter-pill ${selectedStatus === 'unplanned' ? 'active' : ''}`}
-            onClick={() => setSelectedStatus(selectedStatus === 'unplanned' ? 'ALL' : 'unplanned')}
+            onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, status: prev.status === 'unplanned' ? 'ALL' : 'unplanned' }))}
             type="button"
           >
             Unplanned
@@ -297,9 +319,95 @@ export const SiteUpdatesView: React.FC = () => {
         )}
       </div>
 
+      {/* Active Filter Chips Bar */}
+      {isFiltered && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', padding: '0.35rem 0.5rem', background: '#f8fafc', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+          <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
+            <SlidersHorizontal size={12} /> Active Filters:
+          </span>
+
+          {searchQuery && (
+            <span className="mono-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}>
+              Search: &ldquo;{searchQuery}&rdquo;
+              <button
+                type="button"
+                onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, search: '' }))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#1e40af' }}
+              >
+                <X size={11} />
+              </button>
+            </span>
+          )}
+
+          {selectedDiscipline !== 'ALL' && (
+            <span className="mono-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}>
+              Discipline: {selectedDiscipline}
+              <button
+                type="button"
+                onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, discipline: 'ALL' }))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#1e40af' }}
+              >
+                <X size={11} />
+              </button>
+            </span>
+          )}
+
+          {selectedStatus !== 'ALL' && (
+            <span className="mono-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}>
+              Status: {selectedStatus === 'review' ? 'Needs Review' : selectedStatus === 'unplanned' ? 'Unplanned' : selectedStatus}
+              <button
+                type="button"
+                onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, status: 'ALL' }))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#1e40af' }}
+              >
+                <X size={11} />
+              </button>
+            </span>
+          )}
+
+          {selectedSource !== 'ALL' && (
+            <span className="mono-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}>
+              Source: {selectedSource}
+              <button
+                type="button"
+                onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, source: 'ALL' }))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#1e40af' }}
+              >
+                <X size={11} />
+              </button>
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            style={{ marginLeft: 'auto', fontSize: '0.725rem', color: 'var(--brand-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
       {/* Main Content: Board View vs Table View */}
-      {viewMode === 'kanban' ? (
-        /* Trello Kanban Board Mode */
+      {filteredUpdates.length === 0 ? (
+        <div className="card" style={{ padding: '3.5rem 1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <Search size={36} style={{ color: 'var(--brand-primary)', margin: '0 auto 0.75rem', opacity: 0.6 }} />
+          <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>
+            No Matching Field Reports Found
+          </h3>
+          <p style={{ fontSize: '0.825rem', maxWidth: 420, margin: '0 auto 1.25rem' }}>
+            No updates matched your current search and filter criteria. Clear filters or change keywords to view other records.
+          </p>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleResetFilters}
+          >
+            <RotateCcw size={14} />
+            <span>Reset All Filters</span>
+          </button>
+        </div>
+      ) : viewMode === 'kanban' ? (
         <div className="kanban-board">
           {kanbanColumns.map(col => (
             <div key={col.id} className="kanban-column">
@@ -308,111 +416,172 @@ export const SiteUpdatesView: React.FC = () => {
                   {col.icon}
                   <span>{col.title}</span>
                 </span>
-                <span className="mono-pill" style={{ fontSize: '0.675rem', fontWeight: 700 }}>
-                  {col.items.length}
-                </span>
+                <span className="kanban-column-badge">{col.items.length}</span>
               </div>
 
-              <div className="kanban-cards-container">
+              <div className="kanban-column-body">
                 {col.items.length === 0 ? (
-                  <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-subtle)', fontSize: '0.775rem' }}>
-                    No updates in this column.
+                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                    No updates in this category
                   </div>
                 ) : (
                   col.items.map(update => {
                     const match = matchResults[update.id];
                     const decision = plannerDecisions[update.id];
                     const discColor = getDisciplineColor(update.discipline);
-                    const linkedId = decision?.linkedActivityId || (match?.category === 'ready' ? match.candidateActivityId : null);
+                    const isLinked = !!(decision?.linkedActivityId || (match?.category === 'ready' && match.candidateActivityId));
+                    const linkedId = decision?.linkedActivityId || match?.candidateActivityId;
 
                     return (
                       <div
                         key={update.id}
                         className="kanban-card"
                         onClick={() => setSelectedInspectorUpdateId(update.id)}
+                        title="Click to view full provenance evidence in Inspector drawer"
                       >
-                        {/* Tags & Badges */}
-                        <div className="kanban-card-labels">
+                        {/* Card Header: ID & Discipline Label */}
+                        <div className="kanban-card-header">
                           <span
-                            className="trello-tag"
+                            className="kanban-label-chip"
                             style={{
                               background: discColor.bg,
                               color: discColor.text,
-                              border: `1px solid ${discColor.border}`,
+                              borderColor: discColor.border,
                             }}
                           >
                             {update.discipline}
                           </span>
-                          <span className="mono-pill" style={{ fontSize: '0.65rem' }}>
-                            {update.id}
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
+                            {update.reportDate}
                           </span>
-                          {match && (
+                        </div>
+
+                        {/* Description */}
+                        <div className="kanban-card-title">
+                          {update.extractedDescription}
+                        </div>
+
+                        {/* Issue Banner if critical */}
+                        {update.issueFlag && (
+                          <div
+                            style={{
+                              background: '#fff1f2',
+                              border: '1px solid #fecdd3',
+                              borderRadius: 'var(--radius-xs)',
+                              padding: '0.3rem 0.5rem',
+                              fontSize: '0.7rem',
+                              color: '#9f1239',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontWeight: 600,
+                              marginBottom: '0.45rem',
+                            }}
+                          >
+                            <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {update.issueFlag}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Matched Target Pill & AI Confidence */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginTop: '0.45rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                            {isLinked ? (
+                              <span
+                                className="mono-pill"
+                                style={{
+                                  fontSize: '0.675rem',
+                                  color: 'var(--brand-primary)',
+                                  borderColor: 'var(--brand-primary)',
+                                  fontWeight: 700,
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                &rarr; {linkedId}
+                              </span>
+                            ) : (
+                              <span className="mono-pill" style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+                                Unplanned
+                              </span>
+                            )}
+                          </div>
+
+                          {match && match.confidenceScore > 0 && (
                             <span
-                              className={`status-badge ${
-                                match.confidenceScore >= 75 ? 'ready' : match.confidenceScore >= 50 ? 'review' : 'unplanned'
-                              }`}
-                              style={{ marginLeft: 'auto', fontSize: '0.65rem' }}
+                              style={{
+                                fontSize: '0.7rem',
+                                fontFamily: 'var(--font-mono)',
+                                fontWeight: 700,
+                                color: match.confidenceScore >= 75 ? 'var(--status-ready-fg)' : match.confidenceScore >= 50 ? 'var(--status-review-fg)' : 'var(--text-muted)',
+                              }}
                             >
                               {match.confidenceScore}%
                             </span>
                           )}
                         </div>
 
-                        {/* Title & Description */}
-                        <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.35 }}>
-                          {update.extractedDescription}
-                        </div>
-
-                        {/* Metadata row */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                          <span>{update.area || 'General Area'}</span>
-                          <span>{update.reportDate}</span>
-                        </div>
-
-                        {/* Linked Target Activity */}
-                        {linkedId && (
-                          <div style={{ fontSize: '0.725rem', color: 'var(--brand-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span>&rarr;</span>
-                            <span style={{ fontFamily: 'var(--font-mono)' }}>{linkedId}</span>
-                          </div>
-                        )}
-
-                        {/* Quick Action Footer on Card */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 6, borderTop: '1px solid var(--border-subtle)' }}>
-                          <span style={{ fontSize: '0.675rem', color: 'var(--text-subtle)' }}>
-                            {update.sourceFile}
-                          </span>
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            {col.id === 'review' && currentRole !== 'supervisor' ? (
-                              <button
-                                className="btn btn-warning btn-sm"
-                                style={{ padding: '2px 6px', fontSize: '0.675rem' }}
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setSelectedReviewUpdateId(update.id);
-                                  setActiveTab('planner-review');
+                        {/* Card Footer: Metadata badges and role-based action */}
+                        <div className="kanban-card-footer">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            {update.images && update.images.length > 0 && (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 2,
+                                  fontSize: '0.675rem',
+                                  color: 'var(--brand-primary)',
+                                  background: '#f0f9ff',
+                                  padding: '1px 5px',
+                                  borderRadius: 3,
+                                  border: '1px solid #bae6fd',
                                 }}
-                                title="Review & link in Planner Review"
-                                type="button"
+                                title="Site supervisor photo evidence attached"
                               >
-                                <span>Review</span>
-                                <ChevronRight size={10} />
-                              </button>
-                            ) : (
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                style={{ padding: '2px 6px', fontSize: '0.675rem' }}
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setSelectedInspectorUpdateId(update.id);
-                                }}
-                                title="Inspect details"
-                                type="button"
-                              >
-                                <span>Inspect</span>
-                              </button>
+                                <Camera size={10} />
+                                <span>Photo</span>
+                              </span>
                             )}
+                            <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+                              {update.area || 'Field'}
+                            </span>
                           </div>
+
+                          {/* Role-gated action: Planners can jump to review; Supervisors inspect only */}
+                          {currentRole === 'admin' && !decision && match?.category === 'review' ? (
+                            <button
+                              type="button"
+                              className="btn btn-warning btn-sm"
+                              style={{ padding: '2px 6px', fontSize: '0.675rem' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedReviewUpdateId(update.id);
+                                navigateToPlannerReviewWithFilter('review');
+                              }}
+                              title="Open in Planner Review Matrix"
+                            >
+                              <span>Review</span>
+                              <ChevronRight size={10} />
+                            </button>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: '0.7rem',
+                                color: 'var(--brand-primary)',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 2,
+                              }}
+                            >
+                              <span>Inspect</span>
+                              <ChevronRight size={11} />
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -431,149 +600,119 @@ export const SiteUpdatesView: React.FC = () => {
                 <tr>
                   <th>Update ID</th>
                   <th>Date</th>
-                  <th>Source & Line</th>
                   <th>Discipline</th>
-                  <th>Extracted Work Description</th>
+                  <th>Extracted Description</th>
                   <th>Area</th>
-                  <th>Event Status</th>
-                  <th>Matched L5/L6 Activity</th>
+                  <th>Linked Milestone</th>
                   <th>Confidence</th>
-                  <th>Action</th>
+                  <th>Proof</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredUpdates.length === 0 ? (
-                  <tr>
-                    <td colSpan={10}>
-                      <div className="empty-state">
-                        <FileText size={32} />
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>No site updates match your filter</div>
-                        <div style={{ fontSize: '0.8rem' }}>Try clearing the search keyword or changing discipline/status filters.</div>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredUpdates.map(update => {
-                    const match = matchResults[update.id];
-                    const decision = plannerDecisions[update.id];
-                    const linkedId = decision?.linkedActivityId || (match?.category === 'ready' ? match.candidateActivityId : null);
-                    const isUnplanned = decision?.status === 'unplanned' || match?.category === 'unplanned';
-                    const isReview = !decision && match?.category === 'review';
+                {filteredUpdates.map(update => {
+                  const match = matchResults[update.id];
+                  const decision = plannerDecisions[update.id];
+                  const discColor = getDisciplineColor(update.discipline);
+                  const isLinked = !!(decision?.linkedActivityId || (match?.category === 'ready' && match.candidateActivityId));
+                  const linkedId = decision?.linkedActivityId || match?.candidateActivityId;
 
-                    return (
-                      <tr
-                        key={update.id}
-                        onClick={() => setSelectedInspectorUpdateId(update.id)}
-                        title="Click row to open details in Inspector Drawer"
-                      >
-                        <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>
-                          {update.id}
-                        </td>
-                        <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                          {update.reportDate}
-                        </td>
-                        <td style={{ fontSize: '0.775rem', whiteSpace: 'nowrap' }}>
-                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{update.sourceFile}</span>
-                          {update.lineEvidence && (
-                            <span style={{ color: 'var(--text-muted)', marginLeft: 4, fontFamily: 'var(--font-mono)' }}>
-                              #{update.lineEvidence}
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          <span className="mono-pill">{update.discipline}</span>
-                        </td>
-                        <td style={{ maxWidth: 280 }}>
-                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.825rem' }}>
-                            {update.extractedDescription}
-                          </div>
-                          {update.supervisor && (
-                            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                              Supv: {update.supervisor}
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
-                          {update.area || '—'}
-                        </td>
-                        <td>
-                          <span
-                            className={`status-badge ${
-                              update.eventStatus === 'Completed' ? 'ready' : update.eventStatus === 'In Progress' ? 'review' : 'rejected'
-                            }`}
-                          >
-                            {update.eventStatus}
+                  return (
+                    <tr
+                      key={update.id}
+                      onClick={() => setSelectedInspectorUpdateId(update.id)}
+                      style={{ cursor: 'pointer' }}
+                      title="Click to inspect update provenance & breakdown"
+                    >
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>
+                        {update.id}
+                      </td>
+                      <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        {update.reportDate}
+                      </td>
+                      <td>
+                        <span
+                          className="kanban-label-chip"
+                          style={{
+                            background: discColor.bg,
+                            color: discColor.text,
+                            borderColor: discColor.border,
+                          }}
+                        >
+                          {update.discipline}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: 300 }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {update.extractedDescription}
+                        </div>
+                        {update.issueFlag && (
+                          <span style={{ fontSize: '0.7rem', color: '#b91c1c', fontWeight: 600 }}>
+                            Blocker: {update.issueFlag}
                           </span>
-                        </td>
-                        <td>
-                          {linkedId ? (
-                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--status-ready-fg)' }}>
-                              {linkedId}
-                            </span>
-                          ) : isUnplanned ? (
-                            <span className="status-badge unplanned">
-                              Unplanned
-                            </span>
-                          ) : (
-                            <span className="status-badge review">
-                              Needs Review
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          {match ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div className="progress-bar-container" style={{ width: 44, height: 5 }}>
-                                <div
-                                  className={`progress-bar-fill ${
-                                    match.confidenceScore >= 75 ? 'green' : match.confidenceScore >= 50 ? 'amber' : 'red'
-                                  }`}
-                                  style={{ width: `${match.confidenceScore}%` }}
-                                />
-                              </div>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                                {match.confidenceScore}%
-                              </span>
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--text-subtle)', fontSize: '0.75rem' }}>—</span>
-                          )}
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            {isReview && currentRole !== 'supervisor' ? (
-                              <button
-                                className="btn btn-warning btn-sm"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setSelectedReviewUpdateId(update.id);
-                                  setActiveTab('planner-review');
-                                }}
-                                title="Review & link in Planner Review"
-                                type="button"
-                              >
-                                <span>Review</span>
-                                <ChevronRight size={11} />
-                              </button>
-                            ) : (
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setSelectedInspectorUpdateId(update.id);
-                                }}
-                                title="Inspect details"
-                                type="button"
-                              >
-                                <span>Inspect</span>
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                        )}
+                      </td>
+                      <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {update.area || '—'}
+                      </td>
+                      <td>
+                        {isLinked ? (
+                          <span className="mono-pill" style={{ fontWeight: 700, color: 'var(--brand-primary)' }}>
+                            {linkedId}
+                          </span>
+                        ) : (
+                          <span className="mono-pill" style={{ color: 'var(--status-unplanned-fg)', borderColor: '#fca5a5' }}>
+                            Unplanned
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {match ? (
+                          <span
+                            style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                              color:
+                                match.confidenceScore >= 75
+                                  ? 'var(--status-ready-fg)'
+                                  : match.confidenceScore >= 50
+                                  ? 'var(--status-review-fg)'
+                                  : 'var(--text-muted)',
+                            }}
+                          >
+                            {match.confidenceScore}%
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        {update.images && update.images.length > 0 ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--brand-primary)', fontSize: '0.75rem', fontWeight: 600 }}>
+                            <Camera size={13} /> {update.images.length}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-subtle)', fontSize: '0.75rem' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '3px 8px', fontSize: '0.725rem' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedInspectorUpdateId(update.id);
+                          }}
+                        >
+                          <span>Inspect</span>
+                          <ChevronRight size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

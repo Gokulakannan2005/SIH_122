@@ -19,7 +19,7 @@ Datum is built on a decoupled, resilient architecture designed for high availabi
 │             │                         │                          │              │
 │  ┌──────────▼─────────────────────────▼──────────────────────────▼───────────┐  │
 │  │                            ProjectContext                                 │  │
-│  │  - State Management       - Ingestion Handler      - Audit Trail Handler │  │
+│  │  - State Management       - Ingestion Handler      - Audit Trail Handler  │  │
 │  │  - Offline Sync Queue     - Planner Actions        - Notification System  │  │
 │  └──────────┬─────────────────────────┬──────────────────────────┬───────────┘  │
 │             │                         │                          │              │

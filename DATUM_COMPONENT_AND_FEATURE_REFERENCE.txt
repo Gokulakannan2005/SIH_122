@@ -1,0 +1,311 @@
+================================================================================
+DATUM — COMPONENT & FEATURE TECHNICAL REFERENCE
+================================================================================
+Platform: Datum (SIH-122 Industrial Schedule-Evidence Linker)
+Domain: Construction Project Controls, EPC Megaprojects & Industrial Scheduling
+Version: 2.3.0
+Date of Record: September 6, 2026
+Audience: Product Engineers, Systems Architects, Technical Evaluators
+--------------------------------------------------------------------------------
+
+================================================================================
+1. SYSTEM ARCHITECTURE & TOPOLOGY
+================================================================================
+
+Datum is built on a decoupled, resilient architecture designed for high
+availability on industrial jobsites with intermittent network connectivity:
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           FRONTEND (React + TypeScript)                         │
+│                                                                                 │
+│  ┌──────────────────────┐  ┌──────────────────────┐  ┌───────────────────────┐  │
+│  │   Sidebar & Layout   │  │   AppHeader / Mode   │  │     Drawers/Modals    │  │
+│  └──────────┬───────────┘  └──────────┬───────────┘  └───────────┬───────────┘  │
+│             │                         │                          │              │
+│  ┌──────────▼─────────────────────────▼──────────────────────────▼───────────┐  │
+│  │                            ProjectContext                                 │  │
+│  │  - State Management       - Ingestion Handler      - Audit Trail Handler  │  │
+│  │  - Offline Sync Queue     - Planner Actions        - Notification System  │  │
+│  └──────────┬─────────────────────────┬──────────────────────────┬───────────┘  │
+│             │                         │                          │              │
+│  ┌──────────▼───────────┐  ┌──────────▼───────────┐  ┌───────────▼───────────┐  │
+│  │  matchingEngine.ts   │  │    ocrService.ts     │  │ scheduleSimulator.ts  │  │
+│  │  (NLP Multi-Factor)  │  │ (Tesseract.js/Crypto)│  │ (Forward Propagation) │  │
+│  └──────────────────────┘  └──────────────────────┘  └───────────────────────┘  │
+└────────────────────────────────────────┬────────────────────────────────────────┘
+                                         │ REST API / Local Fallback
+                                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    BACKEND (Node.js + Express + SQLite Embedded)                │
+│                                                                                 │
+│  ┌──────────────────────┐  ┌──────────────────────┐  ┌───────────────────────┐  │
+│  │      server.ts       │  │      parsers.ts      │  │         db.ts         │  │
+│  │ (REST Endpoints/Cors)│  │ (CSV, TXT, Excel)    │  │ (SQLite Tables/Seed)  │  │
+│  └──────────────────────┘  └──────────────────────┘  └───────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+2. FEATURE CATALOGUE
+================================================================================
+
+FEATURE 1: MULTI-SOURCE FIELD INGESTION
+---------------------------------------
+  - Location: SupervisorEntryView.tsx, UploadDemoView.tsx
+  - Purpose: Ingests unstructured daily progress text, single entries, CSV schedules,
+    TXT logs, and Excel piping spreadsheets.
+  - Intended Role: Site Supervisor (single entry) & Lead Planner (batch upload).
+  - Source Files: SupervisorEntryView.tsx, UploadDemoView.tsx, parsers.ts, server.ts.
+  - Inputs: Text fields, files (.csv, .txt, .xlsx, .jpg, .png, .webp).
+  - Outputs/State Changes: Adds new SiteUpdate to siteUpdates, generates MatchResult, creates AuditLog.
+  - Backend/API Dependency: POST /api/upload, POST /api/site-updates, fallback to browser in-memory state.
+  - Offline Behavior: Queues entry in offlineSyncQueue in local storage; syncs when online.
+  - Status: Working.
+
+FEATURE 2: PHOTO EVIDENCE & SHA-256 INTEGRITY FINGERPRINTING
+------------------------------------------------------------
+  - Location: SupervisorEntryView.tsx, InspectorDrawer.tsx
+  - Purpose: Attaches construction photo proof with client-side SHA-256 integrity hash verification.
+  - Intended Role: Site Supervisor & Lead Planner.
+  - Source Files: ocrService.ts, ProjectContext.tsx, SupervisorEntryView.tsx, InspectorDrawer.tsx.
+  - Inputs: Image file (JPEG, PNG, WebP <= 8 MB).
+  - Outputs/State Changes: Computes SHA-256 string, generates thumbnail URL, attaches to ImageEvidence.
+  - Backend/API Dependency: Client-side Web Crypto API (crypto.subtle.digest).
+  - Offline Behavior: Fully operational client-side; persists in local session state.
+  - Status: Working.
+
+FEATURE 3: BROWSER-LOCAL OCR EQUIPMENT TAG EXTRACTION
+-----------------------------------------------------
+  - Location: SupervisorEntryView.tsx, InspectorDrawer.tsx
+  - Purpose: Runs local OCR on demand to extract candidate equipment and activity tags.
+  - Intended Role: Site Supervisor & Lead Planner.
+  - Source Files: ocrService.ts, SupervisorEntryView.tsx.
+  - Inputs: User click on "Run OCR Tag Scan".
+  - Outputs/State Changes: Extracts candidate tags ("24-CW-017", "18-FW-008"), calculates OCR confidence %,
+    provides raw OCR text.
+  - Backend/API Dependency: Browser-local tesseract.js engine (zero external API calls).
+  - Offline Behavior: Fully client-side.
+  - Status: Working.
+
+FEATURE 4: HUMAN-IN-THE-LOOP EQUIPMENT TAG VERIFICATION
+-------------------------------------------------------
+  - Location: SupervisorEntryView.tsx, InspectorDrawer.tsx
+  - Purpose: Allows supervisor or planner to confirm or manually enter an equipment tag.
+  - Intended Role: Site Supervisor & Lead Planner.
+  - Source Files: ProjectContext.tsx, InspectorDrawer.tsx.
+  - Inputs: Candidate tag chip click or manual tag input submission.
+  - Outputs/State Changes: Sets confirmedTag, confirmedBy, updates matching engine scores, creates audit record.
+  - Backend/API Dependency: Updates local state and triggers re-match evaluation.
+  - Offline Behavior: Fully client-side.
+  - Status: Working.
+
+FEATURE 5: DETERMINISTIC MULTI-FACTOR SCHEDULE MATCHING ENGINE
+--------------------------------------------------------------
+  - Location: matchingEngine.ts (frontend and backend)
+  - Purpose: Computes explainable match scores between field updates and L5/L6 schedule activities.
+  - Intended Role: System background engine.
+  - Source Files: frontend/src/utils/matchingEngine.ts, backend/src/matchingEngine.ts.
+  - Inputs: SiteUpdate and ScheduleActivity[].
+  - Outputs/State Changes: Generates MatchResult with confidence score, category (ready, review, unplanned),
+    and score breakdown.
+  - Backend/API Dependency: GET /api/matches or local processAllMatches.
+  - Status: Working.
+
+FEATURE 6: PLANNER REVIEW WORKBENCH & DECISION ENGINE
+-----------------------------------------------------
+  - Location: PlannerReviewView.tsx
+  - Purpose: Lead Planner command center for approving links, relinking, marking unplanned, or rejecting reports.
+  - Intended Role: Lead Planner only.
+  - Source Files: PlannerReviewView.tsx, ProjectContext.tsx.
+  - Inputs: Selection of target activity, planner justification note, action button click.
+  - Outputs/State Changes: Updates plannerDecisions, triggers schedule actual date recalculation, logs audit event,
+    advances queue.
+  - Backend/API Dependency: POST /api/planner/action or local state.
+  - Status: Working.
+
+FEATURE 7: SCENARIO-BASED SCHEDULE RISK SIMULATOR
+-------------------------------------------------
+  - Location: CopilotView.tsx, scheduleSimulator.ts
+  - Purpose: Deterministic forward delay propagation simulating downstream domino impacts across Finish-to-Start dependency chains.
+  - Intended Role: Lead Planner & Project Manager.
+  - Source Files: frontend/src/utils/scheduleSimulator.ts, frontend/src/components/CopilotView.tsx.
+  - Inputs: Target milestone selection, delay duration slider (+1 to +60 days).
+  - Outputs/State Changes: Calculates shifted start/finish dates, incremental delay days, impacted milestone count,
+    critical path impact flag, and executive briefing.
+  - Backend/API Dependency: Client-side dependency graph engine.
+  - Status: Working.
+
+FEATURE 8: CROSS-DISCIPLINE FIELD REPORTS BOARD & TABLE
+-------------------------------------------------------
+  - Location: SiteUpdatesView.tsx
+  - Purpose: Multi-view feed for exploring field updates with multi-attribute search and coordinated filters.
+  - Intended Role: All users (read-only for supervisors; quick-review access for planners).
+  - Source Files: SiteUpdatesView.tsx, InspectorDrawer.tsx.
+  - Inputs: Search text, discipline chips, status dropdowns, view mode toggle.
+  - Outputs/State Changes: Filtered list of updates, opens InspectorDrawer.
+  - Status: Working.
+
+FEATURE 9: MILESTONE BASELINE & SCHEDULE ACTIVITY INSPECTOR
+-----------------------------------------------------------
+  - Location: ScheduleActivitiesView.tsx, ScheduleActivityDrawer.tsx
+  - Purpose: Displays master schedule deliverables with actual execution overlays and dependency chains.
+  - Intended Role: All users.
+  - Source Files: ScheduleActivitiesView.tsx, ScheduleActivityDrawer.tsx.
+  - Inputs: Search query, discipline filter, row click.
+  - Outputs/State Changes: Opens ScheduleActivityDrawer with linked updates and variance metrics.
+  - Status: Working.
+
+FEATURE 10: GLOBAL ACTION-FEEDBACK NOTIFICATION SYSTEM
+------------------------------------------------------
+  - Location: ToastContainer.tsx, ProjectContext.tsx
+  - Purpose: Non-blocking pop-up toast alerts confirming system state changes without disorienting the user.
+  - Intended Role: All users.
+  - Source Files: ToastContainer.tsx, ProjectContext.tsx.
+  - Inputs: Ingestion, approval, relinking, OCR scanning, tag confirmation, demo reset events.
+  - Outputs/State Changes: Auto-dismissing toast notifications (3000-4000ms duration).
+  - Status: Working.
+
+
+================================================================================
+3. COMPREHENSIVE BUTTON AND CONTROL REFERENCE
+================================================================================
+
++-----------------------+----------------------------------+----------------+-------------------------------------+-------------------------------------------------------+------------------------------------------+
+| Screen / Component    | Control Label                    | Who Can Use    | What It Does                        | Result / State Change                                 | Notes / Limitations                      |
++-----------------------+----------------------------------+----------------+-------------------------------------+-------------------------------------------------------+------------------------------------------+
+| AppHeader             | Role Toggle (Planner/Supervisor) | All Users      | Toggles active operational role     | Switches currentRole; hides/shows planner tabs        | Supervisor role redirects out of planner |
+| AppHeader             | Export CSV                       | All Users      | Exports execution alignment matrix  | Triggers download of datum_execution_alignment.csv    | Standard UTF-8 CSV                       |
+| AppHeader             | Restart Demo                     | All Users      | Resets dataset to pristine baseline | Calls loadDemoData(), restores benchmark data         | Displays green confirmation toast        |
+| Sidebar               | Navigation Items (7 Views)       | All Users      | Switches active viewport tab        | Updates activeTab                                     | Planner tabs hidden in Supervisor mode   |
+| Sidebar               | Audit Trail & Governance         | All Users      | Opens full audit history modal      | Sets selectedAuditUpdateId                            | Displays complete tabular audit log      |
+| Dashboard             | KPI Metric Cards                 | All Users      | Navigates to filtered view          | Updates activeTab and sets filter criteria            | 1-click drilldown                        |
+| SiteUpdatesView       | Kanban / Table Toggle            | All Users      | Switches display mode               | Updates viewMode (kanban or table)                    | Retains active search & filter state     |
+| SiteUpdatesView       | Search Input                     | All Users      | Filters updates by keyword          | Updates searchQuery in filter state                   | Matches across ID, text, area, tags      |
+| SiteUpdatesView       | Discipline Filter Chips          | All Users      | Filters updates by discipline       | Sets selectedDiscipline                               | Highlights active chip                   |
+| SiteUpdatesView       | Status Filter Select             | All Users      | Filters by match status             | Sets selectedStatus (ALL, approved, review, unplanned)| Native select dropdown                   |
+| SiteUpdatesView       | Clear all / Reset All Filters    | All Users      | Clears all active filters           | Resets filter state to defaults                       | Restores full update list                |
+| SiteUpdatesView       | Card / Row Click                 | All Users      | Opens record inspector              | Sets selectedInspectorUpdateId                        | Opens slide-over InspectorDrawer         |
+| SiteUpdatesView       | Review -> Button                 | Lead Planner   | Jumps to review workbench           | Sets selectedReviewUpdateId & navigates to review     | Only visible on pending review items     |
+| PlannerReviewView     | Queue Search Input               | Lead Planner   | Filters left review queue           | Filters queueItems                                    | Fast local fuzzy filtering               |
+| PlannerReviewView     | Queue Filter Chips               | Lead Planner   | Filters review items by category    | Sets plannerQueueFilter                               | Preserves active item selection          |
+| PlannerReviewView     | Queue Item Card Click            | Lead Planner   | Focuses update in review pane       | Sets selectedReviewUpdateId                           | Loads details into workbench             |
+| PlannerReviewView     | Inspect Metadata Button          | Lead Planner   | Opens side drawer for raw text/hash | Sets selectedInspectorUpdateId                        | Opens InspectorDrawer                    |
+| PlannerReviewView     | Photo Proof Badge Click          | Lead Planner   | Opens photo evidence in drawer      | Sets selectedInspectorUpdateId                        | Shows enlarged image & tag status        |
+| PlannerReviewView     | Alternative Candidate Chip Click | Lead Planner   | Selects suggested milestone         | Sets selectedActivityId                               | Updates action button to "Relink"        |
+| PlannerReviewView     | Browse Schedule Search Box       | Lead Planner   | Searches full master baseline       | Filters filteredSchedule list                         | Allows picking any L5/L6 activity        |
+| PlannerReviewView     | Planner Justification Input      | Lead Planner   | Enters audit rationale text         | Updates plannerNote state                             | Logged into immutable audit log          |
+| PlannerReviewView     | Confirm Link / Relink (Green/Blue| Lead Planner   | Approves or relinks activity        | Saves decision, recalculates dates, advances queue    | Non-blocking toast feedback              |
+| PlannerReviewView     | Mark Unplanned (Amber)           | Lead Planner   | Classifies update as unplanned      | Sets status to unplanned, logs note, advances queue   | Surfaced on blocker/unplanned lists      |
+| PlannerReviewView     | Reject (Red)                     | Lead Planner   | Rejects invalid field report        | Sets status to rejected, logs note, advances queue    | Preserves original report for audit      |
+| SupervisorEntryView   | Discipline Dropdown              | Site Supervisor| Selects trade discipline            | Updates form discipline                               | Piping, Civil, Electrical, etc.          |
+| SupervisorEntryView   | Area / Location Input            | Site Supervisor| Specifies physical location         | Updates form area                                     | e.g. Utility Yard Pump Bay                |
+| SupervisorEntryView   | Event Status Select              | Site Supervisor| Selects execution state             | Updates eventStatus (Started, In Progress, Completed) | Influences schedule actual dates          |
+| SupervisorEntryView   | Blocker Toggle & Severity        | Site Supervisor| Flags site obstruction               | Toggles blocker state and severity level               | Triggers warning indicators               |
+| SupervisorEntryView   | Photo Drag & Drop Zone           | Site Supervisor| Attaches construction photo         | Reads buffer, computes SHA-256, generates preview     | Validates <= 8 MB and JPEG/PNG/WebP       |
+| SupervisorEntryView   | Run OCR Tag Scan Button          | Site Supervisor| Executes browser-local OCR          | Calls runLocalOCR(), extracts candidate tags           | Shows loading spinner & confidence        |
+| SupervisorEntryView   | Candidate Tag Chip Click         | Site Supervisor| Selects detected equipment tag      | Sets confirmedTag state                               | Adds checkmark to selected chip           |
+| SupervisorEntryView   | Manual Tag Confirm Input         | Site Supervisor| Manually enters equipment tag       | Sets confirmedTag state                               | Auto-uppercases input                     |
+| SupervisorEntryView   | Remove Photo Button              | Site Supervisor| Detaches attached photo             | Clears image, hash, and OCR state                     | Reversible before submit                  |
+| SupervisorEntryView   | Ingest Field Record Button       | Site Supervisor| Submits report into pipeline        | Adds SiteUpdate, runs matching engine, logs audit     | Non-blocking success toast                |
+| SupervisorEntryView   | Reset Form Button                | Site Supervisor| Clears all form fields              | Resets form state to default values                   | Clean form reset                          |
+| CopilotView           | Target Milestone Select          | Lead Planner   | Chooses activity to simulate        | Sets selectedTargetActivityId                         | Lists all baseline activities             |
+| CopilotView           | Simulated Delay Slider           | Lead Planner   | Sets delay slippage days            | Updates delayDays (+1 to +60 working days)             | Real-time numeric feedback                |
+| CopilotView           | Simulate Risk Scenario Button    | Lead Planner   | Runs forward delay propagation      | Calls simulateScheduleDelay(), updates impact table   | Deterministic Finish-to-Start math        |
+| CopilotView           | Reset Scenario Button            | Lead Planner   | Clears active simulation            | Resets scenario state to baseline                     | Restores pristine view                    |
+| UploadDemoView         | Dropzones (Schedule, DPR, Piping)| Lead Planner   | Attaches files for batch upload     | Reads file contents into upload state                 | Schema-validated dropzones                |
+| UploadDemoView         | Execute Ingestion Batch Button   | Lead Planner   | Executes batch ingestion            | Calls backend API or local parser pipeline            | Full project reload                       |
+| InspectorDrawer       | Close X Button / Backdrop        | All Users      | Closes inspector drawer             | Sets selectedInspectorUpdateId(null)                  | Smooth slide-out                          |
+| InspectorDrawer       | Copy Hash Button                 | All Users      | Copies SHA-256 hash                 | Writes hash to system clipboard                       | Displays "Copied" feedback                |
+| InspectorDrawer       | Candidate Tag Chips              | All Users      | Confirms equipment tag              | Calls handleConfirmImageTag()                         | Immediately updates matching scores       |
+| InspectorDrawer       | Manual Tag Confirm Input         | All Users      | Confirms custom tag                 | Calls handleConfirmImageTag()                         | Updates matching scores                   |
+| InspectorDrawer       | Remove (Photo) Button            | All Users      | Detaches photo from record          | Calls handleRemoveImageFromUpdate()                   | Updates audit log                         |
+| InspectorDrawer       | Save Parameters Button           | Lead Planner   | Saves parameter edits               | Calls handleEditUpdate(), persists changes            | Displays "Saved!" feedback                |
+| InspectorDrawer       | Schedule Search Box              | Lead Planner   | Searches linker activities          | Filters drawer schedule list                          | Fast activity selection                   |
+| InspectorDrawer       | Action Buttons (Confirm/Unpl/Rej)| Lead Planner   | Submits planner decision            | Calls handlePlannerAction()                           | Closes drawer on submit                   |
+| ScheduleActivityDrawer| Close X Button / Backdrop        | All Users      | Closes milestone drawer             | Sets selectedScheduleActivityId(null)                 | Slide-out drawer                          |
+| ScheduleActivityDrawer| Linked Update Click              | All Users      | Switches focus to field update      | Sets selectedInspectorUpdateId                        | 1-click evidence inspection               |
+| AuditTrailModal       | Close X Button / Close Button    | All Users      | Closes audit log modal              | Sets selectedAuditUpdateId(null)                      | Closes overlay                            |
++-----------------------+----------------------------------+----------------+-------------------------------------+-------------------------------------------------------+------------------------------------------+
+
+
+================================================================================
+4. BACKEND REST API ENDPOINT MAP
+================================================================================
+
+  - GET  /api/health            -> Health status and metrics count
+  - GET  /api/schedule          -> Enriched schedule activities with actual dates & variance
+  - GET  /api/site-updates      -> All ingested site updates
+  - PUT  /api/site-updates/:id  -> Update site report parameters
+  - GET  /api/matches           -> Algorithmic match results
+  - GET  /api/planner/decisions -> All submitted planner decisions
+  - POST /api/planner/action    -> Submit planner decision (approve, relink, mark_unplanned, reject)
+  - GET  /api/audit-logs        -> Immutable audit log history
+  - POST /api/upload            -> Multi-file batch ingestion (multipart form)
+  - POST /api/reset             -> Restore initial benchmark dataset
+
+
+================================================================================
+5. CORE DATA MODEL GLOSSARY
+================================================================================
+
+  - ScheduleActivity: Master Schedule Milestone
+      * activityId, wbs, activityName, discipline, area, plannedStart, plannedFinish,
+        duration, rawAliases, actualStart, actualFinish, percentComplete, varianceDays, status.
+
+  - ImageEvidence: Attached Photo Proof
+      * id, url, type, caption, timestamp, supervisor, filename, fileSize,
+        sha256Hash, ocrStatus, ocrConfidence, ocrRawText, ocrDetectedTags,
+        confirmedTag, confirmedBy, confirmedAt.
+
+  - SiteUpdate: Field Progress Record
+      * id, sourceFile, sourceType, discipline, reportDate, rawText,
+        extractedDescription, eventStatus, area, quantity, supervisor, images,
+        confirmedTag, issueFlag, issueSeverity.
+
+  - MatchResult: Algorithmic Match Evaluation
+      * updateId, candidateActivityId, confidenceScore, category, matchReasons,
+        scoreBreakdown (keywordScore: 50, disciplineScore: 20, areaScore: 15, fuzzyScore: 15),
+        suggestedActivities.
+
+  - PlannerDecision: Governance Decision
+      * updateId, status, linkedActivityId, plannerNote, timestamp, plannerRole.
+
+  - AuditLog: Immutable Traceability Record
+      * id, timestamp, updateId, rawText, sourceFile, action, originalConfidence,
+        originalCategory, finalActivityId, plannerNote, userRole.
+
+
+================================================================================
+6. DEMO BENCHMARK DATASET
+================================================================================
+
+  - demo-data/schedule.csv:
+    Primavera P6 schedule containing 12 Level-6 activities across Civil, Equipment,
+    Piping, Hydrotesting, Electrical, and Loop Checks.
+  - demo-data/daily_report.txt:
+    Unstructured DPR text log containing exact matches ("24-CW-017"), ambiguous entries,
+    and unplanned scope rework.
+  - demo-data/piping_progress.xlsx:
+    Contractor piping joint log tracking inch-dia weld completion and NDT inspection statuses.
+  - Pre-seeded Photos:
+    Construction photo proof demonstrating "24-CW-017" tag recognition on pipe spools.
+
+
+================================================================================
+7. HONEST BOUNDARIES & NON-CLAIMED SCOPE
+================================================================================
+
+  1. No Cloud CV / Paid AI APIs:
+     OCR is strictly browser-local using tesseract.js; no external cloud credentials
+     or paid APIs are used.
+  2. No Auto-Approval of Milestones:
+     OCR and matching algorithms only provide candidates; human planner confirmation
+     is mandatory.
+  3. No Automatic Defect / Face Recognition:
+     The image engine only extracts text tags; it does not assess quality or detect defects visually.
+  4. No Cryptographic Legal Certification:
+     The SHA-256 hash is an integrity fingerprint, not a legally binding digital signature.
+
+================================================================================
+END OF TECHNICAL REFERENCE
+================================================================================

@@ -285,21 +285,32 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const loadDemoData = async () => {
     setIsLoading(true);
-    if (backendStatus === 'connected') {
-      await api.resetDemo();
-      const backendData = await api.fetchInitialData();
-      if (backendData) {
-        setSchedule(backendData.schedule);
-        setSiteUpdates(backendData.siteUpdates);
-        setMatchResults(backendData.matchResults);
-        setPlannerDecisions(backendData.plannerDecisions);
-        setAuditLogs(backendData.auditLogs);
-        setIsLoading(false);
-        return;
+    setSelectedInspectorUpdateId(null);
+    setSelectedReviewUpdateId(null);
+    setSelectedScheduleActivityId(null);
+    setSelectedAuditUpdateId(null);
+    setOfflineSyncQueue([]);
+
+    try {
+      if (backendStatus === 'connected') {
+        await api.resetDemo();
+        const backendData = await api.fetchInitialData();
+        if (backendData) {
+          setSchedule(backendData.schedule);
+          setSiteUpdates(backendData.siteUpdates);
+          setMatchResults(backendData.matchResults);
+          setPlannerDecisions(backendData.plannerDecisions);
+          setAuditLogs(backendData.auditLogs);
+          setIsLoading(false);
+          return;
+        }
       }
+      await loadClientDemoData();
+    } catch (err) {
+      console.error('Failed to reset demo dataset:', err);
+    } finally {
+      setIsLoading(false);
     }
-    await loadClientDemoData();
-    setIsLoading(false);
   };
 
   const toggleOfflineMode = () => {

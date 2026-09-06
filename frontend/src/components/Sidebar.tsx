@@ -13,8 +13,7 @@ import {
   Wifi,
   WifiOff,
   Layers,
-  Activity,
-  FileSpreadsheet
+  Lock
 } from 'lucide-react';
 import { NavigationTab } from '../types';
 
@@ -32,8 +31,19 @@ export const Sidebar: React.FC = () => {
     plannerDecisions,
   } = useProject();
 
+  const isSupervisor = currentRole === 'supervisor';
+
   const handleTabClick = (tab: NavigationTab) => {
     setActiveTab(tab);
+  };
+
+  const handleRoleSwitch = (role: 'admin' | 'supervisor') => {
+    setCurrentRole(role);
+    if (role === 'supervisor') {
+      if (activeTab === 'planner-review' || activeTab === 'dashboard' || activeTab === 'upload') {
+        setActiveTab('supervisor-entry');
+      }
+    }
   };
 
   const pendingReviewCount = siteUpdates.filter(
@@ -42,28 +52,30 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside className="app-sidebar">
-      {/* Sidebar Header & Industrial Branding */}
+      {/* Sidebar Header & Sky Branding */}
       <div className="sidebar-header">
         <div className="sidebar-brand">
-          <div className="sidebar-brand-logo">
+          <div className="sidebar-brand-logo" style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' }}>
             <Layers size={18} />
           </div>
           <div>
             <div className="sidebar-brand-title">
               <span>Datum</span>
-              <span className="sidebar-brand-badge">L5 / L6 ENGINE</span>
+              <span className="sidebar-brand-badge" style={{ background: '#e0f2fe', color: '#0284c7', borderColor: '#bae6fd' }}>
+                SKY v2.4
+              </span>
             </div>
             <div className="sidebar-brand-subtitle">The record of execution.</div>
           </div>
         </div>
 
         {/* Role Switcher Pill */}
-        <div className="sidebar-role-toggle">
+        <div className="sidebar-role-toggle" style={{ background: '#f0f9ff', borderColor: '#e0f2fe' }}>
           <button
             type="button"
             className={`sidebar-role-btn ${currentRole === 'admin' ? 'active' : ''}`}
-            onClick={() => setCurrentRole('admin')}
-            title="Lead Project Planner & Admin Access"
+            onClick={() => handleRoleSwitch('admin')}
+            title="Lead Project Planner & Management Access"
           >
             <ShieldCheck size={13} />
             <span>Lead Planner</span>
@@ -71,11 +83,8 @@ export const Sidebar: React.FC = () => {
           <button
             type="button"
             className={`sidebar-role-btn ${currentRole === 'supervisor' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentRole('supervisor');
-              setActiveTab('supervisor-entry');
-            }}
-            title="Site Supervisor Quick-Entry Portal"
+            onClick={() => handleRoleSwitch('supervisor')}
+            title="Field Site Supervisor Quick-Entry Portal"
           >
             <HardHat size={13} />
             <span>Site Supervisor</span>
@@ -85,7 +94,7 @@ export const Sidebar: React.FC = () => {
 
       {/* Navigation Sections */}
       <nav className="sidebar-nav">
-        {/* Field Execution Section */}
+        {/* Field Operations Section (Available to all) */}
         <div>
           <div className="sidebar-group-title">Field Operations</div>
           <div className="sidebar-group-items">
@@ -124,55 +133,79 @@ export const Sidebar: React.FC = () => {
         </div>
 
         {/* Schedule & Alignment Section */}
-        <div>
-          <div className="sidebar-group-title">Schedule & Reconciliation</div>
-          <div className="sidebar-group-items">
-            <button
-              type="button"
-              className={`sidebar-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => handleTabClick('dashboard')}
-            >
-              <LayoutDashboard size={16} />
-              <span>Project Control Center</span>
-            </button>
-
-            <button
-              type="button"
-              className={`sidebar-item ${activeTab === 'planner-review' ? 'active' : ''}`}
-              onClick={() => handleTabClick('planner-review')}
-            >
-              <FileCheck2 size={16} />
-              <span>AI Auto-Match Matrix</span>
-              {pendingReviewCount > 0 && (
+        {isSupervisor ? (
+          /* Simplified Supervisor Schedule Reference */
+          <div>
+            <div className="sidebar-group-title">Schedule Targets (Read-Only)</div>
+            <div className="sidebar-group-items">
+              <button
+                type="button"
+                className={`sidebar-item ${activeTab === 'schedule-activities' ? 'active' : ''}`}
+                onClick={() => handleTabClick('schedule-activities')}
+              >
+                <CalendarDays size={16} />
+                <span>Milestone Baseline (L5/L6)</span>
                 <span
                   className="sidebar-item-badge"
-                  style={{ background: '#e9f2ff', color: '#0c66e4', border: '1px solid #cce0ff' }}
+                  style={{ background: '#f1f5f9', color: '#334155' }}
                 >
-                  {pendingReviewCount}
+                  {schedule.length}
                 </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              className={`sidebar-item ${activeTab === 'schedule-activities' ? 'active' : ''}`}
-              onClick={() => handleTabClick('schedule-activities')}
-            >
-              <CalendarDays size={16} />
-              <span>Milestone Baseline (L5/L6)</span>
-              <span
-                className="sidebar-item-badge"
-                style={{ background: '#f1f5f9', color: '#334155' }}
-              >
-                {schedule.length}
-              </span>
-            </button>
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Full Planner Control & Reconciliation */
+          <div>
+            <div className="sidebar-group-title">Schedule & Reconciliation</div>
+            <div className="sidebar-group-items">
+              <button
+                type="button"
+                className={`sidebar-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+                onClick={() => handleTabClick('dashboard')}
+              >
+                <LayoutDashboard size={16} />
+                <span>Project Control Center</span>
+              </button>
 
-        {/* Intelligence & Data Section */}
+              <button
+                type="button"
+                className={`sidebar-item ${activeTab === 'planner-review' ? 'active' : ''}`}
+                onClick={() => handleTabClick('planner-review')}
+              >
+                <FileCheck2 size={16} />
+                <span>AI Auto-Match Matrix</span>
+                {pendingReviewCount > 0 && (
+                  <span
+                    className="sidebar-item-badge"
+                    style={{ background: '#e0f2fe', color: '#0284c7', border: '1px solid #bae6fd' }}
+                  >
+                    {pendingReviewCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                className={`sidebar-item ${activeTab === 'schedule-activities' ? 'active' : ''}`}
+                onClick={() => handleTabClick('schedule-activities')}
+              >
+                <CalendarDays size={16} />
+                <span>Milestone Baseline (L5/L6)</span>
+                <span
+                  className="sidebar-item-badge"
+                  style={{ background: '#f1f5f9', color: '#334155' }}
+                >
+                  {schedule.length}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Intelligence & Pipeline Section */}
         <div>
-          <div className="sidebar-group-title">AI & Data Pipeline</div>
+          <div className="sidebar-group-title">AI & Intelligence</div>
           <div className="sidebar-group-items">
             <button
               type="button"
@@ -189,14 +222,16 @@ export const Sidebar: React.FC = () => {
               </span>
             </button>
 
-            <button
-              type="button"
-              className={`sidebar-item ${activeTab === 'upload' ? 'active' : ''}`}
-              onClick={() => handleTabClick('upload')}
-            >
-              <UploadCloud size={16} />
-              <span>Data Ingestion & Schemas</span>
-            </button>
+            {!isSupervisor && (
+              <button
+                type="button"
+                className={`sidebar-item ${activeTab === 'upload' ? 'active' : ''}`}
+                onClick={() => handleTabClick('upload')}
+              >
+                <UploadCloud size={16} />
+                <span>Data Ingestion & Schemas</span>
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -210,8 +245,8 @@ export const Sidebar: React.FC = () => {
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '0.45rem 0.6rem',
-            background: offlineMode ? '#fffbeb' : '#f8fafc',
-            border: `1px solid ${offlineMode ? '#fde68a' : 'var(--border-subtle)'}`,
+            background: offlineMode ? '#fffbeb' : '#f0f9ff',
+            border: `1px solid ${offlineMode ? '#fde68a' : '#e0f2fe'}`,
             borderRadius: 'var(--radius-sm)',
           }}
         >
@@ -236,7 +271,7 @@ export const Sidebar: React.FC = () => {
             onClick={toggleOfflineMode}
             style={{
               border: 'none',
-              background: offlineMode ? '#b45309' : '#0c66e4',
+              background: offlineMode ? '#b45309' : '#0284c7',
               color: '#ffffff',
               fontSize: '0.675rem',
               fontWeight: 700,
@@ -270,9 +305,9 @@ export const Sidebar: React.FC = () => {
                 display: 'inline-block',
               }}
             />
-            Deterministic L5/L6 Engine
+            {isSupervisor ? 'Supervisor Field View' : 'Deterministic L5/L6 Engine'}
           </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>v2.4 Ready</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>v2.4 Sky</span>
         </div>
       </div>
     </aside>

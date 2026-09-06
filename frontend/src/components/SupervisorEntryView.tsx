@@ -23,10 +23,17 @@ import {
   ShieldCheck,
   ChevronDown,
   ChevronUp,
-  AlertTriangle
+  AlertTriangle,
+  Mic,
+  MicOff,
+  Volume2,
+  Globe
 } from 'lucide-react';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
 import { runLocalOCR, calculateImageFingerprint, normalizeEquipmentTag, OCRScanResult } from '../utils/ocrService';
+import { speechService, SAMPLE_VOICE_PRESETS, SpeechLanguage, VoicePreset } from '../utils/speechService';
+import { parseSpokenUpdate } from '../utils/speechParser';
+import { SpokenParseResult } from '../types';
 
 const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8 MB
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -54,6 +61,15 @@ export const SupervisorEntryView: React.FC = () => {
   const [eventStatus, setEventStatus] = useState<'Started' | 'Completed' | 'In Progress'>('Completed');
   const [quantity, setQuantity] = useState('100%');
   const [supervisorName, setSupervisorName] = useState('R. Sharma (Lead Piping Supv)');
+
+  // Voice Dictation State
+  const [showVoiceCard, setShowVoiceCard] = useState<boolean>(true);
+  const [voiceLang, setVoiceLang] = useState<SpeechLanguage>('en-IN');
+  const [isVoiceRecording, setIsVoiceRecording] = useState<boolean>(false);
+  const [voiceTranscript, setVoiceTranscript] = useState<string>('');
+  const [interimVoiceText, setInterimVoiceText] = useState<string>('');
+  const [parsedVoiceResult, setParsedVoiceResult] = useState<SpokenParseResult | null>(null);
+  const [voiceErrorMsg, setVoiceErrorMsg] = useState<string | null>(null);
 
   // Photo Evidence State
   const [imagePreview, setImagePreview] = useState<string | null>(SAMPLE_EVIDENCE_IMAGES.pipeWeld);
@@ -88,6 +104,91 @@ export const SupervisorEntryView: React.FC = () => {
   // File Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchCsvRef = useRef<HTMLInputElement>(null);
+
+  // Voice Recording Toggle
+  const handleToggleVoiceRecording = (lang: SpeechLanguage = voiceLang) => {
+    if (isVoiceRecording) {
+      speechService.stop();
+      setIsVoiceRecording(false);
+      return;
+    }
+
+    setVoiceErrorMsg(null);
+    setVoiceTranscript('');
+    setInterimVoiceText('');
+    setParsedVoiceResult(null);
+
+    const started = speechService.start(lang, {
+      onInterimTranscript: text => {
+        setInterimVoiceText(text);
+        const parsed = parseSpokenUpdate(text, lang);
+        setParsedVoiceResult(parsed);
+      },
+      onFinalTranscript: text => {
+        setVoiceTranscript(prev => (prev ? `${prev} ${text}` : text));
+        setInterimVoiceText('');
+        const full = voiceTranscript ? `${voiceTranscript} ${text}` : text;
+        const parsed = parseSpokenUpdate(full, lang);
+        setParsedVoiceResult(parsed);
+      },
+      onStateChange: state => {
+        setIsVoiceRecording(state === 'listening');
+      },
+      onError: err => {
+        setVoiceErrorMsg(err);
+        setIsVoiceRecording(false);
+      },
+    });
+
+    if (!started) {
+      setIsVoiceRecording(false);
+    }
+  };
+
+  const handleSelectVoicePreset = (preset: VoicePreset) => {
+    speechService.stop();
+    setIsVoiceRecording(false);
+    setVoiceLang(preset.language);
+    setVoiceTranscript(preset.transcript);
+    setInterimVoiceText('');
+    setVoiceErrorMsg(null);
+
+    const parsed = parseSpokenUpdate(preset.transcript, preset.language);
+    setParsedVoiceResult(parsed);
+
+    addToast({
+      type: 'info',
+      title: `Voice Preset Loaded (${preset.langLabel})`,
+      message: `Spoken log loaded: "${preset.transcript}".`,
+    });
+  };
+
+  const handleApplyVoiceToForm = () => {
+    if (!parsedVoiceResult) return;
+
+    setDiscipline(parsedVoiceResult.discipline);
+    setArea(parsedVoiceResult.area);
+    setEventStatus(parsedVoiceResult.eventStatus);
+    if (parsedVoiceResult.quantity) setQuantity(parsedVoiceResult.quantity);
+    if (parsedVoiceResult.detectedTag) {
+      setConfirmedTag(parsedVoiceResult.detectedTag);
+      setManualTagInput(parsedVoiceResult.detectedTag);
+    }
+    setDescription(parsedVoiceResult.cleanDescription);
+    setRawText(`[VOICE LOG (${parsedVoiceResult.language})]: ${parsedVoiceResult.rawTranscript}`);
+
+    if (parsedVoiceResult.issueFlag) {
+      setIsIssueReport(true);
+      setIssueFlag(parsedVoiceResult.issueFlag);
+      setIssueSeverity(parsedVoiceResult.issueSeverity || 'medium');
+    }
+
+    addToast({
+      type: 'success',
+      title: 'Spoken Fields Applied to Form',
+      message: `Set ${parsedVoiceResult.discipline} • ${parsedVoiceResult.area}${parsedVoiceResult.detectedTag ? ` • Tag [${parsedVoiceResult.detectedTag}]` : ''}.`,
+    });
+  };
 
   // Process File Selection & Validation
   const processImageFile = async (file: File) => {
@@ -503,6 +604,263 @@ export const SupervisorEntryView: React.FC = () => {
               </div>
 
               <div className="card-body">
+                {/* Multilingual Voice Dictation Assistant (Web Speech API) */}
+                <div
+                  style={{
+                    marginBottom: '1.25rem',
+                    background: isVoiceRecording ? '#f0f9ff' : '#f8fafc',
+                    padding: '1rem 1.15rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: isVoiceRecording ? '2px solid var(--brand-primary)' : '1px solid #bae6fd',
+                    boxShadow: isVoiceRecording ? '0 0 15px rgba(2, 132, 199, 0.2)' : 'none',
+                    transition: 'all 0.2s ease-out',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span
+                        style={{
+                          background: isVoiceRecording ? '#ef4444' : 'var(--brand-primary)',
+                          color: '#ffffff',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 800,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <Mic size={13} />
+                        <span>{isVoiceRecording ? 'RECORDING LIVE' : 'VOICE DICTATION'}</span>
+                      </span>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                        Native Multilingual Speech-to-Field Dictation
+                      </span>
+                    </div>
+
+                    {/* Language Selector Chips */}
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {(
+                        [
+                          { id: 'en-IN', label: 'English (IN)' },
+                          { id: 'hi-IN', label: 'हिन्दी (Hindi)' },
+                          { id: 'ta-IN', label: 'தமிழ் (Tamil)' },
+                        ] as const
+                      ).map(l => (
+                        <button
+                          key={l.id}
+                          type="button"
+                          onClick={() => {
+                            setVoiceLang(l.id);
+                            if (isVoiceRecording) {
+                              handleToggleVoiceRecording(l.id);
+                            }
+                          }}
+                          style={{
+                            background: voiceLang === l.id ? 'var(--brand-primary)' : '#ffffff',
+                            color: voiceLang === l.id ? '#ffffff' : 'var(--text-secondary)',
+                            border: '1px solid var(--border-subtle)',
+                            padding: '2px 7px',
+                            borderRadius: '4px',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {l.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Main Speech Interaction Area */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
+                    {/* Big Pulsing Mic Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleVoiceRecording(voiceLang)}
+                      className="btn"
+                      style={{
+                        background: isVoiceRecording ? '#dc2626' : 'var(--brand-primary)',
+                        color: '#ffffff',
+                        padding: '0.6rem 1.1rem',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        borderRadius: 'var(--radius-sm)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        boxShadow: isVoiceRecording ? '0 0 12px rgba(220, 38, 38, 0.5)' : 'none',
+                        cursor: 'pointer',
+                      }}
+                      title="Click to start/stop live microphone dictation"
+                    >
+                      {isVoiceRecording ? <MicOff size={16} /> : <Mic size={16} />}
+                      <span>{isVoiceRecording ? 'Stop Recording' : 'Tap to Speak'}</span>
+                    </button>
+
+                    {/* Status Feedback & Audio Waveform Simulator */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 200 }}>
+                      {isVoiceRecording ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontSize: '0.75rem', color: '#0284c7', fontWeight: 700 }}>
+                            Listening in {voiceLang === 'en-IN' ? 'Indian English' : voiceLang === 'hi-IN' ? 'Hindi' : 'Tamil'}...
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 6 }}>
+                            <span style={{ width: 3, height: 14, background: '#0284c7', borderRadius: 2, animation: 'pulse 0.6s infinite alternate' }} />
+                            <span style={{ width: 3, height: 22, background: '#0284c7', borderRadius: 2, animation: 'pulse 0.4s infinite alternate' }} />
+                            <span style={{ width: 3, height: 10, background: '#0284c7', borderRadius: 2, animation: 'pulse 0.7s infinite alternate' }} />
+                            <span style={{ width: 3, height: 18, background: '#0284c7', borderRadius: 2, animation: 'pulse 0.5s infinite alternate' }} />
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Speak naturally or select a test scenario below to automatically structure fields.
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Apply Button (Visible when transcript is ready) */}
+                    {parsedVoiceResult && (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        style={{ background: '#059669', borderColor: '#047857', fontWeight: 700, fontSize: '0.775rem' }}
+                        onClick={handleApplyVoiceToForm}
+                      >
+                        <Check size={14} />
+                        <span>Apply Spoken Fields to Form</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Error Notification if mic is blocked */}
+                  {voiceErrorMsg && (
+                    <div
+                      style={{
+                        padding: '0.5rem 0.75rem',
+                        background: '#fef2f2',
+                        border: '1px solid #fecdd3',
+                        color: '#991b1b',
+                        borderRadius: 'var(--radius-xs)',
+                        fontSize: '0.725rem',
+                        marginBottom: '0.65rem',
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      <strong>Speech Notice:</strong> {voiceErrorMsg}
+                    </div>
+                  )}
+
+                  {/* Live Streaming Transcript Box */}
+                  {(voiceTranscript || interimVoiceText) && (
+                    <div
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-xs)',
+                        padding: '0.6rem 0.85rem',
+                        marginBottom: '0.65rem',
+                        fontSize: '0.8rem',
+                        color: 'var(--text-primary)',
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      <div style={{ fontSize: '0.675rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 2 }}>
+                        SPOKEN DICTATION TRANSCRIPT:
+                      </div>
+                      <span>{voiceTranscript}</span>
+                      {interimVoiceText && <span style={{ color: 'var(--brand-primary)', fontStyle: 'italic' }}> {interimVoiceText}...</span>}
+                    </div>
+                  )}
+
+                  {/* Real-Time Parsed Entity Chips */}
+                  {parsedVoiceResult && (
+                    <div
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #bae6fd',
+                        borderRadius: 'var(--radius-xs)',
+                        padding: '0.6rem 0.85rem',
+                        marginBottom: '0.65rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--brand-primary)', textTransform: 'uppercase' }}>
+                          ✓ AI Structured Intent Extraction:
+                        </span>
+                        <span className="mono-pill" style={{ fontSize: '0.65rem', background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' }}>
+                          {parsedVoiceResult.confidenceScore}% Confidence
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: 2 }}>
+                        <span className="mono-pill" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd' }}>
+                          Trade: <strong>{parsedVoiceResult.discipline}</strong>
+                        </span>
+                        <span className="mono-pill" style={{ background: '#f8fafc', color: 'var(--text-secondary)' }}>
+                          Area: <strong>{parsedVoiceResult.area}</strong>
+                        </span>
+                        {parsedVoiceResult.detectedTag && (
+                          <span className="mono-pill" style={{ background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0', fontWeight: 800 }}>
+                            Tag: <strong>{parsedVoiceResult.detectedTag}</strong>
+                          </span>
+                        )}
+                        <span className="mono-pill" style={{ background: '#fef3c7', color: '#92400e', borderColor: '#fde68a' }}>
+                          Status: <strong>{parsedVoiceResult.eventStatus}</strong>
+                        </span>
+                        {parsedVoiceResult.quantity && (
+                          <span className="mono-pill" style={{ background: '#f3f0ff', color: '#6e5dc6', borderColor: '#d3cbfb' }}>
+                            Qty: <strong>{parsedVoiceResult.quantity}</strong>
+                          </span>
+                        )}
+                        {parsedVoiceResult.issueFlag && (
+                          <span className="mono-pill" style={{ background: '#fef2f2', color: '#991b1b', borderColor: '#fecdd3', fontWeight: 700 }}>
+                            Blocker: {parsedVoiceResult.issueFlag}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 1-Click Voice Presets (for instant evaluation in Opera/Firefox/offline) */}
+                  <div>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>
+                      Quick Voice Scenarios (1-Click Test for Opera / Quiet Environments):
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                      {SAMPLE_VOICE_PRESETS.map(preset => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleSelectVoicePreset(preset)}
+                          style={{
+                            background: '#ffffff',
+                            border: '1px solid var(--border-subtle)',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.725rem',
+                            color: 'var(--text-secondary)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                          title={preset.transcript}
+                        >
+                          <Volume2 size={12} style={{ color: 'var(--brand-primary)' }} />
+                          <span>{preset.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* 1-Click Field Scenarios Toolbar */}
                 <div
                   style={{

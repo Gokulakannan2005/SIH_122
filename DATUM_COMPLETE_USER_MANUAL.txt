@@ -223,9 +223,17 @@ toggled using the top-right header button ("Lead Planner Mode" / "Supervisor Mod
 
 4.5 FIELD PROGRESS & PHOTO LOGS (Supervisor Hub)
 ------------------------------------------------
-  - Purpose: Dedicated site supervisor interface for capturing daily work logs,
-    uploading construction photos, running OCR tag detection, and submitting progress.
+  - Purpose: Dedicated site supervisor interface for capturing daily work logs via
+    keyboard or native multilingual speech dictation, uploading construction photos,
+    running OCR tag detection, and submitting progress.
   - What You See:
+      * Multilingual Voice Dictation Assistant (Web Speech API):
+          - Language selector: English (India), Hindi, Tamil.
+          - Live animated audio visualizer waveform.
+          - Real-time speech-to-text transcript streaming box.
+          - Auto-parsed entity chips (Trade, Area, Tag, Status, Quantity, Blocker).
+          - Quick Voice Presets for instant testing in Opera, Firefox, or quiet areas.
+          - "Apply Spoken Fields to Form" 1-click population button.
       * Discipline dropdown, Area / Location input, Event Status selector (Started,
         In Progress, Completed), Quantity field.
       * Extracted task description and verbatim supervisor log box.
@@ -236,8 +244,8 @@ toggled using the top-right header button ("Lead Planner Mode" / "Supervisor Mod
         (e.g., "24-CW-017") with OCR recognition confidence.
       * Tag Confirmation Box: Candidate tag chips + manual tag input for confirming
         equipment tag before submission.
-  - How to Use: Fill out report details, drop a photo, click "Run OCR Tag Scan",
-    click the matching tag chip, and click "Ingest Field Record".
+  - How to Use: Tap "Tap to Speak" (or click a Voice Preset), review the extracted
+    entity chips, click "Apply Spoken Fields to Form", attach photo, and click "Ingest Field Record".
 
 4.6 AI PREDICTIVE RISK & COPILOT (Schedule Risk Simulator)
 ----------------------------------------------------------

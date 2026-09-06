@@ -126,6 +126,23 @@ production implementation of Datum:
        and TypeScript data model glossary.
      - Verification against running codebase and UI to eliminate phantom claims.
 
+--------------------------------------------------------------------------------
+FEATURE-003: Native Multilingual Speech-to-Text Field Dictation & Intent Parsing
+--------------------------------------------------------------------------------
+DATE IMPLEMENTED: September 6, 2026
+AFFECTED COMPONENTS:
+  - frontend/src/utils/speechService.ts (NEW)
+  - frontend/src/utils/speechParser.ts (NEW)
+  - frontend/src/types/index.ts
+  - frontend/src/components/SupervisorEntryView.tsx
+
+DESCRIPTION:
+Implemented browser-native Web Speech API client supporting English (India), Hindi,
+and Tamil field dictation. Deterministically parses spoken sentences into structured
+Datum field updates (Trade, Spatial Area, Equipment Tag, Event Status, Quantity, and
+Blocker Flag) with real-time audio waveform visualizer and 1-click Opera/browser fallback
+presets.
+
 ================================================================================
 END OF CHANGELOG & BUG AUDIT LOG
 ================================================================================

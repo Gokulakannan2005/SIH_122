@@ -165,6 +165,16 @@ FEATURE 10: GLOBAL ACTION-FEEDBACK NOTIFICATION SYSTEM
   - Outputs/State Changes: Auto-dismissing toast notifications (3000-4000ms duration).
   - Status: Working.
 
+FEATURE 11: NATIVE MULTILINGUAL VOICE DICTATION & INTENT EXTRACTION
+-------------------------------------------------------------------
+  - Location: SupervisorEntryView.tsx, speechService.ts, speechParser.ts
+  - Purpose: Browser-native speech recognition for site supervisors in noisy industrial environments with multilingual support (English, Hindi, Tamil) and spoken entity parsing.
+  - Intended Role: Site Supervisor.
+  - Source Files: SupervisorEntryView.tsx, speechService.ts, speechParser.ts, types/index.ts.
+  - Inputs: Audio stream from microphone (via Web Speech API) or 1-click voice presets (Opera / quiet room fallback).
+  - Outputs/State Changes: Live interim/final speech transcripts, extracted entity chips (discipline, area, status, quantity, tags, blockers), form pre-population upon human confirmation.
+  - Status: Working.
+
 
 ================================================================================
 3. COMPREHENSIVE BUTTON AND CONTROL REFERENCE
@@ -197,6 +207,11 @@ FEATURE 10: GLOBAL ACTION-FEEDBACK NOTIFICATION SYSTEM
 | PlannerReviewView     | Confirm Link / Relink (Green/Blue| Lead Planner   | Approves or relinks activity        | Saves decision, recalculates dates, advances queue    | Non-blocking toast feedback              |
 | PlannerReviewView     | Mark Unplanned (Amber)           | Lead Planner   | Classifies update as unplanned      | Sets status to unplanned, logs note, advances queue   | Surfaced on blocker/unplanned lists      |
 | PlannerReviewView     | Reject (Red)                     | Lead Planner   | Rejects invalid field report        | Sets status to rejected, logs note, advances queue    | Preserves original report for audit      |
+| SupervisorEntryView   | Start / Stop Voice Dictation     | Site Supervisor| Toggles microphone listening        | Starts/stops Web Speech API, streams transcript       | Audio waveform animation while active    |
+| SupervisorEntryView   | Language Selector Chips (EN/HI/TA| Site Supervisor| Switches recognition language       | Sets speech recognition lang (en-IN, hi-IN, ta-IN)    | Supports multilingual field vocabulary   |
+| SupervisorEntryView   | Apply Spoken Fields to Form      | Site Supervisor| Populates form from voice entities  | Maps parsed intent/entities to form inputs            | Requires explicit supervisor click       |
+| SupervisorEntryView   | Voice Quick Presets (1-Click)    | Site Supervisor| Tests voice pipeline without mic    | Simulates spoken sentences in English/Hindi/Tamil     | Guaranteed fallback for Opera/evaluators |
+| SupervisorEntryView   | Clear Spoken Transcript          | Site Supervisor| Clears active voice buffer          | Resets transcript and parsed entities                 | Reversible prior to form application     |
 | SupervisorEntryView   | Discipline Dropdown              | Site Supervisor| Selects trade discipline            | Updates form discipline                               | Piping, Civil, Electrical, etc.          |
 | SupervisorEntryView   | Area / Location Input            | Site Supervisor| Specifies physical location         | Updates form area                                     | e.g. Utility Yard Pump Bay                |
 | SupervisorEntryView   | Event Status Select              | Site Supervisor| Selects execution state             | Updates eventStatus (Started, In Progress, Completed) | Influences schedule actual dates          |

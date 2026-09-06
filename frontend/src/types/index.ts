@@ -181,4 +181,19 @@ export interface ScenarioSimulationResult {
   executiveBriefing: string;
 }
 
+export interface SpokenParseResult {
+  rawTranscript: string;
+  cleanDescription: string;
+  discipline: string;
+  area: string;
+  eventStatus: EventStatus;
+  detectedTag?: string;
+  quantity?: string;
+  issueFlag?: string;
+  issueSeverity?: 'low' | 'medium' | 'critical';
+  confidenceScore: number;
+  language: 'en-IN' | 'hi-IN' | 'ta-IN';
+}
+
+
 

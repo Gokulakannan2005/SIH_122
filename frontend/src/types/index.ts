@@ -124,3 +124,50 @@ export interface ToastNotification {
   onAction?: () => void;
 }
 
+export interface ScheduleDependency {
+  predecessorId: string;
+  successorId: string;
+  relationshipType: 'FS'; // Finish-to-Start
+  lagDays?: number;
+  description?: string;
+}
+
+export interface ImpactedActivityScenario {
+  activityId: string;
+  activityName: string;
+  discipline: string;
+  area: string;
+  wbs: string;
+  baselineStart: string;
+  baselineFinish: string;
+  durationDays: number;
+  scenarioStart: string;
+  scenarioFinish: string;
+  shiftDays: number;
+  incrementalShiftDays: number;
+  isDirectTarget: boolean;
+  predecessorIds: string[];
+  severity: 'low' | 'medium' | 'critical';
+  impactExplanation: string;
+}
+
+export interface ScenarioSimulationResult {
+  targetActivityId: string;
+  targetActivityName: string;
+  targetDiscipline: string;
+  targetArea: string;
+  simulatedDelayDays: number;
+  baselineStart: string;
+  baselineFinish: string;
+  scenarioStart: string;
+  scenarioFinish: string;
+  maxShiftDays: number;
+  impactedCount: number;
+  criticalMilestoneImpacted: boolean;
+  overallRiskLevel: 'Low' | 'Medium' | 'High';
+  impactedActivities: ImpactedActivityScenario[];
+  upstreamActivities: ScheduleActivity[];
+  executiveBriefing: string;
+}
+
+

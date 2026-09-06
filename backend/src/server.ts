@@ -1,6 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
+import { spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { fileURLToPath } from 'url';
 import {
   initSchema,
   seedBenchmarkData,
@@ -348,6 +353,70 @@ app.get('/api/export/csv', (req, res) => {
     res.send(csvContent);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * 11. Speech-to-Text Audio Transcription Endpoint
+ */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No audio file received.' });
+    }
+
+    const lang = req.body?.language || 'en-IN';
+    const tempDir = os.tmpdir();
+    const tempFilePath = path.join(tempDir, `datum_stt_${Date.now()}_${Math.random().toString(36).substring(7)}.wav`);
+
+    fs.writeFileSync(tempFilePath, req.file.buffer);
+
+    const scriptPath = path.join(__dirname, 'transcribe.py');
+    const pythonProcess = spawn('python', [scriptPath, tempFilePath, lang]);
+
+    let stdoutData = '';
+    let stderrData = '';
+
+    pythonProcess.stdout.on('data', data => {
+      stdoutData += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', data => {
+      stderrData += data.toString();
+    });
+
+    pythonProcess.on('close', code => {
+      try {
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      if (!stdoutData.trim()) {
+        return res.json({
+          success: false,
+          error: stderrData || 'No response from transcription engine.',
+        });
+      }
+
+      try {
+        const result = JSON.parse(stdoutData.trim());
+        res.json(result);
+      } catch (parseErr) {
+        res.json({
+          success: false,
+          error: 'Failed to parse transcription response.',
+          raw: stdoutData,
+        });
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

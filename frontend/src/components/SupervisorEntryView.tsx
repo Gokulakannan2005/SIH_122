@@ -27,11 +27,12 @@ import {
   Mic,
   MicOff,
   Volume2,
-  Globe
+  Globe,
+  Loader2
 } from 'lucide-react';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
 import { runLocalOCR, calculateImageFingerprint, normalizeEquipmentTag, OCRScanResult } from '../utils/ocrService';
-import { speechService, SAMPLE_VOICE_PRESETS, SpeechLanguage, VoicePreset, isOperaBrowser, RecordedAudioData } from '../utils/speechService';
+import { speechService, SAMPLE_VOICE_PRESETS, SpeechLanguage, VoicePreset, isOperaBrowser, RecordedAudioData, transcribeAudioBlob } from '../utils/speechService';
 import { parseSpokenUpdate } from '../utils/speechParser';
 import { SpokenParseResult } from '../types';
 
@@ -67,6 +68,7 @@ export const SupervisorEntryView: React.FC = () => {
   const [voiceLang, setVoiceLang] = useState<SpeechLanguage>('en-IN');
   const [isVoiceRecording, setIsVoiceRecording] = useState<boolean>(false);
   const [isMicActive, setIsMicActive] = useState<boolean>(false);
+  const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const [audioLevel, setAudioLevel] = useState<number>(0);
   const [recordedAudio, setRecordedAudio] = useState<RecordedAudioData | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState<string>('');
@@ -109,15 +111,49 @@ export const SupervisorEntryView: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchCsvRef = useRef<HTMLInputElement>(null);
 
+  // Transcribe recorded audio with real ASR
+  const handleTranscribeRecordedAudio = async (blob: Blob, lang: SpeechLanguage = voiceLang) => {
+    setIsTranscribing(true);
+    setVoiceErrorMsg(null);
+    try {
+      const res = await transcribeAudioBlob(blob, lang);
+      if (res.success && res.text) {
+        setVoiceTranscript(res.text);
+        const parsed = parseSpokenUpdate(res.text, lang);
+        setParsedVoiceResult(parsed);
+        addToast({
+          type: 'success',
+          title: 'Speech Transcribed Successfully',
+          message: `Recognized: "${res.text}"`,
+        });
+      } else if (res.error) {
+        setVoiceErrorMsg(res.error);
+        addToast({
+          type: 'warning',
+          title: 'Audio Transcription',
+          message: res.error,
+        });
+      }
+    } catch (err: any) {
+      setVoiceErrorMsg(err?.message || 'Failed to transcribe audio.');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
   // Voice Recording Toggle (with Hardware Mic Stream, MediaRecorder & Audio Analyzer)
   const handleToggleVoiceRecording = async (lang: SpeechLanguage = voiceLang) => {
     if (isVoiceRecording || isMicActive) {
-      const audioData = speechService.stop();
+      const audioData = await speechService.stop();
       setIsVoiceRecording(false);
       setIsMicActive(false);
       setAudioLevel(0);
       if (audioData) {
         setRecordedAudio(audioData);
+        // Automatically transcribe if no live transcript was captured
+        if (!voiceTranscript && audioData.durationSec >= 0.8) {
+          handleTranscribeRecordedAudio(audioData.blob, lang);
+        }
       }
       return;
     }
@@ -152,7 +188,9 @@ export const SupervisorEntryView: React.FC = () => {
       },
       onStateChange: state => {
         setIsVoiceRecording(state === 'listening');
-        if (state !== 'listening' && !isMicActive) {
+        if (state === 'transcribing') {
+          setIsTranscribing(true);
+        } else if (state !== 'listening' && !isMicActive) {
           setAudioLevel(0);
         }
       },
@@ -856,15 +894,60 @@ export const SupervisorEntryView: React.FC = () => {
                           <Volume2 size={13} />
                           <span>Captured Spoken Audio ({recordedAudio.durationSec}s)</span>
                         </span>
-                        <span className="mono-pill" style={{ fontSize: '0.65rem', background: '#dcfce7', color: '#15803d', borderColor: '#86efac' }}>
-                          ✓ Audio Captured
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => handleTranscribeRecordedAudio(recordedAudio.blob, voiceLang)}
+                            disabled={isTranscribing}
+                            style={{
+                              background: '#ffffff',
+                              border: '1px solid #86efac',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '0.675rem',
+                              fontWeight: 700,
+                              color: '#15803d',
+                              cursor: isTranscribing ? 'wait' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            {isTranscribing ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}
+                            <span>{isTranscribing ? 'Transcribing...' : 'Re-Transcribe Voice'}</span>
+                          </button>
+                          <span className="mono-pill" style={{ fontSize: '0.65rem', background: '#dcfce7', color: '#15803d', borderColor: '#86efac' }}>
+                            ✓ Audio Captured
+                          </span>
+                        </div>
                       </div>
                       <audio
                         controls
                         src={recordedAudio.url}
                         style={{ width: '100%', height: 32, marginTop: 2 }}
                       />
+                    </div>
+                  )}
+
+                  {/* Transcribing Status Indicator */}
+                  {isTranscribing && (
+                    <div
+                      style={{
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        color: '#1d4ed8',
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: 'var(--radius-xs)',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        marginBottom: '0.65rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <Loader2 size={14} className="spin" style={{ color: '#2563eb' }} />
+                      <span>Transcribing actual spoken audio via Speech Recognition Engine ({voiceLang})...</span>
                     </div>
                   )}
 

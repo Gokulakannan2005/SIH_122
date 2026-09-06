@@ -1,12 +1,12 @@
 /**
- * Datum Speech Service: Browser-Native Multilingual Voice & Audio Stream Engine
+ * Datum Speech Service: Browser-Native Multilingual Voice & Real Audio Transcription Engine
  * Features:
- *  1. Hardware Microphone Stream via navigator.mediaDevices.getUserMedia (Works in Opera, Chrome, Edge, Firefox).
+ *  1. Hardware Microphone Stream via navigator.mediaDevices.getUserMedia (Works on Opera, Chrome, Edge, Safari, Firefox).
  *  2. Real-Time Web Audio API VU / Frequency Level Analyzer for responsive visual feedback.
- *  3. MediaRecorder Audio Capture: Creates physical audio recordings with duration & playback URL.
- *  4. Dual Web Speech API (SpeechRecognition / webkitSpeechRecognition) with multilingual profiles.
- *  5. Opera & Restricted-Browser Intelligent Fallback Engine: Automatic speech-to-field resolution
- *     when browser cloud STT services are blocked.
+ *  3. MediaRecorder Audio Capture: Records physical voice into audio blobs.
+ *  4. Browser-side PCM WAV Encoder: Converts audio buffer to standard 16-bit WAV for accurate transcription.
+ *  5. Direct Speech-to-Text API (/api/transcribe): Accurately transcribes the exact spoken words in English, Hindi, and Tamil.
+ *  6. Dual Web Speech API fallback for Chrome/Edge with seamless server-side fallback for Opera/Firefox.
  */
 
 export type SpeechLanguage = 'en-IN' | 'hi-IN' | 'ta-IN';
@@ -21,7 +21,7 @@ export interface SpeechRecognitionHandlers {
   onInterimTranscript?: (text: string) => void;
   onFinalTranscript?: (text: string) => void;
   onError?: (error: string) => void;
-  onStateChange?: (state: 'idle' | 'listening' | 'processing' | 'error') => void;
+  onStateChange?: (state: 'idle' | 'listening' | 'transcribing' | 'processing' | 'error') => void;
   onAudioLevel?: (level: number) => void; // 0 to 100 volume level
   onMicConnected?: (connected: boolean) => void;
   onAudioRecorded?: (audio: RecordedAudioData) => void;
@@ -42,7 +42,7 @@ export function isSpeechRecognitionSupported(): boolean {
   );
 }
 
-// Sample Voice Presets for instant evaluation & Opera/Firefox testing
+// Sample Voice Presets for instant evaluation & offline testing
 export interface VoicePreset {
   id: string;
   label: string;
@@ -86,6 +86,96 @@ export const SAMPLE_VOICE_PRESETS: VoicePreset[] = [
     description: 'Emergency crane breakdown site obstacle flag',
   },
 ];
+
+/**
+ * Convert AudioBuffer to standard 16-bit PCM WAV Blob
+ */
+export function audioBufferToWav(buffer: AudioBuffer): Blob {
+  const numChannels = 1;
+  const sampleRate = buffer.sampleRate;
+  const format = 1; // PCM
+  const bitDepth = 16;
+
+  const channelData = buffer.getChannelData(0);
+  const dataLength = channelData.length * (bitDepth / 8);
+  const bufferLength = 44 + dataLength;
+  const arrayBuffer = new ArrayBuffer(bufferLength);
+  const view = new DataView(arrayBuffer);
+
+  function writeString(offset: number, str: string) {
+    for (let i = 0; i < str.length; i++) {
+      view.setUint8(offset + i, str.charCodeAt(i));
+    }
+  }
+
+  // RIFF chunk descriptor
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataLength, true);
+  writeString(8, 'WAVE');
+
+  // fmt sub-chunk
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true);
+  view.setUint16(32, numChannels * (bitDepth / 8), true);
+  view.setUint16(34, bitDepth, true);
+
+  // data sub-chunk
+  writeString(36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  // Write PCM samples
+  let offset = 44;
+  for (let i = 0; i < channelData.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, channelData[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
+
+/**
+ * Send recorded audio blob to backend Speech-to-Text API
+ */
+export async function transcribeAudioBlob(
+  blob: Blob,
+  lang: SpeechLanguage = 'en-IN'
+): Promise<{ success: boolean; text?: string; error?: string }> {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) {
+      return { success: false, error: 'Web Audio API not supported in this browser.' };
+    }
+
+    const ctx = new AudioCtx();
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    const wavBlob = audioBufferToWav(audioBuffer);
+    ctx.close();
+
+    const formData = new FormData();
+    formData.append('audio', wavBlob, 'recording.wav');
+    formData.append('language', lang);
+
+    const res = await fetch('/api/transcribe', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      return { success: false, error: errJson?.error || `Server returned HTTP ${res.status}` };
+    }
+
+    const data = await res.json();
+    return data;
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Audio transcription error' };
+  }
+}
 
 class SpeechService {
   private recognition: any = null;
@@ -162,7 +252,7 @@ class SpeechService {
       }
     }
 
-    // 2. Initialize Web Speech API
+    // 2. Initialize Web Speech API (active in Chrome/Edge; fallback for Opera)
     const SpeechRecognitionClass =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
@@ -216,13 +306,6 @@ class SpeechService {
         if (err === 'not-allowed') {
           message = 'Microphone permission was denied. Please allow microphone access in browser settings.';
           handlers.onError?.(message);
-        } else if (err === 'no-speech') {
-          // Normal silence; do not abort recording
-        } else if (err === 'network') {
-          // Opera cloud STT restriction notice (not fatal because hardware mic & fallback engine are active)
-          if (!isOpera) {
-            handlers.onError?.('Speech recognition network endpoint unavailable.');
-          }
         } else if (err === 'audio-capture') {
           message = 'No microphone device found on system.';
           handlers.onError?.(message);
@@ -231,7 +314,7 @@ class SpeechService {
 
       this.recognition.onend = () => {
         if (this.isListening) {
-          // Keep active if mic stream is alive
+          // Keep active if recording
         }
       };
 
@@ -291,9 +374,9 @@ class SpeechService {
   }
 
   /**
-   * Stop both recognition and media stream, and finalize recorded audio
+   * Stop both recognition and media stream, and return recorded audio data
    */
-  public stop(): RecordedAudioData | null {
+  public async stop(): Promise<RecordedAudioData | null> {
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
@@ -312,8 +395,15 @@ class SpeechService {
 
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       try {
-        this.mediaRecorder.stop();
         const durationSec = Math.max(0.5, Number(((Date.now() - this.recordingStartTime) / 1000).toFixed(1)));
+        
+        // Wait for final chunk
+        await new Promise<void>(resolve => {
+          if (!this.mediaRecorder) return resolve();
+          this.mediaRecorder.onstop = () => resolve();
+          this.mediaRecorder.stop();
+        });
+
         const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
         recordedData = { blob, url, durationSec };
@@ -322,11 +412,14 @@ class SpeechService {
           this.currentHandlers.onAudioRecorded(recordedData);
         }
 
-        // Opera / Offline Fallback: If native STT failed to return text but the user actually recorded speech (>1s)
-        if (!this.hasReceivedNativeTranscript && durationSec >= 1.0 && this.currentHandlers?.onFinalTranscript) {
-          const fallback = this.getFallbackSpokenLog(this.currentLanguage, durationSec);
-          if (fallback) {
-            this.currentHandlers.onFinalTranscript(fallback);
+        // If native browser STT didn't return text (e.g. in Opera / Firefox), transcribe via backend API
+        if (!this.hasReceivedNativeTranscript && durationSec >= 0.8) {
+          this.currentHandlers?.onStateChange?.('transcribing');
+          const result = await transcribeAudioBlob(blob, this.currentLanguage);
+          if (result.success && result.text) {
+            this.currentHandlers?.onFinalTranscript?.(result.text);
+          } else if (result.error) {
+            this.currentHandlers?.onError?.(result.error);
           }
         }
       } catch (e) {
@@ -352,25 +445,6 @@ class SpeechService {
     this.isListening = false;
     this.currentHandlers?.onStateChange?.('idle');
     return recordedData;
-  }
-
-  /**
-   * Intelligent Contextual Speech Fallback when browser STT cloud is blocked
-   */
-  private getFallbackSpokenLog(lang: SpeechLanguage, durationSec: number): string {
-    if (lang === 'hi-IN') {
-      return durationSec > 4
-        ? 'Piping utility yard line 24-CW-017 spool erection aur alignment completed ho gaya'
-        : 'Piping line 24-CW-017 hydrotest complete';
-    } else if (lang === 'ta-IN') {
-      return durationSec > 4
-        ? 'Civil pump bay foundation raft concrete pouring started 45 cubic meters'
-        : 'Piping utility yard line 24-CW-017 erection completed';
-    } else {
-      return durationSec > 4
-        ? 'Piping utility yard line 24-CW-017 spool erection and flange fit-up completed 100 percent'
-        : 'Piping pump bay line 24-CW-017 completed 100 percent';
-    }
   }
 
   public getIsListening(): boolean {

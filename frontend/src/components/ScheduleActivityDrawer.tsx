@@ -3,12 +3,7 @@ import { useProject } from '../context/ProjectContext';
 import {
   X,
   Calendar,
-  Clock,
-  Layers,
-  MapPin,
   Tag,
-  CheckCircle2,
-  AlertTriangle,
   FileText,
   ChevronRight
 } from 'lucide-react';
@@ -22,8 +17,6 @@ export const ScheduleActivityDrawer: React.FC = () => {
     selectedScheduleActivityId,
     setSelectedScheduleActivityId,
     setSelectedInspectorUpdateId,
-    setSelectedReviewUpdateId,
-    setActiveTab,
   } = useProject();
 
   if (!selectedScheduleActivityId) return null;
@@ -52,38 +45,39 @@ export const ScheduleActivityDrawer: React.FC = () => {
       <div
         className="drawer-pane"
         onClick={e => e.stopPropagation()}
-        style={{ maxWidth: 620 }}
+        style={{ maxWidth: 580 }}
       >
         {/* Drawer Header */}
         <div className="drawer-header">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '1rem', color: '#93c5fd' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.95rem', color: 'var(--brand-primary)' }}>
                 {activity.activityId}
               </span>
-              <span className="mono-pill" style={{ background: 'rgba(255,255,255,0.15)', color: 'white', borderColor: 'transparent' }}>
+              <span className="mono-pill">
                 WBS {activity.wbs}
               </span>
             </div>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginTop: 4 }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: 4, color: 'var(--text-primary)' }}>
               {activity.activityName}
             </h3>
           </div>
 
           <button
             onClick={() => setSelectedScheduleActivityId(null)}
-            style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: 4 }}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+            type="button"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
         {/* Drawer Content */}
         <div className="drawer-body">
           {/* Status & Variance Overview Card */}
-          <div className="card" style={{ padding: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+          <div className="card" style={{ padding: '0.85rem 1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                 Schedule Performance
               </span>
               <span
@@ -101,7 +95,7 @@ export const ScheduleActivityDrawer: React.FC = () => {
               </span>
             </div>
 
-            <div className="progress-bar-container" style={{ marginBottom: '0.75rem', height: 8 }}>
+            <div className="progress-bar-container" style={{ marginBottom: '0.75rem', height: 6 }}>
               <div
                 className={`progress-bar-fill ${
                   activity.status === 'Completed' ? 'green' : activity.status === 'In Progress' ? 'blue' : 'red'
@@ -110,42 +104,42 @@ export const ScheduleActivityDrawer: React.FC = () => {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', textAlign: 'center' }}>
-              <div style={{ background: '#f8fafc', padding: '0.5rem', borderRadius: 4, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Discipline</div>
-                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>{activity.discipline}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
+              <div style={{ background: 'var(--bg-subtle)', padding: '0.45rem', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>Discipline</div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.8rem' }}>{activity.discipline}</div>
               </div>
-              <div style={{ background: '#f8fafc', padding: '0.5rem', borderRadius: 4, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Area Location</div>
-                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>{activity.area}</div>
+              <div style={{ background: 'var(--bg-subtle)', padding: '0.45rem', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>Area</div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.8rem' }}>{activity.area}</div>
               </div>
-              <div style={{ background: '#f8fafc', padding: '0.5rem', borderRadius: 4, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Schedule Variance</div>
-                <div style={{ fontWeight: 800, fontSize: '0.85rem', color: isDelayed ? '#dc2626' : '#15803d' }}>
-                  {variance > 0 ? `+${variance} Days Delay` : '0 Days (On-Track)'}
+              <div style={{ background: 'var(--bg-subtle)', padding: '0.45rem', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>Schedule Variance</div>
+                <div style={{ fontWeight: 800, fontSize: '0.8rem', color: isDelayed ? 'var(--status-unplanned-fg)' : 'var(--status-ready-fg)' }}>
+                  {variance > 0 ? `+${variance}d Delay` : '0d On-Track'}
                 </div>
               </div>
             </div>
           </div>
 
           {/* Planned vs Actual Timeline */}
-          <div className="card" style={{ padding: '1rem' }}>
-            <h4 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Calendar size={16} style={{ color: '#2563eb' }} />
+          <div className="card" style={{ padding: '0.85rem 1rem' }}>
+            <h4 style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Calendar size={14} style={{ color: 'var(--brand-primary)' }} />
               Planned Baseline vs Actual Site Evidence
             </h4>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div style={{ borderRight: '1px solid #e2e8f0', paddingRight: '0.75rem' }}>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Planned Window</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', marginTop: 3 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div style={{ borderRight: '1px solid var(--border-subtle)', paddingRight: '0.5rem' }}>
+                <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 600 }}>Planned Window</div>
+                <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
                   {activity.plannedStart} &rarr; {activity.plannedFinish}
                 </div>
               </div>
 
               <div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Actual Site Window</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: activity.actualStart ? '#15803d' : '#94a3b8', marginTop: 3 }}>
+                <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 600 }}>Actual Site Window</div>
+                <div style={{ fontSize: '0.825rem', fontWeight: 700, color: activity.actualStart ? 'var(--status-ready-fg)' : 'var(--text-subtle)', marginTop: 2 }}>
                   {activity.actualStart ? `${activity.actualStart} \u2192 ${activity.actualFinish || 'In Progress'}` : 'No Site Activity Logged'}
                 </div>
               </div>
@@ -153,64 +147,63 @@ export const ScheduleActivityDrawer: React.FC = () => {
           </div>
 
           {/* Recognized Aliases & Keywords */}
-          <div className="card" style={{ padding: '1rem' }}>
-            <h4 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Tag size={16} style={{ color: '#2563eb' }} />
+          <div className="card" style={{ padding: '0.85rem 1rem' }}>
+            <h4 style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Tag size={14} style={{ color: 'var(--brand-primary)' }} />
               Recognized Search Aliases & Matching Keywords
             </h4>
-            <p style={{ fontSize: '0.775rem', color: '#64748b', marginBottom: '0.75rem' }}>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.65rem' }}>
               Synonyms and equipment tags used by the matching engine to pair supervisor field text with this activity:
             </p>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
               {activity.aliases && activity.aliases.length > 0 ? (
                 activity.aliases.map((alias, i) => (
-                  <span key={i} className="mono-pill" style={{ background: '#f8fafc', padding: '0.25rem 0.65rem' }}>
+                  <span key={i} className="mono-pill" style={{ padding: '0.2rem 0.55rem' }}>
                     {alias}
                   </span>
                 ))
               ) : (
-                <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>No aliases specified</span>
+                <span style={{ fontSize: '0.775rem', color: 'var(--text-subtle)' }}>No aliases specified</span>
               )}
             </div>
           </div>
 
           {/* Linked Site Progress Updates */}
-          <div className="card" style={{ padding: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <FileText size={16} style={{ color: '#15803d' }} />
+          <div className="card" style={{ padding: '0.85rem 1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+              <h4 style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <FileText size={14} style={{ color: 'var(--status-ready-fg)' }} />
                 Linked Site Progress Updates ({linkedUpdates.length})
               </h4>
             </div>
 
             {linkedUpdates.length === 0 ? (
-              <div style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+              <div style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--text-subtle)', fontSize: '0.8rem' }}>
                 No site updates currently linked to this activity.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {linkedUpdates.map(u => {
-                  const match = matchResults[u.id];
                   return (
                     <div
                       key={u.id}
                       style={{
-                        padding: '0.75rem',
+                        padding: '0.65rem 0.75rem',
                         background: '#ffffff',
-                        border: '1px solid #cbd5e1',
-                        borderRadius: 6,
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-xs)',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 4,
+                        gap: 3,
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span className="mono-pill" style={{ color: '#2563eb', fontWeight: 700 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span className="mono-pill" style={{ color: 'var(--brand-primary)', fontWeight: 700 }}>
                             {u.id}
                           </span>
-                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                             {u.reportDate}
                           </span>
                         </div>
@@ -224,21 +217,22 @@ export const ScheduleActivityDrawer: React.FC = () => {
                         </span>
                       </div>
 
-                      <div style={{ fontSize: '0.825rem', fontWeight: 600, color: '#0f172a' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                         {u.extractedDescription}
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, fontSize: '0.75rem', color: '#64748b' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3, fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                         <span>
                           Source: {u.sourceFile} {u.lineEvidence ? `(#${u.lineEvidence})` : ''}
                         </span>
                         <button
                           className="btn btn-secondary btn-sm"
-                          style={{ padding: '2px 8px', fontSize: '0.7rem' }}
+                          style={{ padding: '2px 7px', fontSize: '0.675rem' }}
                           onClick={() => {
                             setSelectedScheduleActivityId(null);
                             setSelectedInspectorUpdateId(u.id);
                           }}
+                          type="button"
                         >
                           <span>Inspect</span>
                           <ChevronRight size={10} />
@@ -257,6 +251,7 @@ export const ScheduleActivityDrawer: React.FC = () => {
           <button
             className="btn btn-secondary btn-sm"
             onClick={() => setSelectedScheduleActivityId(null)}
+            type="button"
           >
             Close
           </button>

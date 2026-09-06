@@ -2,16 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { useProject } from '../context/ProjectContext';
 import {
   Search,
-  Filter,
   FileText,
-  CheckCircle2,
-  AlertTriangle,
-  Flame,
-  ArrowUpDown,
-  ExternalLink,
-  ChevronRight
+  ChevronRight,
+  RotateCcw
 } from 'lucide-react';
-import { MatchCategory } from '../types';
 
 export const SiteUpdatesView: React.FC = () => {
   const {
@@ -29,6 +23,20 @@ export const SiteUpdatesView: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [selectedSource, setSelectedSource] = useState('ALL');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'confidence-desc' | 'confidence-asc'>('date-desc');
+
+  const isFiltered =
+    searchQuery.trim() !== '' ||
+    selectedDiscipline !== 'ALL' ||
+    selectedStatus !== 'ALL' ||
+    selectedSource !== 'ALL';
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setSelectedDiscipline('ALL');
+    setSelectedStatus('ALL');
+    setSelectedSource('ALL');
+    setSortBy('date-desc');
+  };
 
   // Filtered & Sorted site updates
   const filteredUpdates = useMemo(() => {
@@ -110,27 +118,27 @@ export const SiteUpdatesView: React.FC = () => {
       {/* Header Info */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <FileText size={22} style={{ color: '#2563eb' }} />
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <FileText size={20} style={{ color: 'var(--brand-primary)' }} />
             Site Progress Updates & Extracted Items
           </h2>
-          <p style={{ fontSize: '0.875rem', color: '#475569', marginTop: 3 }}>
-            Granular daily activity entries parsed from supervisor logs and discipline spreadsheets ready for schedule alignment.
+          <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: 2 }}>
+            Daily supervisor reports and discipline tracking entries parsed for L5/L6 schedule alignment.
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span className="mono-pill" style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}>
+          <span className="mono-pill" style={{ fontSize: '0.75rem', padding: '0.3rem 0.65rem' }}>
             Showing <strong>{filteredUpdates.length}</strong> of <strong>{siteUpdates.length}</strong> Updates
           </span>
         </div>
       </div>
 
       {/* Filter Toolbar */}
-      <div className="toolbar-card" style={{ gap: '0.75rem' }}>
+      <div className="toolbar-card">
         {/* Live Search Input */}
         <div className="search-input-box" style={{ maxWidth: 360 }}>
-          <Search size={16} className="search-icon" />
+          <Search size={15} className="search-icon" />
           <input
             type="text"
             className="form-input"
@@ -142,8 +150,8 @@ export const SiteUpdatesView: React.FC = () => {
         </div>
 
         {/* Discipline Dropdown */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Discipline:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Discipline:</span>
           <select
             className="form-select"
             value={selectedDiscipline}
@@ -157,8 +165,8 @@ export const SiteUpdatesView: React.FC = () => {
         </div>
 
         {/* Status Dropdown */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Status:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Status:</span>
           <select
             className="form-select"
             value={selectedStatus}
@@ -172,8 +180,8 @@ export const SiteUpdatesView: React.FC = () => {
         </div>
 
         {/* Source File Dropdown */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Source:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Source:</span>
           <select
             className="form-select"
             value={selectedSource}
@@ -187,8 +195,8 @@ export const SiteUpdatesView: React.FC = () => {
         </div>
 
         {/* Sort Dropdown */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Sort:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}>
+          <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Sort:</span>
           <select
             className="form-select"
             value={sortBy}
@@ -200,6 +208,19 @@ export const SiteUpdatesView: React.FC = () => {
             <option value="confidence-asc">Confidence (Lowest First)</option>
           </select>
         </div>
+
+        {/* Clear Filters Button */}
+        {isFiltered && (
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleResetFilters}
+            title="Reset search and filters"
+            type="button"
+          >
+            <RotateCcw size={12} />
+            <span>Reset</span>
+          </button>
+        )}
       </div>
 
       {/* Updates Data Table */}
@@ -225,9 +246,17 @@ export const SiteUpdatesView: React.FC = () => {
                 <tr>
                   <td colSpan={10}>
                     <div className="empty-state">
-                      <FileText size={36} />
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>No site updates match your filter criteria</div>
-                      <div style={{ fontSize: '0.85rem' }}>Try clearing your search keyword or changing the discipline/status filters.</div>
+                      <FileText size={32} />
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>No site updates match your filter</div>
+                      <div style={{ fontSize: '0.8rem' }}>Try clearing the search keyword or changing discipline/status filters.</div>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={handleResetFilters}
+                        style={{ marginTop: '0.5rem' }}
+                        type="button"
+                      >
+                        Reset All Filters
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -248,20 +277,20 @@ export const SiteUpdatesView: React.FC = () => {
                       title="Click row to open details in Inspector Drawer"
                     >
                       {/* Update ID */}
-                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#2563eb' }}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>
                         {update.id}
                       </td>
 
                       {/* Date */}
-                      <td style={{ fontSize: '0.8rem', color: '#475569', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                         {update.reportDate}
                       </td>
 
                       {/* Source & Line */}
-                      <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontWeight: 600, color: '#0f172a' }}>{update.sourceFile}</span>
+                      <td style={{ fontSize: '0.775rem', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{update.sourceFile}</span>
                         {update.lineEvidence && (
-                          <span style={{ color: '#64748b', marginLeft: 4, fontFamily: 'var(--font-mono)' }}>
+                          <span style={{ color: 'var(--text-muted)', marginLeft: 4, fontFamily: 'var(--font-mono)' }}>
                             #{update.lineEvidence}
                           </span>
                         )}
@@ -274,18 +303,18 @@ export const SiteUpdatesView: React.FC = () => {
 
                       {/* Extracted Work Description */}
                       <td style={{ maxWidth: 280 }}>
-                        <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.85rem' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.825rem' }}>
                           {update.extractedDescription}
                         </div>
                         {update.supervisor && (
-                          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
+                          <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>
                             Supv: {update.supervisor}
                           </div>
                         )}
                       </td>
 
                       {/* Area */}
-                      <td style={{ fontSize: '0.8rem', color: '#334155' }}>
+                      <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
                         {update.area || '—'}
                       </td>
 
@@ -295,7 +324,6 @@ export const SiteUpdatesView: React.FC = () => {
                           className={`status-badge ${
                             update.eventStatus === 'Completed' ? 'ready' : update.eventStatus === 'In Progress' ? 'review' : 'rejected'
                           }`}
-                          style={{ fontSize: '0.7rem' }}
                         >
                           {update.eventStatus}
                         </span>
@@ -304,15 +332,15 @@ export const SiteUpdatesView: React.FC = () => {
                       {/* Matched L5/L6 Activity */}
                       <td>
                         {linkedId ? (
-                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#15803d' }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--status-ready-fg)' }}>
                             {linkedId}
                           </span>
                         ) : isUnplanned ? (
-                          <span className="status-badge unplanned" style={{ fontSize: '0.7rem' }}>
+                          <span className="status-badge unplanned">
                             Unplanned
                           </span>
                         ) : (
-                          <span className="status-badge review" style={{ fontSize: '0.7rem' }}>
+                          <span className="status-badge review">
                             Needs Review
                           </span>
                         )}
@@ -330,12 +358,12 @@ export const SiteUpdatesView: React.FC = () => {
                                 style={{ width: `${match.confidenceScore}%` }}
                               />
                             </div>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: '#0f172a' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                               {match.confidenceScore}%
                             </span>
                           </div>
                         ) : (
-                          <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>—</span>
+                          <span style={{ color: 'var(--text-subtle)', fontSize: '0.75rem' }}>—</span>
                         )}
                       </td>
 
@@ -345,26 +373,26 @@ export const SiteUpdatesView: React.FC = () => {
                           {isReview ? (
                             <button
                               className="btn btn-warning btn-sm"
-                              style={{ padding: '2px 8px', fontSize: '0.725rem' }}
                               onClick={e => {
                                 e.stopPropagation();
                                 setSelectedReviewUpdateId(update.id);
                                 setActiveTab('planner-review');
                               }}
                               title="Review & link in Planner Review"
+                              type="button"
                             >
                               <span>Review</span>
-                              <ChevronRight size={12} />
+                              <ChevronRight size={11} />
                             </button>
                           ) : (
                             <button
                               className="btn btn-secondary btn-sm"
-                              style={{ padding: '2px 8px', fontSize: '0.725rem' }}
                               onClick={e => {
                                 e.stopPropagation();
                                 setSelectedInspectorUpdateId(update.id);
                               }}
                               title="Inspect details & edit parameters"
+                              type="button"
                             >
                               <span>Inspect</span>
                             </button>

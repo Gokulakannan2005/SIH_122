@@ -1,7 +1,6 @@
 import React from 'react';
 import { useProject } from '../context/ProjectContext';
 import {
-  LayoutDashboard,
   CheckCircle2,
   AlertTriangle,
   Flame,
@@ -9,8 +8,8 @@ import {
   ArrowRight,
   ShieldCheck,
   Layers,
-  Sparkles,
-  TrendingDown
+  TrendingDown,
+  CalendarCheck
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
@@ -77,20 +76,33 @@ export const Dashboard: React.FC = () => {
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* Planner Action Callout Banner */}
       {pendingReviewCount > 0 ? (
         <div className="action-callout warning">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ width: 44, height: 44, borderRadius: 8, background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertTriangle size={24} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--status-review-bg)',
+                color: 'var(--status-review-fg)',
+                border: '1px solid var(--status-review-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <AlertTriangle size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
-                Action Required: {pendingReviewCount} Site Updates Pending Review
+              <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                {pendingReviewCount} Site Updates Awaiting Planner Confirmation
               </div>
-              <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: 2 }}>
-                Site progress evidence matches require planner confirmation, re-linking, or classification as new unplanned work.
+              <div style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                Site progress evidence matches require planner confirmation, re-linking, or classification as unplanned work.
               </div>
             </div>
           </div>
@@ -98,23 +110,35 @@ export const Dashboard: React.FC = () => {
             className="btn btn-warning"
             onClick={() => setActiveTab('planner-review')}
             type="button"
-            style={{ fontWeight: 700, padding: '0.6rem 1.25rem' }}
           >
             <span>Open Review Queue</span>
-            <ArrowRight size={16} />
+            <ArrowRight size={14} />
           </button>
         </div>
       ) : (
-        <div className="action-callout" style={{ borderLeftColor: '#10b981', background: '#f0fdf4' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ width: 44, height: 44, borderRadius: 8, background: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CheckCircle2 size={24} />
+        <div className="action-callout">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--status-ready-bg)',
+                color: 'var(--status-ready-fg)',
+                border: '1px solid var(--status-ready-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <CheckCircle2 size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
+              <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
                 All Site Updates Verified & Aligned
               </div>
-              <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: 2 }}>
+              <div style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: 2 }}>
                 All extracted supervisor reports and Excel progress rows have been linked to L5/L6 activities or classified.
               </div>
             </div>
@@ -125,60 +149,60 @@ export const Dashboard: React.FC = () => {
             type="button"
           >
             <span>View Schedule</span>
-            <ArrowRight size={14} />
+            <ArrowRight size={13} />
           </button>
         </div>
       )}
 
       {/* 5 Core Metric Cards */}
-      <div className="grid-kpi" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+      <div className="grid-kpi">
         <div className="card kpi-card">
-          <div className="kpi-icon" style={{ background: '#eff6ff', color: '#2563eb' }}>
-            <Layers size={22} />
+          <div className="kpi-icon" style={{ background: '#f1f5f9', color: '#2b4360' }}>
+            <Layers size={20} />
           </div>
           <div>
-            <div className="kpi-title">Extracted Site Updates</div>
+            <div className="kpi-title">Extracted Updates</div>
             <div className="kpi-value">{totalSiteUpdates}</div>
           </div>
         </div>
 
         <div className="card kpi-card">
-          <div className="kpi-icon" style={{ background: '#ecfdf5', color: '#059669' }}>
-            <CheckCircle2 size={22} />
+          <div className="kpi-icon" style={{ background: 'var(--status-ready-bg)', color: 'var(--status-ready-fg)' }}>
+            <CheckCircle2 size={20} />
           </div>
           <div>
             <div className="kpi-title">Verified & Linked</div>
-            <div className="kpi-value" style={{ color: '#059669' }}>{linkedCount}</div>
+            <div className="kpi-value" style={{ color: 'var(--status-ready-fg)' }}>{linkedCount}</div>
           </div>
         </div>
 
         <div className="card kpi-card">
-          <div className="kpi-icon" style={{ background: '#fffbeb', color: '#d97706' }}>
-            <Clock size={22} />
+          <div className="kpi-icon" style={{ background: 'var(--status-review-bg)', color: 'var(--status-review-fg)' }}>
+            <Clock size={20} />
           </div>
           <div>
             <div className="kpi-title">Pending Review</div>
-            <div className="kpi-value" style={{ color: '#d97706' }}>{pendingReviewCount}</div>
+            <div className="kpi-value" style={{ color: 'var(--status-review-fg)' }}>{pendingReviewCount}</div>
           </div>
         </div>
 
         <div className="card kpi-card">
-          <div className="kpi-icon" style={{ background: '#fef2f2', color: '#dc2626' }}>
-            <Flame size={22} />
+          <div className="kpi-icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
+            <Flame size={20} />
           </div>
           <div>
-            <div className="kpi-title">Unplanned Activities</div>
-            <div className="kpi-value" style={{ color: '#dc2626' }}>{unplannedCount}</div>
+            <div className="kpi-title">Unplanned Work</div>
+            <div className="kpi-value" style={{ color: '#b91c1c' }}>{unplannedCount}</div>
           </div>
         </div>
 
         <div className="card kpi-card">
-          <div className="kpi-icon" style={{ background: '#fff1f2', color: '#e11d48' }}>
-            <TrendingDown size={22} />
+          <div className="kpi-icon" style={{ background: '#fff1f2', color: '#991b1b' }}>
+            <TrendingDown size={20} />
           </div>
           <div>
-            <div className="kpi-title">Schedule Delays / Variances</div>
-            <div className="kpi-value" style={{ color: '#e11d48' }}>{delayedCount}</div>
+            <div className="kpi-title">Schedule Delays</div>
+            <div className="kpi-value" style={{ color: '#991b1b' }}>{delayedCount}</div>
           </div>
         </div>
       </div>
@@ -187,37 +211,45 @@ export const Dashboard: React.FC = () => {
       <div className="card" style={{ padding: '1.25rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-              Discipline Completion & Schedule Health
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Discipline Progress & Schedule Health
             </h3>
-            <p style={{ fontSize: '0.825rem', color: '#64748b', marginTop: 2 }}>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
               Physical progress extracted from site evidence across construction packages
             </p>
           </div>
           <span className="mono-pill">L5 / L6 Baseline</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.85rem' }}>
           {disciplineStats.map(stat => (
-            <div key={stat.discipline} style={{ padding: '0.85rem 1rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>{stat.discipline}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.85rem', color: '#2563eb' }}>
+            <div
+              key={stat.discipline}
+              style={{
+                padding: '0.75rem 0.85rem',
+                background: 'var(--bg-subtle)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{stat.discipline}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.825rem', color: 'var(--brand-primary)' }}>
                   {stat.pct}%
                 </span>
               </div>
 
-              <div className="progress-bar-container" style={{ marginBottom: '0.5rem' }}>
+              <div className="progress-bar-container" style={{ marginBottom: '0.45rem' }}>
                 <div
                   className="progress-bar-fill green"
                   style={{ width: `${stat.pct}%` }}
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                 <span>{stat.completed} of {stat.total} Done</span>
                 {stat.delayed > 0 && (
-                  <span style={{ color: '#dc2626', fontWeight: 600 }}>{stat.delayed} Delayed</span>
+                  <span style={{ color: 'var(--status-unplanned-fg)', fontWeight: 600 }}>{stat.delayed} Delayed</span>
                 )}
               </div>
             </div>
@@ -226,12 +258,12 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* 2-Column Section: Delayed Activities & Recent Audit Trail */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.25rem' }}>
         {/* Delayed Activities Watchlist */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #cbd5e1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <TrendingDown size={18} style={{ color: '#dc2626' }} />
+          <div style={{ padding: '0.85rem 1.15rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <TrendingDown size={16} style={{ color: 'var(--status-unplanned-fg)' }} />
               Schedule Variance Watchlist (Behind Planned Dates)
             </h3>
             <button
@@ -257,7 +289,7 @@ export const Dashboard: React.FC = () => {
               <tbody>
                 {delayedActivities.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
                       No critical schedule variances detected.
                     </td>
                   </tr>
@@ -268,14 +300,14 @@ export const Dashboard: React.FC = () => {
                       onClick={() => setSelectedScheduleActivityId(act.activityId)}
                       title="Click to inspect activity details & linked site updates"
                     >
-                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#2563eb' }}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>
                         {act.activityId}
                       </td>
                       <td style={{ fontWeight: 600 }}>{act.activityName}</td>
                       <td>
                         <span className="mono-pill">{act.discipline}</span>
                       </td>
-                      <td style={{ fontSize: '0.8rem', color: '#475569' }}>
+                      <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
                         {act.plannedFinish}
                       </td>
                       <td>
@@ -293,17 +325,17 @@ export const Dashboard: React.FC = () => {
 
         {/* Live Audit Trail */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #cbd5e1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <ShieldCheck size={18} style={{ color: '#2563eb' }} />
-              Recent Planner & Ingestion Audit Trail
+          <div style={{ padding: '0.85rem 1.15rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <ShieldCheck size={16} style={{ color: 'var(--brand-primary)' }} />
+              Recent Execution & Audit Trail
             </h3>
             <span className="mono-pill">{auditLogs.length} events</span>
           </div>
 
-          <div style={{ maxHeight: 310, overflowY: 'auto', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ maxHeight: 290, overflowY: 'auto', padding: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
             {auditLogs.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b', fontSize: '0.85rem' }}>
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.825rem' }}>
                 No audit events recorded yet.
               </div>
             ) : (
@@ -312,34 +344,34 @@ export const Dashboard: React.FC = () => {
                   key={log.id}
                   onClick={() => setSelectedInspectorUpdateId(log.updateId)}
                   style={{
-                    padding: '0.65rem 0.85rem',
+                    padding: '0.55rem 0.75rem',
                     background: '#ffffff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 6,
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-xs)',
                     cursor: 'pointer',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: 3,
+                    gap: 2,
                     transition: 'all 0.1s ease',
                   }}
                   title="Click to view update details in inspector drawer"
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                    <span style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                       {log.action}
                     </span>
-                    <span style={{ fontSize: '0.725rem', color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
                       {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#475569', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <span className="mono-pill">{log.updateId}</span>
+                  <div style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <span className="mono-pill" style={{ fontSize: '0.65rem' }}>{log.updateId}</span>
                     <span>&rarr;</span>
-                    <span style={{ fontWeight: 600, color: log.finalActivityId ? '#2563eb' : '#dc2626' }}>
+                    <span style={{ fontWeight: 600, color: log.finalActivityId ? 'var(--brand-primary)' : 'var(--status-unplanned-fg)' }}>
                       {log.finalActivityId || 'UNPLANNED'}
                     </span>
                     {log.originalConfidence > 0 && (
-                      <span style={{ marginLeft: 'auto', fontSize: '0.725rem', color: '#64748b' }}>
+                      <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                         {log.originalConfidence}% match
                       </span>
                     )}

@@ -44,6 +44,7 @@ export const InspectorDrawer: React.FC = () => {
   const [editArea, setEditArea] = useState<string>('');
   const [editStatus, setEditStatus] = useState<'Started' | 'Completed' | 'In Progress'>('In Progress');
   const [editDate, setEditDate] = useState<string>('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     if (update) {
@@ -55,6 +56,7 @@ export const InspectorDrawer: React.FC = () => {
       const curDec = plannerDecisions[update.id];
       setSelectedActivityId(curDec?.linkedActivityId || curMatch?.candidateActivityId || null);
       setPlannerNote(curDec?.plannerNote || '');
+      setSaveSuccess(false);
     }
   }, [selectedInspectorUpdateId, siteUpdates, matchResults, plannerDecisions]);
 
@@ -81,44 +83,47 @@ export const InspectorDrawer: React.FC = () => {
       eventStatus: editStatus,
       reportDate: editDate,
     });
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
   };
 
   return (
     <div className="drawer-backdrop" onClick={() => setSelectedInspectorUpdateId(null)}>
       <div className="drawer-pane" onClick={e => e.stopPropagation()}>
         {/* Drawer Header */}
-        <div className="drawer-header" style={{ background: '#0f172a', borderBottom: '1px solid #334155' }}>
+        <div className="drawer-header">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span className="mono-pill" style={{ background: '#2563eb', color: 'white', borderColor: 'transparent', fontWeight: 700 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+              <span className="mono-pill" style={{ color: 'var(--brand-primary)', fontWeight: 700 }}>
                 {update.id}
               </span>
-              <span className="mono-pill" style={{ background: '#334155', color: '#e2e8f0', borderColor: 'transparent' }}>
+              <span className="mono-pill">
                 {update.discipline}
               </span>
-              <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
-                {update.sourceFile} #{update.lineEvidence || '—'}
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                {update.sourceFile} {update.lineEvidence ? `(#${update.lineEvidence})` : ''}
               </span>
             </div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'white', marginTop: '6px' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px' }}>
               Site Update Inspector & Parameter Editor
             </h3>
           </div>
 
           <button
             onClick={() => setSelectedInspectorUpdateId(null)}
-            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+            type="button"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
         {/* Drawer Body */}
         <div className="drawer-body">
           {/* Section 1: Raw Text Evidence */}
-          <div className="card" style={{ background: '#ffffff', padding: '1rem' }}>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
-              📄 Original Source Evidence Text:
+          <div className="card" style={{ padding: '0.85rem 1rem' }}>
+            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+              Original Source Evidence Text:
             </div>
             <div className="raw-code-box">
               &ldquo;{update.rawText}&rdquo;
@@ -126,44 +131,44 @@ export const InspectorDrawer: React.FC = () => {
           </div>
 
           {/* Section 2: Algorithm Score Breakdown */}
-          <div className="card" style={{ padding: '1rem', background: '#ffffff' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <span style={{ fontWeight: 800, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#0f172a' }}>
-                <Sparkles size={16} style={{ color: '#2563eb' }} /> Algorithm Confidence Score
+          <div className="card" style={{ padding: '0.85rem 1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+              <span style={{ fontWeight: 800, fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-primary)' }}>
+                <Sparkles size={14} style={{ color: 'var(--brand-primary)' }} /> Alignment Confidence Score
               </span>
               <span className={`status-badge ${match.category}`}>
                 {match.confidenceScore}% Confidence
               </span>
             </div>
 
-            <div style={{ fontSize: '0.8rem', color: '#475569' }}>
+            <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
               Keyword ({match.scoreBreakdown.keywordScore}/50) | Discipline ({match.scoreBreakdown.disciplineScore}/20) | Area ({match.scoreBreakdown.areaScore}/15) | Fuzzy ({match.scoreBreakdown.fuzzyScore}/15)
             </div>
 
             {match.matchReasons.length > 0 && (
-              <div style={{ fontSize: '0.78rem', color: '#1e3a8a', marginTop: '6px', fontWeight: 600 }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--brand-primary)', marginTop: '5px', fontWeight: 600 }}>
                 💡 <i>{match.matchReasons[0]}</i>
               </div>
             )}
           </div>
 
           {/* Section 3: Editable Parameters */}
-          <div className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', background: '#ffffff' }}>
-            <div style={{ fontWeight: 800, fontSize: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#0f172a' }}>
+          <div className="card" style={{ padding: '0.85rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+            <div style={{ fontWeight: 800, fontSize: '0.825rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-primary)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Edit3 size={16} style={{ color: '#2563eb' }} /> Edit Site Update Parameters
+                <Edit3 size={14} style={{ color: 'var(--brand-primary)' }} /> Edit Site Update Parameters
               </span>
-              <button className="btn btn-secondary btn-sm" onClick={saveEdits}>
-                <Save size={14} /> Save Parameters
+              <button className="btn btn-secondary btn-sm" onClick={saveEdits} type="button">
+                <Save size={13} /> <span>{saveSuccess ? 'Saved!' : 'Save Parameters'}</span>
               </button>
             </div>
 
             <div>
-              <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '2px', fontWeight: 600 }}>Extracted Description:</label>
+              <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '2px', fontWeight: 600 }}>Extracted Description:</label>
               <input
                 type="text"
                 className="form-input"
-                style={{ width: '100%' }}
+                style={{ width: '100%', paddingLeft: '0.75rem' }}
                 value={editDesc}
                 onChange={e => setEditDesc(e.target.value)}
               />
@@ -171,18 +176,18 @@ export const InspectorDrawer: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
               <div>
-                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '2px', fontWeight: 600 }}>Area / Location:</label>
+                <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '2px', fontWeight: 600 }}>Area / Location:</label>
                 <input
                   type="text"
                   className="form-input"
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', paddingLeft: '0.75rem' }}
                   value={editArea}
                   onChange={e => setEditArea(e.target.value)}
                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '2px', fontWeight: 600 }}>Event Status:</label>
+                <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '2px', fontWeight: 600 }}>Event Status:</label>
                 <select
                   className="form-select"
                   style={{ width: '100%' }}
@@ -199,26 +204,25 @@ export const InspectorDrawer: React.FC = () => {
 
           {/* Section 4: L5/L6 Schedule Search Bar */}
           <div>
-            <h4 style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <LinkIcon size={16} style={{ color: '#2563eb' }} /> Search & Link L5/L6 Schedule Activity:
+            <h4 style={{ fontSize: '0.825rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <LinkIcon size={14} style={{ color: 'var(--brand-primary)' }} /> Target Schedule Activity:
             </h4>
 
-            {/* High Visibility Search Input */}
+            {/* Search Input */}
             <div className="search-input-box" style={{ marginBottom: '0.5rem' }}>
-              <Search size={16} className="search-icon" style={{ color: '#2563eb' }} />
+              <Search size={14} className="search-icon" />
               <input
                 type="text"
                 className="form-input"
                 placeholder="Search schedule activities by ID or keyword..."
                 value={searchSchedule}
                 onChange={e => setSearchSchedule(e.target.value)}
-                style={{ borderColor: '#2563eb', fontWeight: 600 }}
               />
             </div>
 
             {/* List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '200px', overflowY: 'auto' }}>
-              {filteredSchedule.map(act => {
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto' }}>
+              {filteredSchedule.slice(0, 15).map(act => {
                 const isSelected = act.activityId === selectedActivityId;
                 const isRec = match.candidateActivityId === act.activityId;
 
@@ -229,14 +233,14 @@ export const InspectorDrawer: React.FC = () => {
                     className={`schedule-select-item ${isSelected ? 'selected' : ''}`}
                   >
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#2563eb', fontSize: '0.85rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)', fontSize: '0.8rem' }}>
                           {act.activityId}
                         </span>
-                        <span style={{ fontSize: '0.725rem', color: '#64748b' }}>WBS {act.wbs}</span>
-                        {isRec && <span style={{ fontSize: '0.65rem', background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>★ Top Candidate</span>}
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>WBS {act.wbs}</span>
+                        {isRec && <span style={{ fontSize: '0.65rem', background: 'var(--status-ready-bg)', color: 'var(--status-ready-fg)', border: '1px solid var(--status-ready-border)', padding: '1px 5px', borderRadius: '3px', fontWeight: 700 }}>★ Top Match</span>}
                       </div>
-                      <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>{act.activityName}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.8rem' }}>{act.activityName}</div>
                     </div>
 
                     <input
@@ -253,13 +257,13 @@ export const InspectorDrawer: React.FC = () => {
 
           {/* Section 5: Planner Justification Note */}
           <div>
-            <label style={{ fontSize: '0.75rem', color: '#0f172a', display: 'block', marginBottom: '2px', fontWeight: 700 }}>
-              Planner Decision Justification Note:
+            <label style={{ fontSize: '0.725rem', color: 'var(--text-primary)', display: 'block', marginBottom: '2px', fontWeight: 700 }}>
+              Planner Justification Note:
             </label>
-            <textarea
-              rows={2}
+            <input
+              type="text"
               className="form-input"
-              style={{ width: '100%', fontSize: '0.85rem' }}
+              style={{ width: '100%', paddingLeft: '0.75rem' }}
               placeholder="Enter audit note for decision rationale..."
               value={plannerNote}
               onChange={e => setPlannerNote(e.target.value)}
@@ -272,8 +276,9 @@ export const InspectorDrawer: React.FC = () => {
           <button
             className="btn btn-secondary btn-sm"
             onClick={() => setSelectedAuditUpdateId(update.id)}
+            type="button"
           >
-            <ShieldCheck size={14} /> Full Audit Log
+            <ShieldCheck size={13} /> Full Audit Log
           </button>
 
           {selectedActivityObj && (
@@ -285,8 +290,9 @@ export const InspectorDrawer: React.FC = () => {
                 handlePlannerAction(update.id, actionType, selectedActivityId, plannerNote);
                 setSelectedInspectorUpdateId(null);
               }}
+              type="button"
             >
-              <CheckCircle2 size={14} /> Confirm Link
+              <CheckCircle2 size={13} /> Confirm Link
             </button>
           )}
 
@@ -297,8 +303,9 @@ export const InspectorDrawer: React.FC = () => {
               handlePlannerAction(update.id, 'mark_unplanned', null, plannerNote || 'Marked as unplanned work');
               setSelectedInspectorUpdateId(null);
             }}
+            type="button"
           >
-            <HelpCircle size={14} /> Mark Unplanned
+            <HelpCircle size={13} /> Unplanned
           </button>
 
           <button
@@ -307,8 +314,9 @@ export const InspectorDrawer: React.FC = () => {
               handlePlannerAction(update.id, 'reject', null, plannerNote || 'Rejected');
               setSelectedInspectorUpdateId(null);
             }}
+            type="button"
           >
-            <XCircle size={14} /> Reject
+            <XCircle size={13} /> Reject
           </button>
         </div>
       </div>

@@ -8,10 +8,8 @@ import {
   UploadCloud,
   Download,
   RefreshCw,
-  Building2,
   Database,
-  Wifi,
-  WifiOff
+  Radio
 } from 'lucide-react';
 import { NavigationTab } from '../types';
 
@@ -41,50 +39,51 @@ export const Navbar: React.FC = () => {
     {
       id: 'dashboard',
       label: 'Dashboard',
-      icon: <LayoutDashboard size={16} />,
+      icon: <LayoutDashboard size={15} />,
     },
     {
       id: 'site-updates',
       label: 'Site Updates',
-      icon: <FileSpreadsheet size={16} />,
+      icon: <FileSpreadsheet size={15} />,
       badge: siteUpdates.length,
       badgeType: 'neutral',
     },
     {
       id: 'schedule-activities',
       label: 'Schedule Activities',
-      icon: <CalendarCheck size={16} />,
+      icon: <CalendarCheck size={15} />,
       badge: schedule.length,
       badgeType: 'neutral',
     },
     {
       id: 'planner-review',
       label: 'Planner Review',
-      icon: <CheckSquare size={16} />,
+      icon: <CheckSquare size={15} />,
       badge: pendingReviewCount > 0 ? pendingReviewCount : undefined,
       badgeType: 'warning',
     },
     {
       id: 'upload',
-      label: 'Upload / Demo Data',
-      icon: <UploadCloud size={16} />,
+      label: 'Data & Ingestion',
+      icon: <UploadCloud size={15} />,
     },
   ];
 
   return (
-    <header className="navbar" style={{ borderBottom: '1px solid #1e293b' }}>
+    <header className="navbar">
       <div className="navbar-inner">
         {/* Brand & System Metadata */}
         <div className="brand-section">
-          <div className="brand-logo" style={{ background: '#2563eb', color: '#ffffff' }}>
-            <Building2 size={22} />
+          <div className="brand-logo">
+            <Radio size={18} />
           </div>
           <div>
             <div className="brand-title">
-              ProjectPulse <span style={{ fontSize: '0.72rem', background: '#3b82f6', color: 'white', padding: '2px 7px', borderRadius: '4px', fontWeight: 600 }}>SIH 2026</span>
+              <span>Datum</span>
+              <span className="brand-badge">L5/L6</span>
             </div>
             <div className="brand-subtitle">
-              L5/L6 Progress Tracking & Schedule Linking Platform
+              The record of execution.
             </div>
           </div>
         </div>
@@ -93,65 +92,57 @@ export const Navbar: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {backendStatus === 'connected' ? (
             <div
+              className="mono-pill"
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                background: '#064e3b',
-                border: '1px solid #059669',
-                color: '#a7f3d0',
-                fontSize: '0.725rem',
-                fontWeight: 700,
-                padding: '3px 10px',
-                borderRadius: '999px',
-                letterSpacing: '0.02em',
+                gap: 5,
+                background: 'var(--status-ready-bg)',
+                borderColor: 'var(--status-ready-border)',
+                color: 'var(--status-ready-fg)',
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                padding: '3px 8px',
               }}
-              title="Connected to Express REST API & embedded SQLite database (backend/database.sqlite)"
+              title="Connected to Express REST API & embedded SQLite database"
             >
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 8px #34d399' }} />
-              <Database size={13} />
-              <span>Backend: SQLite Online</span>
+              <Database size={12} />
+              <span>SQLite Engine Active</span>
             </div>
           ) : backendStatus === 'checking' ? (
             <div
+              className="mono-pill"
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                background: '#1e293b',
-                border: '1px solid #475569',
-                color: '#94a3b8',
-                fontSize: '0.725rem',
-                padding: '3px 10px',
-                borderRadius: '999px',
+                gap: 5,
+                fontSize: '0.72rem',
+                padding: '3px 8px',
               }}
             >
-              <RefreshCw size={12} className="spin" />
-              <span>Checking Backend...</span>
+              <RefreshCw size={11} className="spin" />
+              <span>Checking System...</span>
             </div>
           ) : (
             <div
+              className="mono-pill"
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                background: '#334155',
-                border: '1px solid #475569',
-                color: '#e2e8f0',
-                fontSize: '0.725rem',
-                fontWeight: 600,
-                padding: '3px 10px',
-                borderRadius: '999px',
+                gap: 5,
+                background: 'var(--bg-subtle)',
+                color: 'var(--text-secondary)',
+                fontSize: '0.72rem',
+                padding: '3px 8px',
               }}
-              title="Backend offline — running in standalone client in-memory mode"
+              title="Running in client-side in-memory mode"
             >
-              <WifiOff size={13} />
-              <span>Client Mode (Standalone)</span>
+              <span>Client Mode</span>
             </div>
           )}
         </div>
 
-        {/* 5 Primary Navigation Tabs */}
+        {/* Primary Navigation Tabs */}
         <nav className="nav-tabs">
           {tabs.map(tab => {
             const isActive = activeTab === tab.id;
@@ -168,12 +159,20 @@ export const Navbar: React.FC = () => {
                   <span
                     className="badge"
                     style={{
-                      background: tab.badgeType === 'warning' ? '#d97706' : (isActive ? '#2563eb' : 'rgba(255,255,255,0.2)'),
-                      color: '#ffffff',
-                      fontWeight: tab.badgeType === 'warning' ? 700 : 500,
-                      padding: '1px 6px',
-                      borderRadius: '999px',
-                      fontSize: '0.72rem',
+                      background:
+                        tab.badgeType === 'warning'
+                          ? 'var(--status-review-bg)'
+                          : isActive
+                          ? 'var(--brand-surface)'
+                          : 'var(--bg-app)',
+                      color:
+                        tab.badgeType === 'warning'
+                          ? 'var(--status-review-fg)'
+                          : 'var(--text-secondary)',
+                      border:
+                        tab.badgeType === 'warning'
+                          ? '1px solid var(--status-review-border)'
+                          : '1px solid var(--border-subtle)',
                     }}
                   >
                     {tab.badge}
@@ -192,7 +191,7 @@ export const Navbar: React.FC = () => {
             title="Download CSV report of aligned schedule & site progress"
             type="button"
           >
-            <Download size={14} />
+            <Download size={13} />
             <span>Export CSV</span>
           </button>
 
@@ -203,7 +202,7 @@ export const Navbar: React.FC = () => {
             title="Reload baseline benchmark datasets"
             type="button"
           >
-            <RefreshCw size={14} className={isLoading ? 'spin' : ''} />
+            <RefreshCw size={13} className={isLoading ? 'spin' : ''} />
             <span>{isLoading ? 'Reloading...' : 'Reload Demo'}</span>
           </button>
         </div>

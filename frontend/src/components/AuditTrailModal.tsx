@@ -28,50 +28,51 @@ export const AuditTrailModal: React.FC = () => {
       <div className="modal-container" onClick={e => e.stopPropagation()}>
         {/* Modal Header */}
         <div className="modal-header">
-          <div style={{ fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white' }}>
-            <ShieldCheck size={22} style={{ color: '#93c5fd' }} />
+          <div style={{ fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-primary)' }}>
+            <ShieldCheck size={18} style={{ color: 'var(--brand-primary)' }} />
             Decision Audit Trail & Provenance History
           </div>
           <button
             onClick={() => setSelectedAuditUpdateId(null)}
-            style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+            type="button"
           >
-            <X size={22} />
+            <X size={18} />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {/* Source Evidence Card */}
-          <div className="card" style={{ background: '#ffffff', padding: '1rem' }}>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
-              📄 Original Source Evidence: <b>{update?.sourceFile}</b> (Line/Row #{update?.lineEvidence})
+          <div className="card" style={{ padding: '0.85rem 1rem' }}>
+            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '4px', textTransform: 'uppercase' }}>
+              Original Source Evidence: {update?.sourceFile} (Line/Row #{update?.lineEvidence})
             </div>
             <div className="raw-code-box">
               &ldquo;{update?.rawText}&rdquo;
             </div>
-            <div style={{ fontSize: '0.825rem', color: '#334155', marginTop: '6px' }}>
-              Extracted Description: <b>&ldquo;{update?.extractedDescription}&rdquo;</b> | Discipline: <b>{update?.discipline}</b> | Area: <b>{update?.area}</b>
+            <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', marginTop: '5px' }}>
+              Extracted: <strong>&ldquo;{update?.extractedDescription}&rdquo;</strong> | Discipline: <strong>{update?.discipline}</strong> | Area: <strong>{update?.area}</strong>
             </div>
           </div>
 
           {/* Match Algorithm Output Card */}
           {match && (
-            <div className="card" style={{ padding: '1rem', background: '#ffffff' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>Deterministic Match Engine Output</span>
+            <div className="card" style={{ padding: '0.85rem 1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                <span style={{ fontWeight: 800, fontSize: '0.825rem', color: 'var(--text-primary)' }}>Algorithm Output</span>
                 <span className={`status-badge ${match.category}`}>
                   {match.confidenceScore}% Confidence Score
                 </span>
               </div>
 
-              <div style={{ fontSize: '0.85rem', color: '#334155', marginBottom: '0.5rem' }}>
-                <b>Top Candidate Match:</b> {match.candidateActivityId || 'None'}
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.45rem' }}>
+                <strong>Candidate Match:</strong> {match.candidateActivityId || 'None'}
               </div>
 
-              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                <b>Logged Match Reasons:</b>
-                <ul style={{ paddingLeft: '1.2rem', marginTop: '4px' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                <strong>Match Reasons:</strong>
+                <ul style={{ paddingLeft: '1.2rem', marginTop: '3px' }}>
                   {match.matchReasons.map((r, i) => (
                     <li key={i}>{r}</li>
                   ))}
@@ -81,53 +82,60 @@ export const AuditTrailModal: React.FC = () => {
           )}
 
           {/* Final Linked Schedule Activity */}
-          <div className="card" style={{ background: '#dcfce7', border: '1px solid #86efac', padding: '1rem' }}>
-            <div style={{ fontSize: '0.8rem', color: '#15803d', fontWeight: 800, marginBottom: '4px' }}>
-              🎯 Current Baseline Schedule Link Status:
+          <div
+            className="card"
+            style={{
+              background: finalActivityObj ? 'var(--status-ready-bg)' : 'var(--status-unplanned-bg)',
+              borderColor: finalActivityObj ? 'var(--status-ready-border)' : 'var(--status-unplanned-border)',
+              padding: '0.85rem 1rem',
+            }}
+          >
+            <div style={{ fontSize: '0.75rem', color: finalActivityObj ? 'var(--status-ready-fg)' : 'var(--status-unplanned-fg)', fontWeight: 800, marginBottom: '3px' }}>
+              Schedule Link Status:
             </div>
             {finalActivityObj ? (
               <div>
-                <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>
+                <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
                   [{finalActivityObj.activityId}] {finalActivityObj.activityName}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: '#334155', marginTop: '2px' }}>
+                <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                   WBS {finalActivityObj.wbs} | Planned: {finalActivityObj.plannedStart} to {finalActivityObj.plannedFinish}
                 </div>
               </div>
             ) : (
-              <div style={{ color: '#be123c', fontSize: '0.85rem', fontWeight: 700 }}>
-                Categorized as New / Unplanned Activity (Not linked to baseline)
+              <div style={{ color: 'var(--status-unplanned-fg)', fontSize: '0.825rem', fontWeight: 700 }}>
+                Categorized as Unplanned Activity (Out of baseline scope)
               </div>
             )}
           </div>
 
           {/* Immutable Audit Log History */}
           <div>
-            <h4 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-              Action Provenance Logs ({logs.length})
+            <h4 style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.45rem' }}>
+              Action Provenance History ({logs.length})
             </h4>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
               {logs.map(log => (
                 <div
                   key={log.id}
                   style={{
-                    padding: '0.75rem 1rem',
-                    borderRadius: '6px',
+                    padding: '0.65rem 0.85rem',
+                    borderRadius: 'var(--radius-xs)',
                     background: '#ffffff',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '0.825rem',
+                    border: '1px solid var(--border-subtle)',
+                    fontSize: '0.775rem',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                    <span style={{ fontWeight: 800, color: '#2563eb' }}>{log.action}</span>
-                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
+                    <span style={{ fontWeight: 800, color: 'var(--brand-primary)' }}>{log.action}</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                       {new Date(log.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
 
                   {log.plannerNote && (
-                    <div style={{ color: '#475569', fontStyle: 'italic', marginTop: '2px' }}>
+                    <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: '2px' }}>
                       Note: &ldquo;{log.plannerNote}&rdquo;
                     </div>
                   )}
@@ -139,7 +147,7 @@ export const AuditTrailModal: React.FC = () => {
 
         {/* Modal Footer */}
         <div className="modal-footer">
-          <button className="btn btn-secondary btn-sm" onClick={() => setSelectedAuditUpdateId(null)}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setSelectedAuditUpdateId(null)} type="button">
             Close Audit History
           </button>
         </div>

@@ -177,11 +177,13 @@ export const SupervisorEntryView: React.FC = () => {
         setParsedVoiceResult(parsed);
       },
       onFinalTranscript: text => {
-        setVoiceTranscript(prev => (prev ? `${prev} ${text}` : text));
+        setVoiceTranscript(prev => {
+          const full = prev ? `${prev} ${text}` : text;
+          const parsed = parseSpokenUpdate(full, lang);
+          setParsedVoiceResult(parsed);
+          return full;
+        });
         setInterimVoiceText('');
-        const full = voiceTranscript ? `${voiceTranscript} ${text}` : text;
-        const parsed = parseSpokenUpdate(full, lang);
-        setParsedVoiceResult(parsed);
       },
       onAudioRecorded: audio => {
         setRecordedAudio(audio);

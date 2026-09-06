@@ -143,6 +143,35 @@ Datum field updates (Trade, Spatial Area, Equipment Tag, Event Status, Quantity,
 Blocker Flag) with real-time audio waveform visualizer and 1-click Opera/browser fallback
 presets.
 
+--------------------------------------------------------------------------------
+BUG-007: Python Speech Recognition UTF-8 Console Encoding & Vite STT Proxy Fix
+--------------------------------------------------------------------------------
+DATE FIXED: September 6, 2026
+AFFECTED COMPONENTS:
+  - backend/src/transcribe.py
+  - backend/src/server.ts
+  - frontend/vite.config.ts
+  - frontend/src/utils/speechService.ts
+  - frontend/src/utils/speechParser.ts
+  - frontend/src/components/SupervisorEntryView.tsx
+
+ROOT CAUSE:
+  1. Python on Windows defaulted stdout to 'cp1252' encoding, causing an unhandled
+     UnicodeEncodeError whenever non-ASCII Devanagari (Hindi) or Tamil characters were
+     returned from Google Speech Recognition.
+  2. Vite dev server (port 5173) lacked a proxy configuration for /api, preventing
+     frontend speech transcription POST requests from reaching the Express backend (port 5000).
+  3. Spoken text parser lacked Devanagari and Tamil script token maps.
+  4. Stale closure in React state updater dropped accumulated multi-sentence spoken text.
+
+RESOLUTION:
+  1. Reconfigured Python stdout/stderr streams to UTF-8 and set PYTHONIOENCODING='utf-8'.
+  2. Added Vite server reverse-proxy forwarding /api to http://localhost:5000.
+  3. Expanded speechParser with native Devanagari and Tamil vocabulary and numerals.
+  4. Fixed state closure in SupervisorEntryView onFinalTranscript handler.
+  5. Added GET /api/transcribe/status diagnostic health endpoint.
+
 ================================================================================
 END OF CHANGELOG & BUG AUDIT LOG
 ================================================================================
+

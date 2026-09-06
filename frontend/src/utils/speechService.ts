@@ -138,46 +138,90 @@ export function audioBufferToWav(buffer: AudioBuffer): Blob {
 }
 
 /**
+ * Check backend Speech-to-Text engine readiness
+ */
+export async function checkSTTEngineStatus(): Promise<{
+  success: boolean;
+  status: 'ready' | 'offline' | 'error';
+  engine?: string;
+  srVersion?: string;
+  error?: string;
+}> {
+  const endpoints = ['/api/transcribe/status', 'http://localhost:5000/api/transcribe/status'];
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, { method: 'GET', cache: 'no-store' });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // try next endpoint
+    }
+  }
+  return { success: false, status: 'offline', error: 'Backend transcription service is offline.' };
+}
+
+/**
  * Send recorded audio blob to backend Speech-to-Text API
  */
 export async function transcribeAudioBlob(
   blob: Blob,
   lang: SpeechLanguage = 'en-IN'
-): Promise<{ success: boolean; text?: string; error?: string }> {
+): Promise<{ success: boolean; text?: string; error?: string; language?: string; fallback?: boolean }> {
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) {
-      return { success: false, error: 'Web Audio API not supported in this browser.' };
-    }
+    let wavBlob: Blob = blob;
 
-    const ctx = new AudioCtx();
-    const arrayBuffer = await blob.arrayBuffer();
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-    const wavBlob = audioBufferToWav(audioBuffer);
-    ctx.close();
+    // Convert audio buffer to standard 16-bit PCM WAV if needed
+    if (blob.type !== 'audio/wav') {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const arrayBuffer = await blob.arrayBuffer();
+          const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+          wavBlob = audioBufferToWav(audioBuffer);
+          ctx.close();
+        }
+      } catch (decodeErr) {
+        console.warn('Audio decoding fallback to raw blob:', decodeErr);
+        wavBlob = blob;
+      }
+    }
 
     const formData = new FormData();
     formData.append('audio', wavBlob, 'recording.wav');
     formData.append('language', lang);
 
-    const res = await fetch('/api/transcribe', {
-      method: 'POST',
-      body: formData,
-    });
+    const endpoints = ['/api/transcribe', 'http://localhost:5000/api/transcribe'];
+    let lastError = '';
 
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => null);
-      return { success: false, error: errJson?.error || `Server returned HTTP ${res.status}` };
+    for (const endpoint of endpoints) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          return data;
+        } else {
+          const errJson = await res.json().catch(() => null);
+          lastError = errJson?.error || `Server returned HTTP ${res.status}`;
+        }
+      } catch (fetchErr: any) {
+        lastError = fetchErr?.message || 'Network request failed';
+      }
     }
 
-    const data = await res.json();
-    return data;
+    return { success: false, error: lastError || 'Audio transcription error' };
   } catch (err: any) {
     return { success: false, error: err.message || 'Audio transcription error' };
   }
 }
 
 class SpeechService {
+
   private recognition: any = null;
   private isListening = false;
   private mediaStream: MediaStream | null = null;

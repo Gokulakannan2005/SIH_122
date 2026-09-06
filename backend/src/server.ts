@@ -357,10 +357,62 @@ app.get('/api/export/csv', (req, res) => {
 });
 
 /**
- * 11. Speech-to-Text Audio Transcription Endpoint
+/**
+ * 11. Speech-to-Text Audio Transcription & Status Endpoints
  */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Helper to determine active Python executable
+function getPythonCommand(): string {
+  return process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
+}
+
+app.get('/api/transcribe/status', (req, res) => {
+  const pythonCmd = getPythonCommand();
+  const testProcess = spawn(pythonCmd, ['-c', 'import speech_recognition as sr; print(sr.__version__)'], {
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+  });
+
+  let output = '';
+  let errorOutput = '';
+
+  testProcess.stdout.on('data', data => {
+    output += data.toString();
+  });
+
+  testProcess.stderr.on('data', data => {
+    errorOutput += data.toString();
+  });
+
+  testProcess.on('error', err => {
+    res.json({
+      success: false,
+      status: 'offline',
+      error: `Python executable (${pythonCmd}) error: ${err.message}`,
+      supportedLanguages: ['en-IN', 'hi-IN', 'ta-IN', 'en-US'],
+    });
+  });
+
+  testProcess.on('close', code => {
+    if (code === 0) {
+      res.json({
+        success: true,
+        status: 'ready',
+        engine: 'SpeechRecognition (Google Cloud Web API)',
+        srVersion: output.trim(),
+        supportedLanguages: ['en-IN', 'hi-IN', 'ta-IN', 'en-US'],
+      });
+    } else {
+      res.json({
+        success: false,
+        status: 'error',
+        error: errorOutput || `Process exited with code ${code}`,
+        supportedLanguages: ['en-IN', 'hi-IN', 'ta-IN', 'en-US'],
+      });
+    }
+  });
+});
 
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
@@ -375,20 +427,43 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     fs.writeFileSync(tempFilePath, req.file.buffer);
 
     const scriptPath = path.join(__dirname, 'transcribe.py');
-    const pythonProcess = spawn('python', [scriptPath, tempFilePath, lang]);
+    const pythonCmd = getPythonCommand();
+    const pythonProcess = spawn(pythonCmd, [scriptPath, tempFilePath, lang], {
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1',
+      },
+    });
 
     let stdoutData = '';
     let stderrData = '';
+    let responded = false;
+
+    pythonProcess.on('error', err => {
+      if (responded) return;
+      responded = true;
+      try {
+        if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+      } catch (e) {}
+      res.status(500).json({
+        success: false,
+        error: `Failed to launch Python (${pythonCmd}): ${err.message}`,
+      });
+    });
 
     pythonProcess.stdout.on('data', data => {
-      stdoutData += data.toString();
+      stdoutData += data.toString('utf8');
     });
 
     pythonProcess.stderr.on('data', data => {
-      stderrData += data.toString();
+      stderrData += data.toString('utf8');
     });
 
     pythonProcess.on('close', code => {
+      if (responded) return;
+      responded = true;
+
       try {
         if (fs.existsSync(tempFilePath)) {
           fs.unlinkSync(tempFilePath);
@@ -427,3 +502,4 @@ app.listen(port, () => {
   console.log(`🗄️  Database: SQLite Embedded (backend/database.sqlite)`);
   console.log(`========================================================`);
 });
+

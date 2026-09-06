@@ -1,70 +1,70 @@
 :root {
-  /* Atlassian / Trello / Linear Enterprise Design Tokens */
-  --bg-app: #f7f8f9;
+  /* Industrial Enterprise Design Tokens (High Legibility & Contrast) */
+  --bg-app: #f4f6f8;
   --bg-sidebar: #ffffff;
   --bg-surface: #ffffff;
-  --bg-surface-hover: #f1f2f4;
-  --bg-surface-active: #e9eaed;
-  --bg-subtle: #f1f2f4;
-  --bg-column: #f1f2f4;
-  --bg-column-hover: #e9eaed;
+  --bg-surface-hover: #f1f5f9;
+  --bg-surface-active: #e2e8f0;
+  --bg-subtle: #f1f5f9;
+  --bg-column: #f1f5f9;
+  --bg-column-hover: #e2e8f0;
 
-  /* Crisp, high-precision borders */
-  --border-subtle: #dfe1e6;
+  /* High-precision crisp borders */
+  --border-subtle: #e2e8f0;
   --border-default: #cbd5e1;
-  --border-strong: #8590a2;
+  --border-strong: #64748b;
   --border-focus: #0c66e4;
 
-  /* Typography Colors */
-  --text-primary: #172b4d;
-  --text-secondary: #44546f;
-  --text-muted: #626f86;
-  --text-subtle: #8590a2;
+  /* High-Contrast Industrial Typography */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-subtle: #94a3b8;
   --text-white: #ffffff;
 
-  /* Brand Colors */
+  /* Industrial Blue & Steel Accents */
   --brand-primary: #0c66e4;
-  --brand-primary-hover: #0055cc;
-  --brand-primary-active: #09326c;
+  --brand-primary-hover: #0052cc;
+  --brand-primary-active: #0747a6;
   --brand-surface: #e9f2ff;
   --brand-surface-hover: #cce0ff;
-  --brand-accent: #1d7afc;
+  --brand-accent: #0065ff;
 
-  /* Status Colors */
-  --status-ready-fg: #1f845a;
-  --status-ready-bg: #dcfff1;
-  --status-ready-border: #7ee2b8;
+  /* High-Contrast Field Status Tokens */
+  --status-ready-fg: #065f46;
+  --status-ready-bg: #ecfdf5;
+  --status-ready-border: #6ee7b7;
 
-  --status-review-fg: #974f0c;
-  --status-review-bg: #fff4e5;
-  --status-review-border: #fec195;
+  --status-review-fg: #92400e;
+  --status-review-bg: #fffbeb;
+  --status-review-border: #fcd34d;
 
-  --status-unplanned-fg: #ae2e24;
-  --status-unplanned-bg: #ffebe6;
-  --status-unplanned-border: #fd9891;
+  --status-unplanned-fg: #991b1b;
+  --status-unplanned-bg: #fef2f2;
+  --status-unplanned-border: #fca5a5;
 
-  --status-rejected-fg: #626f86;
-  --status-rejected-bg: #f1f2f4;
-  --status-rejected-border: #dfe1e6;
+  --status-rejected-fg: #475569;
+  --status-rejected-bg: #f1f5f9;
+  --status-rejected-border: #cbd5e1;
 
-  /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  /* High-Legibility Typography Stack */
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
 
-  /* Radii */
-  --radius-xs: 3px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
+  /* Industrial Geometry & Radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 
-  /* Elevation & Shadows */
-  --shadow-xs: 0 1px 1px rgba(9, 30, 66, 0.12), 0 0 1px rgba(9, 30, 66, 0.25);
-  --shadow-card: 0 1px 1px rgba(9, 30, 66, 0.12), 0 0 1px rgba(9, 30, 66, 0.25);
-  --shadow-card-hover: 0 4px 8px -2px rgba(9, 30, 66, 0.15), 0 0 1px rgba(9, 30, 66, 0.31);
-  --shadow-md: 0 4px 8px -2px rgba(9, 30, 66, 0.15), 0 0 1px rgba(9, 30, 66, 0.31);
-  --shadow-lg: 0 8px 16px -4px rgba(9, 30, 66, 0.18), 0 0 1px rgba(9, 30, 66, 0.31);
-  --shadow-drawer: -4px 0 24px rgba(9, 30, 66, 0.15);
+  /* Elevated Shadows */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card-hover: 0 4px 12px -2px rgba(15, 23, 42, 0.1), 0 2px 4px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.05);
+  --shadow-drawer: -4px 0 24px rgba(15, 23, 42, 0.15);
 
   /* Transitions */
   --transition-fast: 120ms cubic-bezier(0.2, 0, 0, 1);

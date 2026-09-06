@@ -7,7 +7,8 @@ import {
   HardHat,
   ChevronRight,
   Database,
-  Sparkles
+  Sparkles,
+  CheckCircle2
 } from 'lucide-react';
 import { NavigationTab } from '../types';
 
@@ -20,52 +21,28 @@ export const AppHeader: React.FC = () => {
     loadDemoData,
     siteUpdates,
     matchResults,
-    offlineMode,
   } = useProject();
 
-  const getTabInfo = (tab: NavigationTab): { title: string; subtitle: string } => {
+  const getTabTitle = (tab: NavigationTab): string => {
     switch (tab) {
       case 'dashboard':
-        return {
-          title: 'Project Control Room',
-          subtitle: 'KPIs, Reconciliation Overview, and Daily Trend Analysis',
-        };
+        return 'Project Control Center';
       case 'site-updates':
-        return {
-          title: 'Site Event Stream',
-          subtitle: 'Supervisor Daily Field Log Events and Status Kanban',
-        };
+        return 'Daily Field Reports Feed';
       case 'schedule-activities':
-        return {
-          title: 'Schedule Activity Master',
-          subtitle: 'L5 / L6 Milestone Hierarchy and Schedule Baseline',
-        };
+        return 'Milestone Baseline (L5/L6)';
       case 'planner-review':
-        return {
-          title: 'Planner Match Matrix',
-          subtitle: 'Confidence-Scored Match Candidates, AI Overrides, and Approvals',
-        };
+        return 'AI Auto-Match Matrix';
       case 'supervisor-entry':
-        return {
-          title: 'Field Supervisor Daily Portal',
-          subtitle: 'Daily Progress Note, CSV / XLSX Dropzone, and Completion Photo Studio',
-        };
+        return 'Field Progress & Photo Logs';
       case 'copilot':
-        return {
-          title: 'AI Copilot & Delay Risk Simulator',
-          subtitle: 'Predictive Milestone Delay Forecasting & Provenance Audit',
-        };
+        return 'AI Predictive Risk & Copilot';
       case 'upload':
-        return {
-          title: 'Batch Schema & Ingestion Portal',
-          subtitle: 'Import Custom CSV / XLSX Data Streams with Multi-Factor Ingestion',
-        };
+        return 'Data Ingestion & Schemas';
       default:
-        return { title: 'Datum', subtitle: 'The record of execution.' };
+        return 'Datum — The record of execution.';
     }
   };
-
-  const tabInfo = getTabInfo(activeTab);
 
   // Compute live match stats
   const totalCount = siteUpdates.length;
@@ -78,7 +55,7 @@ export const AppHeader: React.FC = () => {
       <div className="header-breadcrumb">
         <span style={{ color: 'var(--text-muted)' }}>Datum</span>
         <ChevronRight size={14} style={{ color: 'var(--border-strong)' }} />
-        <span className="header-breadcrumb-current">{tabInfo.title}</span>
+        <span className="header-breadcrumb-current">{getTabTitle(activeTab)}</span>
       </div>
 
       {/* Global Actions and Indicators */}
@@ -90,30 +67,37 @@ export const AppHeader: React.FC = () => {
           className="mono-pill"
           style={{
             cursor: 'pointer',
-            background: currentRole === 'admin' ? '#e9f2ff' : '#dcfff1',
-            color: currentRole === 'admin' ? '#0c66e4' : '#1f845a',
-            borderColor: currentRole === 'admin' ? '#cce0ff' : '#7ee2b8',
+            background: currentRole === 'admin' ? '#e9f2ff' : '#ecfdf5',
+            color: currentRole === 'admin' ? '#0c66e4' : '#047857',
+            borderColor: currentRole === 'admin' ? '#cce0ff' : '#a7f3d0',
             display: 'flex',
             alignItems: 'center',
-            gap: 4,
+            gap: 5,
+            padding: '3px 9px',
+            fontWeight: 700,
           }}
           title="Click to toggle user role"
         >
-          {currentRole === 'admin' ? <ShieldCheck size={12} /> : <HardHat size={12} />}
-          <span>{currentRole === 'admin' ? 'Admin / Lead Planner' : 'Supervisor Mode'}</span>
+          {currentRole === 'admin' ? <ShieldCheck size={13} /> : <HardHat size={13} />}
+          <span>{currentRole === 'admin' ? 'Lead Planner Mode' : 'Site Supervisor Mode'}</span>
         </button>
 
         {/* Live Confidence Index */}
         <div
           className="mono-pill"
           style={{
-            background: '#f1f2f4',
+            background: '#f8fafc',
             color: 'var(--text-secondary)',
             borderColor: 'var(--border-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: '3px 9px',
           }}
         >
-          <span>Auto-Match: </span>
-          <strong style={{ color: '#1f845a' }}>
+          <CheckCircle2 size={13} style={{ color: '#047857' }} />
+          <span>Auto-Match Rate: </span>
+          <strong style={{ color: '#047857' }}>
             {highConfPct}% High Conf
           </strong>
         </div>
@@ -134,7 +118,7 @@ export const AppHeader: React.FC = () => {
           type="button"
           className="btn btn-ghost btn-sm"
           onClick={loadDemoData}
-          title="Reset dataset to fresh SIH 122 sample baseline"
+          title="Reset dataset to fresh baseline"
         >
           <RotateCcw size={13} />
           <span>Reset Demo</span>

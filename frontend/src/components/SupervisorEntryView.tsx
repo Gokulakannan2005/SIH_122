@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
 import { runLocalOCR, calculateImageFingerprint, normalizeEquipmentTag, OCRScanResult } from '../utils/ocrService';
-import { speechService, SAMPLE_VOICE_PRESETS, SpeechLanguage, VoicePreset, isOperaBrowser } from '../utils/speechService';
+import { speechService, SAMPLE_VOICE_PRESETS, SpeechLanguage, VoicePreset, isOperaBrowser, RecordedAudioData } from '../utils/speechService';
 import { parseSpokenUpdate } from '../utils/speechParser';
 import { SpokenParseResult } from '../types';
 
@@ -68,6 +68,7 @@ export const SupervisorEntryView: React.FC = () => {
   const [isVoiceRecording, setIsVoiceRecording] = useState<boolean>(false);
   const [isMicActive, setIsMicActive] = useState<boolean>(false);
   const [audioLevel, setAudioLevel] = useState<number>(0);
+  const [recordedAudio, setRecordedAudio] = useState<RecordedAudioData | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState<string>('');
   const [interimVoiceText, setInterimVoiceText] = useState<string>('');
   const [parsedVoiceResult, setParsedVoiceResult] = useState<SpokenParseResult | null>(null);
@@ -108,13 +109,16 @@ export const SupervisorEntryView: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchCsvRef = useRef<HTMLInputElement>(null);
 
-  // Voice Recording Toggle (with Hardware Mic Stream & Audio Analyzer)
+  // Voice Recording Toggle (with Hardware Mic Stream, MediaRecorder & Audio Analyzer)
   const handleToggleVoiceRecording = async (lang: SpeechLanguage = voiceLang) => {
     if (isVoiceRecording || isMicActive) {
-      speechService.stop();
+      const audioData = speechService.stop();
       setIsVoiceRecording(false);
       setIsMicActive(false);
       setAudioLevel(0);
+      if (audioData) {
+        setRecordedAudio(audioData);
+      }
       return;
     }
 
@@ -122,6 +126,7 @@ export const SupervisorEntryView: React.FC = () => {
     setVoiceTranscript('');
     setInterimVoiceText('');
     setParsedVoiceResult(null);
+    setRecordedAudio(null);
 
     const started = await speechService.start(lang, {
       onAudioLevel: lvl => {
@@ -142,6 +147,9 @@ export const SupervisorEntryView: React.FC = () => {
         const parsed = parseSpokenUpdate(full, lang);
         setParsedVoiceResult(parsed);
       },
+      onAudioRecorded: audio => {
+        setRecordedAudio(audio);
+      },
       onStateChange: state => {
         setIsVoiceRecording(state === 'listening');
         if (state !== 'listening' && !isMicActive) {
@@ -150,7 +158,6 @@ export const SupervisorEntryView: React.FC = () => {
       },
       onError: err => {
         setVoiceErrorMsg(err);
-        // Note: Keep micActive if audio stream is alive
       },
     });
 
@@ -181,6 +188,7 @@ export const SupervisorEntryView: React.FC = () => {
     setVoiceTranscript(preset.transcript);
     setInterimVoiceText('');
     setVoiceErrorMsg(null);
+    setRecordedAudio(null);
 
     const parsed = parseSpokenUpdate(preset.transcript, preset.language);
     setParsedVoiceResult(parsed);
@@ -829,6 +837,37 @@ export const SupervisorEntryView: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Physical Recorded Audio Player (When Audio is Captured) */}
+                  {recordedAudio && (
+                    <div
+                      style={{
+                        background: '#f0fdf4',
+                        border: '1px solid #bbf7d0',
+                        borderRadius: 'var(--radius-xs)',
+                        padding: '0.5rem 0.75rem',
+                        marginBottom: '0.65rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.725rem', fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Volume2 size={13} />
+                          <span>Captured Spoken Audio ({recordedAudio.durationSec}s)</span>
+                        </span>
+                        <span className="mono-pill" style={{ fontSize: '0.65rem', background: '#dcfce7', color: '#15803d', borderColor: '#86efac' }}>
+                          ✓ Audio Captured
+                        </span>
+                      </div>
+                      <audio
+                        controls
+                        src={recordedAudio.url}
+                        style={{ width: '100%', height: 32, marginTop: 2 }}
+                      />
+                    </div>
+                  )}
+
                   {/* Interactive Editable Spoken Log Box */}
                   <div
                     style={{
@@ -850,6 +889,7 @@ export const SupervisorEntryView: React.FC = () => {
                             setVoiceTranscript('');
                             setInterimVoiceText('');
                             setParsedVoiceResult(null);
+                            setRecordedAudio(null);
                           }}
                           style={{
                             background: 'transparent',

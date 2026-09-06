@@ -23,6 +23,7 @@ export const SiteUpdatesView: React.FC = () => {
     setSelectedReviewUpdateId,
     handlePlannerAction,
     setActiveTab,
+    currentRole,
   } = useProject();
 
   // View Mode: 'table' vs 'kanban'
@@ -382,7 +383,7 @@ export const SiteUpdatesView: React.FC = () => {
                             {update.sourceFile}
                           </span>
                           <div style={{ display: 'flex', gap: 4 }}>
-                            {col.id === 'review' ? (
+                            {col.id === 'review' && currentRole !== 'supervisor' ? (
                               <button
                                 className="btn btn-warning btn-sm"
                                 style={{ padding: '2px 6px', fontSize: '0.675rem' }}
@@ -540,7 +541,7 @@ export const SiteUpdatesView: React.FC = () => {
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: 4 }}>
-                            {isReview ? (
+                            {isReview && currentRole !== 'supervisor' ? (
                               <button
                                 className="btn btn-warning btn-sm"
                                 onClick={e => {
@@ -561,7 +562,7 @@ export const SiteUpdatesView: React.FC = () => {
                                   e.stopPropagation();
                                   setSelectedInspectorUpdateId(update.id);
                                 }}
-                                title="Inspect details & edit parameters"
+                                title="Inspect details"
                                 type="button"
                               >
                                 <span>Inspect</span>

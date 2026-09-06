@@ -1,0 +1,376 @@
+================================================================================
+PROJECTPULSE (SIH-122) — COMPLETE SYSTEM GUIDE & FIELD EXPLAINER
+================================================================================
+A Plain-English Handbook on How the System Works, What Every Screen Shows,
+What Every Field & Metric Means, and How to Operate the Platform.
+
+Author: Antigravity AI Engineering Team
+Target Audience: Project Planners, Site Engineers, Hackathon Evaluators, Project Managers
+Date: September 5, 2026
+
+================================================================================
+TABLE OF CONTENTS:
+================================================================================
+1. The Big Picture: How This Entire System Works (In Plain English)
+2. What Are You Looking At? Screen-by-Screen Walkthrough
+   - 2.1 The Top Navigation Bar (Navbar)
+   - 2.2 Dashboard (Executive KPI & Schedule Health Overview)
+   - 2.3 Site Updates View (Extracted Field Evidence Table)
+   - 2.4 Schedule Activities View (Master Baseline & Variance Tracker)
+   - 2.5 Planner Review Workbench (AI Review & Schedule Linker Queue)
+   - 2.6 Data Ingestion & Demo Data View (File Upload & Benchmark Reset)
+   - 2.7 Slide-Over Drawers (Site Inspector Drawer & Schedule Activity Drawer)
+   - 2.8 Audit Trail Modal (Immutable Provenance History)
+3. Exhaustive Field-by-Field Glossary (What Every Term Means)
+4. Step-by-Step Tutorials: How to Use the System
+
+================================================================================
+1. THE BIG PICTURE: HOW THIS ENTIRE SYSTEM WORKS (IN PLAIN ENGLISH)
+================================================================================
+Imagine a construction project building a massive cooling water pump house:
+- The Head Office has a MASTER SCHEDULE (in Primavera P6 or Excel). It has strict,
+  formal activity codes, like:
+  "PIP-L6-012: Erect Line 24-CW-017 (Planned: Sept 5 to Sept 7, Area: Pump Bay)".
+- But on the physical construction site, the site supervisor writes down in their
+  daily log:
+  "3. CW 24-inch spool was erected near Pump Bay today; alignment is in progress."
+  Or the contractor sends an Excel sheet with row: "Spool 24-CW-017, Status: Started".
+
+Notice the problem?
+The site supervisor did NOT write "PIP-L6-012". They used words like "CW 24-inch spool",
+"alignment in progress", or "spool erected".
+Before this software was built, a human planner had to spend hours reading hundreds of
+such messy notes and manually finding which schedule line item it matched.
+
+HOW PROJECTPULSE AUTOMATES THIS:
+1. Multi-Source Ingestion: The system reads the schedule CSV, the supervisor's text notes,
+   and the Excel tracking sheets.
+2. Intelligent NLP Matching Engine: For every supervisor update, it runs a 4-factor test:
+   - Does it mention equipment tags or aliases? ("24-CW-017", "CW spool" -> up to 50 pts)
+   - Does the discipline match? (Piping vs Civil vs Electrical -> up to 20 pts)
+   - Is it in the same physical area? ("Pump Bay" vs "Filter Bay" -> up to 15 pts)
+   - Do the action words match? ("erected", "pour", "excavation" -> up to 15 pts)
+   Total score = 0 to 100%.
+3. Three-Way Routing:
+   - High Confidence (>= 75%): Automatically approved and linked.
+   - Ambiguous / Medium (40% to 74%): Sent to the PLANNER REVIEW QUEUE so a human can
+     make the final call in 1 click.
+   - Low Confidence (< 40%) or "[Not in baseline]": Flagged as UNPLANNED WORK (work done
+     on site that was never scheduled).
+4. Real-Time Schedule Update: Once linked, the software calculates:
+   - Did the activity start on time?
+   - Is it completed or in progress?
+   - How many days is it delayed compared to the planned finish date?
+5. Audit Trail: Every single match, approval, or change is permanently recorded so nobody
+   can dispute who approved what.
+
+================================================================================
+2. WHAT ARE YOU LOOKING AT? SCREEN-BY-SCREEN WALKTHROUGH
+================================================================================
+
+--------------------------------------------------------------------------------
+2.1 THE TOP NAVIGATION BAR (NAVBAR)
+--------------------------------------------------------------------------------
+Located at the very top of your screen:
+- "ProjectPulse [SIH 2026]": The platform brand.
+- "Backend: SQLite Connected" (Pill): Shows the live status of the backend REST API
+  and local SQLite database. If the backend is running, it pulses green. If offline, it
+  gracefully switches to "Client Mode (Standalone)".
+- 5 Navigation Tabs:
+  1. Dashboard: Overall executive health and delay summary.
+  2. Site Updates: The table of all parsed daily supervisor notes and Excel rows.
+  3. Schedule Activities: The master baseline schedule (L5/L6) with planned vs actuals.
+  4. Planner Review: The queue of uncertain items waiting for your verification.
+     (Shows an amber badge count with the number of pending items!)
+  5. Upload / Demo Data: Where you can upload custom files or reload the demo data.
+- "Export CSV" Button: Downloads the complete schedule alignment report as a verified CSV.
+- "Reload Demo" Button: Resets all data back to the clean benchmark project state.
+
+--------------------------------------------------------------------------------
+2.2 DASHBOARD (EXECUTIVE KPI & SCHEDULE HEALTH OVERVIEW)
+--------------------------------------------------------------------------------
+When you first open the app, you are greeted by the Dashboard. Here is what you see:
+
+A. ACTION REQUIRED CALLOUT BANNER (Top):
+   - If there are items in the Planner Review Queue, a large amber warning banner alerts
+     you: "Action Required: X Site Updates Pending Review". Clicking "Open Review Queue"
+     takes you directly to the review workbench.
+   - If all items have been reviewed and approved, it turns green: "All Site Updates
+     Verified & Aligned".
+
+B. 5 CORE KPI METRIC CARDS:
+   1. Extracted Site Updates: Total number of discrete daily work items parsed from
+      both supervisor text notes and Excel sheets (e.g. 14 items).
+   2. Verified & Linked: Number of site items successfully linked to an approved schedule
+      activity ID (e.g. 10 items).
+   3. Pending Review: Number of site items that are ambiguous or have moderate confidence
+      scores and need human confirmation (e.g. 2 items).
+   4. Unplanned Activities: Number of site items that represent out-of-scope work (e.g.
+      a small-bore drain line not included in the original project schedule).
+   5. Schedule Delays / Variances: Number of schedule activities whose site progress
+      indicates they are behind the baseline planned finish date.
+
+C. DISCIPLINE COMPLETION & SCHEDULE HEALTH CARDS:
+   - Shows horizontal progress bars for each engineering package: Civil, Piping,
+     Electrical, Instrumentation, and HSE.
+   - Displays percentage completed, number of completed activities, and delayed count.
+
+D. SCHEDULE VARIANCE WATCHLIST (Bottom-Left Table):
+   - A prioritized table showing only activities that are behind schedule!
+   - Columns: Activity ID, Activity Name, Discipline, Planned Finish, Variance (+days).
+   - Clicking ANY row opens the Schedule Activity Drawer to investigate the cause!
+
+E. LIVE AUDIT TRAIL FEED (Bottom-Right Card):
+   - A streaming feed of recent ingestion actions, auto-links, and planner approvals.
+   - Clicking any audit row opens the Site Update Inspector to view the original text.
+
+--------------------------------------------------------------------------------
+2.3 SITE UPDATES VIEW (EXTRACTED FIELD EVIDENCE TABLE)
+--------------------------------------------------------------------------------
+Clicking the "Site Updates" tab opens the master table of all raw site evidence.
+- Top Toolbar:
+  * Live Search Box: Type any keyword, equipment tag, supervisor name, or area.
+  * Discipline Dropdown: Filter by Civil, Piping, Electrical, Instrumentation, HSE.
+  * Status Dropdown: Filter by Linked/Approved, Review Needed, Unplanned Work.
+  * Source Dropdown: Filter by daily_report.txt or piping_progress.xlsx.
+  * Sort Dropdown: Sort by Date (newest/oldest) or Confidence (highest/lowest).
+
+- Table Columns:
+  1. Update ID: Unique system identifier (e.g. "TXT-LINE-3" or "XLSX-ROW-1").
+  2. Date: The date the work was performed on site (e.g. "2026-09-05").
+  3. Source & Line: Which file it came from and the line or row number (#3).
+  4. Discipline: The engineering package (Civil, Piping, Electrical, HSE).
+  5. Extracted Work Description: Cleaned summary of the work done.
+  6. Area: Physical location on site (e.g. "Pump Bay", "Fabrication Yard").
+  7. Event Status: "Started", "In Progress", or "Completed".
+  8. Matched L5/L6 Activity: The green Activity ID it was linked to, or an amber
+     "Needs Review" badge, or a red "Unplanned" badge.
+  9. Confidence: A progress bar and score (0–100%) showing algorithm certainty.
+  10. Action Button:
+      - If it needs review: Yellow "Review >" button (opens Planner Review).
+      - If already linked: Gray "Inspect" button (opens the Inspector Drawer).
+
+--------------------------------------------------------------------------------
+2.4 SCHEDULE ACTIVITIES VIEW (MASTER BASELINE & VARIANCE TRACKER)
+--------------------------------------------------------------------------------
+Clicking "Schedule Activities" shows the master project plan (what SHOULD happen):
+- Table Columns:
+  1. Activity ID: Formal schedule code (e.g. "PIP-L6-012").
+  2. WBS: Work Breakdown Structure hierarchy number (e.g. "2.1.2").
+  3. Activity Name & Aliases: Formal name ("Erect Line 24-CW-017") plus recognized
+     synonyms and equipment tags below it ("spool erection", "CW line").
+  4. Discipline: Engineering branch (Piping, Civil, etc.).
+  5. Area: Designated physical work zone ("Pump Bay").
+  6. Planned Window: Start date to finish date ("2026-09-05 -> 2026-09-07").
+  7. Actual Evidence: Extracted site dates ("2026-09-05 -> Active" or "Completed").
+  8. Variance: Days of delay!
+     * "+2d" (Red Badge): Activity finished or is running 2 days late.
+     * "0d" (Slate Badge): On track according to schedule.
+     * "-1d" (Green Badge): Finished 1 day ahead of schedule.
+  9. Status: "Not Started", "In Progress", "Completed", or "Delayed".
+  10. Linked Evidence: Number of site supervisor notes or Excel rows linked to this.
+  11. Action: "Details >" button to open the deep-dive drawer.
+
+--------------------------------------------------------------------------------
+2.5 PLANNER REVIEW WORKBENCH (AI REVIEW & SCHEDULE LINKER QUEUE)
+--------------------------------------------------------------------------------
+This is the core cockpit for the Project Planner. It has a dual-pane layout:
+
+A. LEFT PANE — THE REVIEW QUEUE:
+   - Shows all items waiting for planner attention.
+   - Filter pills: "Review" (ambiguous items), "Unplanned" (out-of-scope work),
+     "Approved" (resolved items), "All".
+   - Search bar: Quick search within the queue.
+   - Each queue card shows: Update ID, Confidence Score %, Description, Discipline,
+     and Source File.
+   - Sorted by lowest confidence first, so the hardest questions come first!
+
+B. RIGHT PANE — THE VERIFICATION WORKBENCH:
+   When you click an item on the left, the right pane displays:
+   1. Header: Update ID, Discipline, Area, Date, Source File & Line #.
+   2. Raw Site Evidence Card: Exactly what the supervisor wrote in quotes.
+   3. NLP Match Score Breakdown: Shows how the AI calculated the score:
+      - Keyword Match (out of 50 pts)
+      - Discipline Match (out of 20 pts)
+      - Area Proximity (out of 15 pts)
+      - Fuzzy Similarity (out of 15 pts)
+      - Bullet points listing exact reasons (e.g. "System tag match: Cooling Water (CW)").
+   4. Interactive Schedule Linker:
+      - A search bar allowing you to search ANY schedule activity by ID or keyword.
+      - A list of candidate activities with radio buttons. The AI's top suggestion has
+        a green "★ AI Recommended" badge.
+   5. Planner Audit Note: A text box where you can type an optional justification note
+      (e.g. "Confirmed with supervisor that spool 24-CW-017 was erected today").
+   6. Action Buttons:
+      - "Confirm Link to [Activity ID]" (Blue Button): Approves the link! The item is
+        instantly linked, the schedule updates, an audit record is saved, and the queue
+        automatically advances to the next item!
+      - "Classify as Unplanned Work" (Amber Button): Confirms this was new out-of-scope
+        work that is NOT part of the baseline schedule.
+      - "Reject Report" (Gray Button): Discards invalid, mistaken, or duplicate reports.
+
+--------------------------------------------------------------------------------
+2.6 DATA INGESTION & DEMO DATA VIEW
+--------------------------------------------------------------------------------
+This screen allows you to manage the data pipeline:
+- Top Banner: "Reload Benchmark Data" resets everything to the official SIH 122 dataset.
+- 3 Pipeline Cards:
+  1. schedule.csv: Displays activity count. "Preview Data" shows table below. "Upload CSV"
+     allows you to upload a new master schedule.
+  2. daily_report.txt: Displays text update count. "Upload TXT" allows you to upload
+     a new supervisor daily diary.
+  3. piping_progress.xlsx: Displays Excel row count. "Upload XLSX" allows you to upload
+     a new contractor spreadsheet.
+- Bottom Preview Table: Lets you inspect the raw ingested data before processing.
+
+--------------------------------------------------------------------------------
+2.7 SLIDE-OVER DRAWERS
+--------------------------------------------------------------------------------
+A. SITE UPDATE INSPECTOR DRAWER (Right slide-over):
+   - Opens when you click any site update row in tables or audit logs.
+   - Allows you to inspect the raw evidence text and algorithm breakdown.
+   - Allows you to EDIT extracted parameters if the AI extracted them incorrectly
+     (e.g. change the description, correct the area, or change event status).
+   - Lets you save parameters, relink, or view the audit log.
+
+B. SCHEDULE ACTIVITY DRAWER (Right slide-over):
+   - Opens when you click any schedule activity row.
+   - Shows schedule health, progress %, planned vs actual timeline.
+   - Lists all recognized Aliases & matching keywords.
+   - Lists every single site update linked to this activity with direct inspection links!
+
+--------------------------------------------------------------------------------
+2.8 AUDIT TRAIL MODAL
+--------------------------------------------------------------------------------
+- Accessible via the Inspector Drawer ("Full Audit Log" button).
+- Displays the complete, immutable provenance history of that specific update:
+  when it was first ingested, what the algorithm scored it, who approved or modified it,
+  what timestamp it occurred at, and any justification notes entered by the planner.
+
+================================================================================
+3. EXHAUSTIVE FIELD-BY-FIELD GLOSSARY (WHAT EVERY TERM MEANS)
+================================================================================
+
+1. Activity ID:
+   The unique identifier for a master schedule line item in Primavera P6.
+   Format: [DISCIPLINE]-[LEVEL]-[SEQUENCE], e.g. "PIP-L6-012" = Piping, Level 6, #12.
+
+2. WBS (Work Breakdown Structure):
+   The hierarchical code defining the project tree.
+   Example: "2.1.2" represents:
+     2 = Piping Package (L3)
+     2.1 = Cooling Water Underground Piping (L4)
+     2.1.2 = Above-ground Spool Erection (L5/L6)
+
+3. Activity Name:
+   The formal contractual description of the work package.
+   Example: "Erect Line 24-CW-017".
+
+4. Aliases:
+   Alternative terms, nicknames, informal abbreviations, or equipment tags used by
+   crews in the field to refer to an activity.
+   Example for PIP-L6-012: "spool erection; erect cooling water line; CW line erection".
+
+5. Discipline:
+   The engineering department or trade responsible for the work.
+   Values: Civil, Piping, Electrical, Instrumentation, HSE (Health, Safety & Environment).
+
+6. Planned Start / Planned Finish:
+   The baseline calendar dates established in the contractual schedule when work was
+   supposed to start and complete.
+
+7. Actual Start / Actual Finish:
+   The real calendar dates extracted from verified on-site supervisor daily reports.
+   - If work was reported "Started", the report date becomes Actual Start.
+   - If work was reported "Completed", the report date becomes Actual Finish.
+
+8. Variance (Days Delay):
+   The mathematical difference between actual performance and planned baseline:
+   Formula: Variance = (Actual Finish Date - Planned Finish Date) in days.
+   - Positive (+2d): 2 days behind schedule (DELAYED).
+   - Zero (0d): Exactly on schedule (ON TRACK).
+   - Negative (-1d): Finished 1 day earlier than planned (AHEAD OF SCHEDULE).
+
+9. Confidence Score (0% to 100%):
+   A deterministic similarity score produced by the AI matching engine based on:
+   - Keyword Score (0 to 50): Tag, line number, and alias match.
+   - Discipline Score (0 to 20): Discipline agreement.
+   - Area Score (0 to 15): Site location match.
+   - Fuzzy Score (0 to 15): General vocabulary token overlap.
+
+10. Match Category:
+    - Ready: High confidence (>= 75%). Can be auto-approved.
+    - Review: Medium confidence (40% to 74%) or ambiguous text (e.g. "cable pulling"
+      without feeder tag). Requires human planner verification.
+    - Unplanned: Low confidence (< 40%) or explicit out-of-baseline marker.
+    - Rejected: Invalid or mistaken report discarded by the planner.
+
+11. Event Status:
+    The completion status reported from the field:
+    - "Started": Work has commenced on site.
+    - "In Progress": Work is ongoing (alignment, welding, etc.).
+    - "Completed": Work is 100% installed, poured, or inspected.
+
+12. Unplanned Activity:
+    Work executed by field teams that has NO corresponding line item in the master
+    contract schedule. Crucial for identifying contractor scope creep or claims early!
+
+13. Line Evidence:
+    The exact physical line number in daily_report.txt or row number in the Excel sheet
+    where the raw data originated, preserving full audit integrity.
+
+14. Audit Log:
+    A permanent, append-only record capturing every decision, timestamp, user, original
+    score, and rationale note for legal, contractual, and audit compliance.
+
+================================================================================
+4. STEP-BY-STEP TUTORIALS: HOW TO USE THE SYSTEM
+================================================================================
+
+TUTORIAL 1: HOW TO REVIEW & APPROVE PENDING SITE UPDATES
+1. Look at the top Navbar or Dashboard banner. Notice the amber badge: "X Items Need Review".
+2. Click the "Planner Review" tab.
+3. On the left queue, click the first pending item (e.g. "TXT-LINE-9: Crew reported cable pulling...").
+4. Read the raw quote in the "Raw Site Evidence" card. Notice that the crew said "cable
+   pulling", but didn't mention the feeder number.
+5. In the "Link to L5/L6 Baseline Schedule Activity" section below, look at the AI recommendations.
+   You see:
+   - ELE-L6-022: Pull MCC feeder cable (Area: Pump Bay)
+6. Click the radio button next to ELE-L6-022.
+7. In the "Planner Audit Note" box, type:
+   "Confirmed with electrical foreman that this was the main MCC feeder in Pump Bay."
+8. Click the blue button: "Confirm Link to ELE-L6-022".
+9. That's it! The update is approved, the schedule is updated, an audit entry is saved,
+   and the queue automatically advances to the next pending item!
+
+TUTORIAL 2: HOW TO CLASSIFY OUT-OF-SCOPE / UNPLANNED WORK
+1. In the "Planner Review" tab, select an item like "TXT-LINE-6: A small-bore drain line was installed...".
+2. Notice the confidence score is low (15%) because "drain line" is not in the schedule baseline.
+3. In the "Planner Audit Note" box, type:
+   "Field modification requested by client; not in baseline scope. Adding to variation register."
+4. Click the amber button: "Classify as Unplanned Work".
+5. The item is safely marked as Unplanned, and the Dashboard KPI for "Unplanned Activities"
+   increments to alert management of scope creep!
+
+TUTORIAL 3: HOW TO INVESTIGATE A DELAYED ACTIVITY
+1. Open the "Dashboard" tab.
+2. Scroll down to the "Schedule Variance Watchlist" table on the left.
+3. Find an activity with a red badge like "+2d" (e.g. CIV-L6-001: Excavate pump foundation).
+4. Click on the row. The "Schedule Activity Drawer" slides open from the right.
+5. In the drawer, compare:
+   - Planned Window: 2026-09-01 -> 2026-09-03 (3 days)
+   - Actual Site Window: 2026-09-05 (Completed 2 days late!)
+6. Look at the bottom section: "Linked Site Progress Updates (1)".
+7. Click "Inspect" next to the linked note to see the supervisor's original daily report!
+
+TUTORIAL 4: HOW TO EXPORT THE OFFICIAL COMPLIANCE REPORT
+1. Go to the top navigation bar.
+2. Click the "Export CSV" button.
+3. The browser will instantly download a clean file named:
+   `SIH_122_Schedule_Alignment_2026-09-05.csv`.
+4. Open it in Microsoft Excel. You will see every update ID, date, discipline, full description,
+   matched activity ID, confidence score, and planner audit notes, ready for executive reporting!
+
+================================================================================
+END OF USER GUIDE & FIELD EXPLAINER — PROJECTPULSE (SIH 2026)
+================================================================================

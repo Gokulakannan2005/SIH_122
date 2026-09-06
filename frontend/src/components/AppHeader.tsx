@@ -76,19 +76,9 @@ export const AppHeader: React.FC = () => {
     <header className="app-header">
       {/* Breadcrumb & Section Name */}
       <div className="header-breadcrumb">
-        <span>Datum</span>
-        <ChevronRight size={14} style={{ color: 'var(--text-subtle)' }} />
+        <span style={{ color: 'var(--text-muted)' }}>Datum</span>
+        <ChevronRight size={14} style={{ color: 'var(--border-strong)' }} />
         <span className="header-breadcrumb-current">{tabInfo.title}</span>
-        <span
-          style={{
-            fontSize: '0.75rem',
-            color: 'var(--text-subtle)',
-            fontWeight: 500,
-            marginLeft: '0.25rem',
-          }}
-        >
-          — {tabInfo.subtitle}
-        </span>
       </div>
 
       {/* Global Actions and Indicators */}

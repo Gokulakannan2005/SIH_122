@@ -12,7 +12,10 @@ import {
   Send,
   Radio,
   FileCode,
-  Eye
+  Eye,
+  Check,
+  Zap,
+  Info
 } from 'lucide-react';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
 
@@ -163,37 +166,37 @@ export const SupervisorEntryView: React.FC = () => {
   const recentSubmissions = siteUpdates.slice(0, 5);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Header Banner */}
-      <div className="banner-card" style={{ borderLeftColor: '#0c66e4' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Top Banner Header */}
+      <div className="banner-card">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
             <span className="brand-badge" style={{ background: '#e9f2ff', color: '#0c66e4', borderColor: '#cce0ff' }}>
-              Supervisor Portal
+              Field Supervisor Hub
             </span>
             {offlineMode && (
               <span className="mono-pill" style={{ background: '#fff4e5', color: '#974f0c', borderColor: '#fec195', fontWeight: 700 }}>
-                ⚡ Offline Field Queue Active (Auto-Sync on Reconnect)
+                ⚡ Offline Field Queue Active
               </span>
             )}
           </div>
-          <h2 className="banner-title" style={{ marginTop: 4 }}>
-            <Camera size={20} style={{ color: '#0c66e4' }} />
-            Field Supervisor Daily Hub
-          </h2>
+          <h1 className="banner-title">
+            <Camera size={22} style={{ color: 'var(--brand-primary)' }} />
+            <span>Site Progress & Execution Evidence Portal</span>
+          </h1>
           <p className="banner-desc">
-            Write daily progress reports directly, upload CSV/TXT spreadsheets, or attach timestamped completion photos & issue blocker flags.
+            Submit daily progress logs, drag-and-drop batch spreadsheets, or record site blockers with photo evidence.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.6rem' }}>
           <button
-            className="btn btn-secondary btn-sm"
+            className="btn btn-secondary"
             onClick={() => setActiveTab('site-updates')}
             type="button"
           >
-            <span>View All Stream Updates</span>
-            <ArrowRight size={13} />
+            <span>View Full Stream</span>
+            <ArrowRight size={14} />
           </button>
         </div>
       </div>
@@ -205,29 +208,30 @@ export const SupervisorEntryView: React.FC = () => {
             background: 'var(--status-ready-bg)',
             border: '1px solid var(--status-ready-border)',
             color: 'var(--status-ready-fg)',
-            padding: '0.75rem 1rem',
-            borderRadius: 'var(--radius-sm)',
+            padding: '0.85rem 1.15rem',
+            borderRadius: 'var(--radius-md)',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
+            gap: '0.6rem',
             fontWeight: 600,
-            fontSize: '0.85rem',
+            fontSize: '0.875rem',
           }}
         >
-          <CheckCircle2 size={18} />
+          <CheckCircle2 size={20} />
           <span>{submitSuccess}</span>
         </div>
       )}
 
-      {/* 3-Tab Mode Selector */}
+      {/* 3-Tab Mode Navigation Pill */}
       <div
         style={{
           display: 'flex',
           background: '#ffffff',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)',
-          padding: '4px',
-          gap: '4px',
+          borderRadius: 'var(--radius-lg)',
+          padding: '5px',
+          gap: '6px',
+          boxShadow: 'var(--shadow-xs)',
         }}
       >
         <button
@@ -239,12 +243,13 @@ export const SupervisorEntryView: React.FC = () => {
             background: activeSubTab === 'quick-report' ? 'var(--brand-primary)' : 'transparent',
             color: activeSubTab === 'quick-report' ? '#ffffff' : 'var(--text-secondary)',
             fontWeight: activeSubTab === 'quick-report' ? 700 : 600,
-            fontSize: '0.825rem',
-            padding: '0.55rem',
-            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.875rem',
+            padding: '0.65rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: activeSubTab === 'quick-report' ? '0 1px 3px rgba(12, 102, 228, 0.3)' : 'none',
           }}
         >
-          <FileText size={15} />
+          <FileText size={16} />
           <span>1. Direct Daily Report</span>
         </button>
 
@@ -257,12 +262,13 @@ export const SupervisorEntryView: React.FC = () => {
             background: activeSubTab === 'file-upload' ? 'var(--brand-primary)' : 'transparent',
             color: activeSubTab === 'file-upload' ? '#ffffff' : 'var(--text-secondary)',
             fontWeight: activeSubTab === 'file-upload' ? 700 : 600,
-            fontSize: '0.825rem',
-            padding: '0.55rem',
-            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.875rem',
+            padding: '0.65rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: activeSubTab === 'file-upload' ? '0 1px 3px rgba(12, 102, 228, 0.3)' : 'none',
           }}
         >
-          <FileSpreadsheet size={15} />
+          <FileSpreadsheet size={16} />
           <span>2. CSV / XLSX / TXT Upload</span>
         </button>
 
@@ -275,46 +281,70 @@ export const SupervisorEntryView: React.FC = () => {
             background: activeSubTab === 'photo-proof' ? 'var(--brand-primary)' : 'transparent',
             color: activeSubTab === 'photo-proof' ? '#ffffff' : 'var(--text-secondary)',
             fontWeight: activeSubTab === 'photo-proof' ? 700 : 600,
-            fontSize: '0.825rem',
-            padding: '0.55rem',
-            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.875rem',
+            padding: '0.65rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: activeSubTab === 'photo-proof' ? '0 1px 3px rgba(12, 102, 228, 0.3)' : 'none',
           }}
         >
-          <Camera size={15} />
+          <Camera size={16} />
           <span>3. Photo Proof & Blocker Studio</span>
         </button>
       </div>
 
-      {/* Main Form Content Area based on Tab */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: '1.25rem' }}>
+      {/* Main Form Content Area */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(330px, 1fr)', gap: '1.5rem' }}>
         
         {/* Left Column: Interactive Form */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
           {/* TAB 1: DIRECT REPORT */}
           {activeSubTab === 'quick-report' && (
             <div className="card">
               <div className="card-header">
                 <div>
-                  <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <FileText size={16} style={{ color: '#0c66e4' }} />
+                  <h3 className="card-title">
+                    <FileText size={18} style={{ color: 'var(--brand-primary)' }} />
                     Write Direct Daily Progress Report
                   </h3>
-                  <div className="card-desc">Fill in field details and Datum will automatically match against schedule milestone activities.</div>
+                  <div className="card-desc">
+                    Enter execution details below. Datum AI will automatically match them against schedule milestones.
+                  </div>
                 </div>
               </div>
 
               <div className="card-body">
-                {/* 1-Click Field Templates */}
-                <div style={{ marginBottom: '1rem', background: '#f7f8f9', padding: '0.65rem 0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+                {/* 1-Click Field Scenarios */}
+                <div
+                  style={{
+                    marginBottom: '1.25rem',
+                    background: '#f8fafc',
+                    padding: '0.85rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      color: 'var(--text-muted)',
+                      marginBottom: '0.5rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                    }}
+                  >
+                    <Zap size={13} style={{ color: 'var(--brand-primary)' }} />
                     Quick Field Scenarios (1-Click Fill)
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem' }}
+                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
                       onClick={() =>
                         applyQuickTemplate({
                           disp: 'Piping',
@@ -333,7 +363,7 @@ export const SupervisorEntryView: React.FC = () => {
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem' }}
+                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
                       onClick={() =>
                         applyQuickTemplate({
                           disp: 'Civil',
@@ -352,7 +382,7 @@ export const SupervisorEntryView: React.FC = () => {
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem' }}
+                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
                       onClick={() =>
                         applyQuickTemplate({
                           disp: 'Electrical',
@@ -372,10 +402,10 @@ export const SupervisorEntryView: React.FC = () => {
                   </div>
                 </div>
 
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
                   {/* Row 1: Discipline & Area */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group">
                       <label className="form-label">Discipline</label>
                       <select
                         className="form-select"
@@ -390,8 +420,8 @@ export const SupervisorEntryView: React.FC = () => {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="form-label">Work Area / Grid</label>
+                    <div className="form-group">
+                      <label className="form-label">Work Area / Grid Reference</label>
                       <input
                         type="text"
                         className="form-input"
@@ -402,9 +432,9 @@ export const SupervisorEntryView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Row 2: Status & Quantity */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '0.75rem' }}>
-                    <div>
+                  {/* Row 2: Status, Quantity & Supervisor */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '1rem' }}>
+                    <div className="form-group">
                       <label className="form-label">Execution Status</label>
                       <select
                         className="form-select"
@@ -417,8 +447,8 @@ export const SupervisorEntryView: React.FC = () => {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="form-label">Quantity / Output</label>
+                    <div className="form-group">
+                      <label className="form-label">Quantity / Progress</label>
                       <input
                         type="text"
                         className="form-input"
@@ -428,7 +458,7 @@ export const SupervisorEntryView: React.FC = () => {
                       />
                     </div>
 
-                    <div>
+                    <div className="form-group">
                       <label className="form-label">Reporting Supervisor</label>
                       <input
                         type="text"
@@ -439,70 +469,78 @@ export const SupervisorEntryView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Row 3: Description */}
-                  <div>
-                    <label className="form-label">Formal Activity Description</label>
+                  {/* Row 3: Formal Activity Description */}
+                  <div className="form-group">
+                    <label className="form-label">
+                      <span>Formal Activity Description</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Core input for NLP matching</span>
+                    </label>
                     <textarea
                       className="form-textarea"
-                      rows={2}
-                      placeholder="e.g. Hydrostatic testing of 8in cooling line completed at Pump Bay."
+                      rows={3}
+                      placeholder="e.g. Hydrostatic testing of 8in cooling water line completed at Pump Bay."
                       value={description}
                       onChange={e => setDescription(e.target.value)}
                       required
                     />
                   </div>
 
-                  {/* Row 4: Raw Log / Voice Note */}
-                  <div>
-                    <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  {/* Row 4: Raw Field Log / Voice Transcript */}
+                  <div className="form-group">
+                    <label className="form-label">
                       <span>Raw Field Voice Note / Log Text</span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Preserves original site note verbatim</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Preserves original site note verbatim</span>
                     </label>
                     <textarea
                       className="form-textarea"
-                      rows={2}
+                      rows={3}
                       placeholder="e.g. Hydro completed on cooling water header line 8in Pump Bay zero leaks"
                       value={rawText}
                       onChange={e => setRawText(e.target.value)}
                     />
                   </div>
 
-                  {/* Blocker / Issue Toggle */}
+                  {/* Blocker / Issue Toggle Card */}
                   <div
                     style={{
-                      background: isIssueReport ? '#ffebe6' : '#f7f8f9',
-                      border: `1px solid ${isIssueReport ? '#fd9891' : 'var(--border-subtle)'}`,
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '0.75rem',
+                      background: isIssueReport ? '#fff5f5' : '#f8fafc',
+                      border: `1px solid ${isIssueReport ? '#fca5a5' : 'var(--border-subtle)'}`,
+                      borderRadius: 'var(--radius-md)',
+                      padding: '1rem',
                       transition: 'all var(--transition-fast)',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <AlertOctagon size={16} style={{ color: isIssueReport ? '#ae2e24' : 'var(--text-muted)' }} />
-                        <span style={{ fontSize: '0.825rem', fontWeight: 700, color: isIssueReport ? '#ae2e24' : 'var(--text-primary)' }}>
-                          Flag as Site Blocker / Delay Issue
-                        </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <AlertOctagon size={18} style={{ color: isIssueReport ? '#dc2626' : 'var(--text-muted)' }} />
+                        <div>
+                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: isIssueReport ? '#dc2626' : 'var(--text-primary)' }}>
+                            Flag as Site Blocker / Delay Issue
+                          </span>
+                          <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+                            Instantly alerts project planners and flags critical path risk
+                          </div>
+                        </div>
                       </div>
                       <input
                         type="checkbox"
                         checked={isIssueReport}
                         onChange={e => setIsIssueReport(e.target.checked)}
-                        style={{ cursor: 'pointer', width: 16, height: 16 }}
+                        style={{ cursor: 'pointer', width: 18, height: 18 }}
                       />
                     </div>
 
                     {isIssueReport && (
-                      <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ marginTop: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                         <input
                           type="text"
                           className="form-input"
-                          placeholder="Describe blocker reason (e.g. Crane breakdown, missing flange gaskets)"
+                          placeholder="Describe blocker reason (e.g. 50T crane breakdown, access road blocked, missing parts)"
                           value={issueFlag}
                           onChange={e => setIssueFlag(e.target.value)}
                         />
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ae2e24' }}>Severity:</span>
+                          <span style={{ fontSize: '0.775rem', fontWeight: 600, color: '#dc2626' }}>Severity:</span>
                           {(['low', 'medium', 'critical'] as const).map(sev => (
                             <button
                               type="button"
@@ -511,10 +549,12 @@ export const SupervisorEntryView: React.FC = () => {
                               className="btn btn-sm"
                               style={{
                                 textTransform: 'capitalize',
-                                fontSize: '0.7rem',
-                                background: issueSeverity === sev ? '#ae2e24' : '#ffffff',
-                                color: issueSeverity === sev ? '#ffffff' : '#ae2e24',
-                                borderColor: '#fd9891',
+                                fontSize: '0.75rem',
+                                padding: '0.3rem 0.75rem',
+                                background: issueSeverity === sev ? '#dc2626' : '#ffffff',
+                                color: issueSeverity === sev ? '#ffffff' : '#dc2626',
+                                borderColor: '#fca5a5',
+                                fontWeight: 700,
                               }}
                             >
                               {sev}
@@ -529,9 +569,9 @@ export const SupervisorEntryView: React.FC = () => {
                   <button
                     type="submit"
                     className="btn btn-primary"
-                    style={{ padding: '0.65rem', justifyContent: 'center', fontWeight: 700 }}
+                    style={{ padding: '0.75rem 1.25rem', fontSize: '0.925rem', fontWeight: 700, justifyContent: 'center' }}
                   >
-                    <Send size={15} />
+                    <Send size={16} />
                     <span>Submit & Run AI Match Reconciliation</span>
                   </button>
                 </form>
@@ -544,28 +584,31 @@ export const SupervisorEntryView: React.FC = () => {
             <div className="card">
               <div className="card-header">
                 <div>
-                  <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <FileSpreadsheet size={16} style={{ color: '#0c66e4' }} />
+                  <h3 className="card-title">
+                    <FileSpreadsheet size={18} style={{ color: 'var(--brand-primary)' }} />
                     Batch Spreadsheet & Text File Ingestion
                   </h3>
-                  <div className="card-desc">Upload daily field logs in CSV, Excel XLSX, or plain text format. Datum parses any format automatically.</div>
+                  <div className="card-desc">
+                    Upload daily field logs in CSV, Excel XLSX, or plain text format. Datum parses any format automatically.
+                  </div>
                 </div>
               </div>
 
-              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 {/* File Dropzone */}
                 <div
                   style={{
-                    border: '2px dashed var(--border-focus)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '2rem 1.5rem',
+                    border: '2px dashed var(--brand-primary)',
+                    borderRadius: 'var(--radius-lg)',
+                    padding: '2.5rem 1.5rem',
                     textAlign: 'center',
-                    background: '#f7f8f9',
+                    background: '#f8fafc',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: '0.75rem',
+                    gap: '0.85rem',
                     cursor: 'pointer',
+                    transition: 'all var(--transition-fast)',
                   }}
                   onClick={() => batchCsvRef.current?.click()}
                   onDragOver={e => e.preventDefault()}
@@ -578,8 +621,8 @@ export const SupervisorEntryView: React.FC = () => {
                 >
                   <div
                     style={{
-                      width: 44,
-                      height: 44,
+                      width: 52,
+                      height: 52,
                       borderRadius: '50%',
                       background: 'var(--brand-surface)',
                       display: 'flex',
@@ -588,14 +631,14 @@ export const SupervisorEntryView: React.FC = () => {
                       color: 'var(--brand-primary)',
                     }}
                   >
-                    <UploadCloud size={24} />
+                    <UploadCloud size={28} />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                    <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
                       Drag & Drop CSV / XLSX / TXT Log Files Here
                     </div>
-                    <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                      Or click to browse from your device
+                    <div style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                      Supports Daily Reports (.txt), Piping Progress (.xlsx), and Site Logs (.csv)
                     </div>
                   </div>
                   <input
@@ -610,14 +653,14 @@ export const SupervisorEntryView: React.FC = () => {
                 </div>
 
                 {/* Pre-formatted Sample Loaders */}
-                <div style={{ background: '#f1f2f4', padding: '0.75rem', borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                <div style={{ background: '#f1f5f9', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.65rem' }}>
                     ⚡ Instant Sample Data Ingestion (One-Click Test)
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     <button
                       type="button"
-                      className="btn btn-secondary btn-sm"
+                      className="btn btn-secondary"
                       onClick={() => {
                         const sampleCSV = `SiteUpdate_ID,Discipline,Activity_Description,Raw_Text,Work_Area,Status,Quantity,Supervisor
 SUP-101,Piping,Erection of 12-inch main steam header spool,Erected 12in spool on rack line B,Rack Line B,Completed,1 spool,R. Sharma
@@ -628,13 +671,13 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
                         setTimeout(() => setSubmitSuccess(null), 4000);
                       }}
                     >
-                      <FileCode size={13} />
+                      <FileCode size={15} />
                       <span>Load Sample Daily CSV</span>
                     </button>
 
                     <button
                       type="button"
-                      className="btn btn-secondary btn-sm"
+                      className="btn btn-secondary"
                       onClick={() => {
                         const sampleTXT = `Daily Supervisor Site Note - 06 Sept 2026
 -------------------------------------------
@@ -646,7 +689,7 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
                         setTimeout(() => setSubmitSuccess(null), 4000);
                       }}
                     >
-                      <FileText size={13} />
+                      <FileText size={15} />
                       <span>Load Raw Text Log</span>
                     </button>
                   </div>
@@ -660,19 +703,21 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
             <div className="card">
               <div className="card-header">
                 <div>
-                  <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <Camera size={16} style={{ color: '#0c66e4' }} />
+                  <h3 className="card-title">
+                    <Camera size={18} style={{ color: 'var(--brand-primary)' }} />
                     Photo Evidence & Visual Proof Ingestion
                   </h3>
-                  <div className="card-desc">Attach visual proof of completed work or document site blockers and equipment breakdowns.</div>
+                  <div className="card-desc">
+                    Attach visual proof of completed work or document site blockers and equipment breakdowns.
+                  </div>
                 </div>
               </div>
 
-              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 {/* Photo Previews & Presets */}
                 <div>
                   <label className="form-label">Select Realistic Construction Evidence Sample</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
                     {[
                       { key: 'pipeWeld', label: 'Pipe Weld NDT', src: SAMPLE_EVIDENCE_IMAGES.pipeWeld, type: 'completion' as const, cap: 'Visual inspection verified for pipe joint erection' },
                       { key: 'pumpFoundation', label: 'Raft Concreting', src: SAMPLE_EVIDENCE_IMAGES.pumpFoundation, type: 'progress' as const, cap: 'Slump test checked at 110mm, concrete pour underway' },
@@ -693,15 +738,15 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
                         }}
                         style={{
                           border: imagePreview === item.src ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
-                          borderRadius: 'var(--radius-sm)',
+                          borderRadius: 'var(--radius-md)',
                           overflow: 'hidden',
                           cursor: 'pointer',
                           background: '#ffffff',
                           boxShadow: imagePreview === item.src ? 'var(--shadow-card-hover)' : 'var(--shadow-xs)',
                         }}
                       >
-                        <img src={item.src} alt={item.label} style={{ width: '100%', height: '70px', objectFit: 'cover' }} />
-                        <div style={{ padding: '4px 6px', fontSize: '0.7rem', fontWeight: 600, textAlign: 'center' }}>
+                        <img src={item.src} alt={item.label} style={{ width: '100%', height: '80px', objectFit: 'cover' }} />
+                        <div style={{ padding: '6px 8px', fontSize: '0.75rem', fontWeight: 600, textAlign: 'center' }}>
                           {item.label}
                         </div>
                       </div>
@@ -714,10 +759,10 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     <button
                       type="button"
-                      className="btn btn-secondary btn-sm"
+                      className="btn btn-secondary"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <UploadCloud size={13} />
+                      <UploadCloud size={15} />
                       <span>Upload Custom Image From Device</span>
                     </button>
                     <input
@@ -735,32 +780,33 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
                   <div
                     style={{
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '0.75rem',
-                      background: '#f7f8f9',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '1rem',
+                      background: '#f8fafc',
                       display: 'flex',
-                      gap: '0.75rem',
+                      gap: '1rem',
                     }}
                   >
                     <img
                       src={imagePreview}
                       alt="Selected Evidence"
-                      style={{ width: 120, height: 80, objectFit: 'cover', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-default)' }}
+                      style={{ width: 140, height: 95, objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)' }}
                     />
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span
                           className="mono-pill"
                           style={{
                             background: imageType === 'issue' ? '#ffebe6' : '#dcfff1',
                             color: imageType === 'issue' ? '#ae2e24' : '#1f845a',
                             borderColor: imageType === 'issue' ? '#fd9891' : '#7ee2b8',
-                            fontSize: '0.675rem',
+                            fontSize: '0.725rem',
+                            fontWeight: 700,
                           }}
                         >
                           {imageType.toUpperCase()}
                         </span>
-                        <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>Timestamp: 2026-09-06 13:05 IST</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Timestamp: 2026-09-06 13:05 IST</span>
                       </div>
                       <input
                         type="text"
@@ -768,7 +814,6 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
                         placeholder="Caption / Inspection Note"
                         value={imageCaption}
                         onChange={e => setImageCaption(e.target.value)}
-                        style={{ fontSize: '0.775rem' }}
                       />
                     </div>
                   </div>
@@ -779,37 +824,37 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
         </div>
 
         {/* Right Column: Live Stream & Matching Intelligence */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
           {/* Live Matching Intelligence Card */}
           <div className="card">
             <div className="card-header">
               <div>
-                <h4 className="card-title" style={{ fontSize: '0.85rem' }}>
-                  <Sparkles size={14} style={{ color: '#0c66e4' }} />
+                <h4 className="card-title">
+                  <Sparkles size={16} style={{ color: 'var(--brand-primary)' }} />
                   Datum NLP & Spatial Engine
                 </h4>
-                <div className="card-desc">How supervisor submissions are evaluated in real-time.</div>
+                <div className="card-desc">Deterministic multi-factor matching intelligence.</div>
               </div>
             </div>
 
-            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.775rem' }}>
-                <CheckCircle2 size={14} style={{ color: '#1f845a', marginTop: 2, flexShrink: 0 }} />
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', fontSize: '0.8125rem' }}>
+                <CheckCircle2 size={16} style={{ color: '#1f845a', marginTop: 2, flexShrink: 0 }} />
                 <div>
                   <strong>Semantic Fuzzy Matching:</strong> Evaluates Jaccard, Token Sort, and Levenshtein similarity against schedule titles.
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.775rem' }}>
-                <CheckCircle2 size={14} style={{ color: '#1f845a', marginTop: 2, flexShrink: 0 }} />
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', fontSize: '0.8125rem' }}>
+                <CheckCircle2 size={16} style={{ color: '#1f845a', marginTop: 2, flexShrink: 0 }} />
                 <div>
                   <strong>Discipline & Spatial Filter:</strong> Enforces discipline taxonomy boundaries (Piping vs Civil vs Electrical).
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.775rem' }}>
-                <CheckCircle2 size={14} style={{ color: '#1f845a', marginTop: 2, flexShrink: 0 }} />
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', fontSize: '0.8125rem' }}>
+                <CheckCircle2 size={16} style={{ color: '#1f845a', marginTop: 2, flexShrink: 0 }} />
                 <div>
                   <strong>Photo Provenance Hash:</strong> Hashes attached photo files and stores SHA256 in immutable audit log.
                 </div>
@@ -821,8 +866,8 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
           <div className="card">
             <div className="card-header">
               <div>
-                <h4 className="card-title" style={{ fontSize: '0.85rem' }}>
-                  <Radio size={14} style={{ color: '#0c66e4' }} />
+                <h4 className="card-title">
+                  <Radio size={16} style={{ color: 'var(--brand-primary)' }} />
                   Recent Field Stream
                 </h4>
                 <div className="card-desc">Latest {recentSubmissions.length} field events ingested.</div>
@@ -841,42 +886,44 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
                         setSelectedInspectorUpdateId(item.id);
                       }}
                       style={{
-                        padding: '0.65rem 0.85rem',
+                        padding: '0.85rem 1.15rem',
                         borderBottom: '1px solid var(--border-subtle)',
                         cursor: 'pointer',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '0.35rem',
+                        gap: '0.45rem',
                         transition: 'background var(--transition-fast)',
                       }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-hover)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <span className="mono-pill" style={{ fontSize: '0.675rem' }}>{item.id}</span>
-                          <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-primary)' }}>{item.discipline}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                          <span className="mono-pill" style={{ fontSize: '0.7rem' }}>{item.id}</span>
+                          <span style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>{item.discipline}</span>
                         </div>
                         <span
                           className="mono-pill"
                           style={{
-                            fontSize: '0.65rem',
+                            fontSize: '0.675rem',
+                            fontWeight: 700,
                             background: matchCategory === 'ready' ? '#dcfff1' : matchCategory === 'unplanned' ? '#ffebe6' : '#fff4e5',
                             color: matchCategory === 'ready' ? '#1f845a' : matchCategory === 'unplanned' ? '#ae2e24' : '#974f0c',
+                            borderColor: matchCategory === 'ready' ? '#7ee2b8' : matchCategory === 'unplanned' ? '#fd9891' : '#fec195',
                           }}
                         >
                           {matchCategory.toUpperCase()}
                         </span>
                       </div>
 
-                      <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
+                      <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
                         {item.extractedDescription || item.rawText}
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                        <span>Area: {item.area || 'General'}</span>
-                        <span style={{ color: 'var(--brand-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 2 }}>
-                          Inspect <Eye size={11} />
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span>Area: <strong>{item.area || 'General'}</strong></span>
+                        <span style={{ color: 'var(--brand-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
+                          Inspect <Eye size={12} />
                         </span>
                       </div>
                     </div>

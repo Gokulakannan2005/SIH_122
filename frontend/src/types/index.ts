@@ -1,4 +1,17 @@
-export type NavigationTab = 'dashboard' | 'site-updates' | 'schedule-activities' | 'planner-review' | 'upload';
+export type NavigationTab = 'dashboard' | 'site-updates' | 'schedule-activities' | 'planner-review' | 'upload' | 'supervisor-entry' | 'copilot';
+
+export type UserRole = 'admin' | 'supervisor';
+
+export type DensityMode = 'comfortable' | 'compact';
+
+export interface ImageEvidence {
+  id: string;
+  url: string;
+  type: 'completion' | 'issue' | 'progress';
+  caption: string;
+  timestamp: string;
+  supervisor: string;
+}
 
 export interface ScheduleActivity {
   activityId: string; // e.g. "PIP-L6-012"
@@ -16,14 +29,15 @@ export interface ScheduleActivity {
   progressPercent?: number;
   varianceDays?: number;
   status?: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed';
+  criticalPath?: boolean;
 }
 
 export type EventStatus = 'Started' | 'Completed' | 'In Progress';
 
 export interface SiteUpdate {
   id: string;
-  sourceFile: 'daily_report.txt' | 'piping_progress.xlsx' | string;
-  sourceType: 'text_report' | 'excel_sheet';
+  sourceFile: 'daily_report.txt' | 'piping_progress.xlsx' | 'field_mobile_entry' | string;
+  sourceType: 'text_report' | 'excel_sheet' | 'supervisor_upload';
   entryId?: string;
   discipline: string;
   reportDate: string;
@@ -36,6 +50,9 @@ export interface SiteUpdate {
   supervisor?: string;
   lineEvidence?: string | number; // line number or row number
   isExplicitUnplanned?: boolean;
+  images?: ImageEvidence[];
+  issueFlag?: string; // Optional site blocker / obstacle note
+  issueSeverity?: 'low' | 'medium' | 'critical';
 }
 
 export type MatchCategory = 'ready' | 'review' | 'unplanned' | 'rejected';
@@ -79,9 +96,17 @@ export interface AuditLog {
   originalCategory: MatchCategory;
   finalActivityId: string | null;
   plannerNote?: string;
+  userRole?: UserRole;
 }
 
 export type WorkbenchViewMode = 'table' | 'kanban' | 'gantt' | 'ingestion';
 
 export type WorkbenchSortOption = 'confidence-desc' | 'confidence-asc' | 'date-desc' | 'date-asc' | 'discipline' | 'wbs';
 
+export interface OfflineSyncItem {
+  id: string;
+  timestamp: string;
+  type: 'new_update' | 'planner_action' | 'image_upload';
+  summary: string;
+  synced: boolean;
+}

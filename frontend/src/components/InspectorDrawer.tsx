@@ -10,7 +10,9 @@ import {
   ShieldCheck,
   Sparkles,
   Save,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Camera,
+  AlertOctagon
 } from 'lucide-react';
 import { PlannerActionType } from '../types';
 
@@ -120,6 +122,38 @@ export const InspectorDrawer: React.FC = () => {
 
         {/* Drawer Body */}
         <div className="drawer-body">
+          {/* Section 0: Photo Proof & Issue Flag (if present) */}
+          {update.images && update.images.length > 0 && (
+            <div className="card" style={{ padding: '0.85rem 1rem', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Camera size={14} /> Attached Photo Evidence ({update.images.length})
+                </span>
+                <span className="mono-pill" style={{ textTransform: 'capitalize' }}>{update.images[0].type}</span>
+              </div>
+              <div style={{ borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: '#0f172a', maxHeight: 160, display: 'flex', justifyContent: 'center' }}>
+                <img src={update.images[0].url} alt="Photo Evidence" style={{ maxHeight: 160, width: '100%', objectFit: 'contain' }} />
+              </div>
+              <div style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                &ldquo;{update.images[0].caption}&rdquo; &bull; {update.images[0].timestamp} ({update.images[0].supervisor})
+              </div>
+            </div>
+          )}
+
+          {update.issueFlag && (
+            <div style={{ background: 'var(--status-unplanned-bg)', border: '1px solid var(--status-unplanned-border)', borderRadius: 'var(--radius-sm)', padding: '0.75rem', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <AlertOctagon size={18} style={{ color: 'var(--status-unplanned-fg)', flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.8rem', color: 'var(--status-unplanned-fg)' }}>
+                  Reported Site Blocker / Delay Issue ({update.issueSeverity?.toUpperCase() || 'MEDIUM'} SEVERITY)
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                  {update.issueFlag}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Section 1: Raw Text Evidence */}
           <div className="card" style={{ padding: '0.85rem 1rem' }}>
             <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>

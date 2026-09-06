@@ -10,7 +10,8 @@ import {
   Sparkles,
   Check,
   RotateCcw,
-  ArrowRight
+  ArrowRight,
+  Camera
 } from 'lucide-react';
 import { PlannerActionType } from '../types';
 
@@ -330,6 +331,32 @@ export const PlannerReviewView: React.FC = () => {
                 >
                   <Check size={15} />
                   <span>{actionSuccessMessage}</span>
+                </div>
+              )}
+
+              {/* Photo Evidence and Issue Blocker Display in Review Workbench */}
+              {currentUpdate.images && currentUpdate.images.length > 0 && (
+                <div className="card" style={{ padding: '0.85rem 1rem', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.775rem', fontWeight: 800, color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Camera size={14} /> Attached Supervisor Photo Evidence
+                    </span>
+                    <span className="mono-pill" style={{ textTransform: 'capitalize' }}>{currentUpdate.images[0].type}</span>
+                  </div>
+                  <div style={{ borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: '#0f172a', maxHeight: 180, display: 'flex', justifyContent: 'center' }}>
+                    <img src={currentUpdate.images[0].url} alt="Photo Evidence" style={{ maxHeight: 180, width: '100%', objectFit: 'contain' }} />
+                  </div>
+                  <div style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                    &ldquo;{currentUpdate.images[0].caption}&rdquo; &bull; {currentUpdate.images[0].timestamp} ({currentUpdate.images[0].supervisor})
+                  </div>
+                </div>
+              )}
+
+              {currentUpdate.issueFlag && (
+                <div style={{ background: 'var(--status-unplanned-bg)', border: '1px solid var(--status-unplanned-border)', borderRadius: 'var(--radius-sm)', padding: '0.75rem', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.8rem', color: 'var(--status-unplanned-fg)' }}>
+                    ⚠ REPORTED SITE BLOCKER: {currentUpdate.issueFlag} ({currentUpdate.issueSeverity?.toUpperCase() || 'MEDIUM'} SEVERITY)
+                  </div>
                 </div>
               )}
 

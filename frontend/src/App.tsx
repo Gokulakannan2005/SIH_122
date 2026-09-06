@@ -6,6 +6,8 @@ import { SiteUpdatesView } from './components/SiteUpdatesView';
 import { ScheduleActivitiesView } from './components/ScheduleActivitiesView';
 import { PlannerReviewView } from './components/PlannerReviewView';
 import { UploadDemoView } from './components/UploadDemoView';
+import { SupervisorEntryView } from './components/SupervisorEntryView';
+import { CopilotView } from './components/CopilotView';
 import { InspectorDrawer } from './components/InspectorDrawer';
 import { ScheduleActivityDrawer } from './components/ScheduleActivityDrawer';
 import { AuditTrailModal } from './components/AuditTrailModal';
@@ -22,6 +24,8 @@ const AppContent: React.FC = () => {
         {activeTab === 'site-updates' && <SiteUpdatesView />}
         {activeTab === 'schedule-activities' && <ScheduleActivitiesView />}
         {activeTab === 'planner-review' && <PlannerReviewView />}
+        {activeTab === 'supervisor-entry' && <SupervisorEntryView />}
+        {activeTab === 'copilot' && <CopilotView />}
         {activeTab === 'upload' && <UploadDemoView />}
       </main>
 

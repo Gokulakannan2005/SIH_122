@@ -20,6 +20,7 @@ import { parseScheduleCSV, parseDailyReportTXT, parsePipingProgressXLSX } from '
 import { processAllMatches } from '../utils/matchingEngine';
 import { api, HealthResponse } from '../services/api';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
+import { calculateImageFingerprint } from '../utils/ocrService';
 
 export type BackendConnectionStatus = 'connected' | 'offline' | 'checking';
 
@@ -95,12 +96,28 @@ interface ProjectContextType {
     eventStatus: 'Started' | 'Completed' | 'In Progress';
     quantity?: string;
     supervisor?: string;
-    imageFile?: string; // base64 / svg
+    imageFile?: string; // base64 / svg / url
     imageType?: 'completion' | 'issue' | 'progress';
     caption?: string;
+    filename?: string;
+    fileSize?: number;
+    sha256Hash?: string;
+    ocrStatus?: 'idle' | 'scanning' | 'success' | 'failed' | 'no_text';
+    ocrConfidence?: number;
+    ocrRawText?: string;
+    ocrDetectedTags?: string[];
+    confirmedTag?: string;
+    confirmedBy?: 'supervisor' | 'planner' | 'unconfirmed';
     issueFlag?: string;
     issueSeverity?: 'low' | 'medium' | 'critical';
   }) => Promise<void>;
+  handleConfirmImageTag: (
+    updateId: string,
+    imageId: string,
+    confirmedTag: string,
+    confirmedBy?: 'supervisor' | 'planner'
+  ) => Promise<void>;
+  handleRemoveImageFromUpdate: (updateId: string, imageId: string) => Promise<void>;
   handlePlannerAction: (
     updateId: string,
     actionType: PlannerActionType,
@@ -234,11 +251,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       let allUpdates = [...parsedXlsxUpdates, ...parsedTxtUpdates];
 
-      // Attach rich sample photo evidence & issue blockers to realistic records for the jury demo
+      // Attach rich sample photo evidence, OCR candidates, confirmed tags & SHA-256 integrity fingerprints
       allUpdates = allUpdates.map(u => {
         if (u.id.includes('PIP-') || u.extractedDescription.toLowerCase().includes('weld') || u.extractedDescription.toLowerCase().includes('spool')) {
           return {
             ...u,
+            confirmedTag: '24-CW-017',
             images: [
               {
                 id: `IMG-${u.id}-1`,
@@ -247,6 +265,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 caption: 'Visual QA Inspection: Weld seam 24-CW-017 completed with full penetration.',
                 timestamp: '2026-09-05 14:22',
                 supervisor: u.supervisor || 'R. Sharma',
+                filename: 'PHOTO_CW_017_WELD_QA.jpg',
+                fileSize: 2450890,
+                sha256Hash: 'a7c3f910e52b89d412c091ea28f73b6490e21bc08192a543881efac99d428901',
+                ocrStatus: 'success' as const,
+                ocrConfidence: 94,
+                ocrRawText: 'LINE 24-CW-017 SPOOL WELD SEAM #03 NDT CLEARED PUMP BAY',
+                ocrDetectedTags: ['24-CW-017', 'CW-017'],
+                confirmedTag: '24-CW-017',
+                confirmedBy: 'supervisor' as const,
+                confirmedAt: '2026-09-05T14:25:00Z',
               },
             ],
           };
@@ -254,6 +282,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (u.id.includes('CIV-') || u.extractedDescription.toLowerCase().includes('foundation') || u.extractedDescription.toLowerCase().includes('concrete')) {
           return {
             ...u,
+            confirmedTag: 'CIV-L6-002',
             images: [
               {
                 id: `IMG-${u.id}-1`,
@@ -262,6 +291,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 caption: 'Concrete Pour & Curing Checklist Verified for Pump Foundation.',
                 timestamp: '2026-09-04 11:15',
                 supervisor: u.supervisor || 'K. Verma',
+                filename: 'CIV_FDN_CONCRETE_POUR_04.jpg',
+                fileSize: 3120400,
+                sha256Hash: 'bc4190ea3810f274a01c9b4e72a819d40e1bc09a827364810feac88d92718290',
+                ocrStatus: 'success' as const,
+                ocrConfidence: 89,
+                ocrRawText: 'PUMP BAY RAFT FOUNDATION CIV-L6-002 M35 GRADE CONCRETE',
+                ocrDetectedTags: ['CIV-L6-002'],
+                confirmedTag: 'CIV-L6-002',
+                confirmedBy: 'supervisor' as const,
+                confirmedAt: '2026-09-04T11:20:00Z',
               },
             ],
           };
@@ -269,6 +308,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (u.id.includes('ELE-') || u.extractedDescription.toLowerCase().includes('cable') || u.extractedDescription.toLowerCase().includes('tray')) {
           return {
             ...u,
+            confirmedTag: 'MCC-415V',
             images: [
               {
                 id: `IMG-${u.id}-1`,
@@ -277,6 +317,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 caption: '415V Switchgear feeder cable pull in progress.',
                 timestamp: '2026-09-05 16:45',
                 supervisor: u.supervisor || 'A. Patel',
+                filename: 'ELE_TRAY_PULL_SWG01.jpg',
+                fileSize: 1980320,
+                sha256Hash: 'd821ea9401bf89274c0a1b9e72f8190d40e1bc09a827364810feac88d9271801',
+                ocrStatus: 'success' as const,
+                ocrConfidence: 86,
+                ocrRawText: '415V FEEDER CABLE TRAY TIER-2 MCC-415V PUMP BAY',
+                ocrDetectedTags: ['MCC-415V', 'ELE-L6-021'],
+                confirmedTag: 'MCC-415V',
+                confirmedBy: 'supervisor' as const,
+                confirmedAt: '2026-09-05T16:50:00Z',
               },
             ],
           };
@@ -286,6 +336,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             ...u,
             issueFlag: '50T Mobile Crane breakdown on site - hydraulic oil seal replacement in progress.',
             issueSeverity: 'critical' as const,
+            confirmedTag: '50T-CRANE-01',
             images: [
               {
                 id: `IMG-${u.id}-1`,
@@ -294,6 +345,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 caption: 'CRITICAL BLOCKER: Crane hydraulic line ruptured. Erection paused.',
                 timestamp: '2026-09-05 09:30',
                 supervisor: u.supervisor || 'M. Khan',
+                filename: 'CRANE_HYDRAULIC_RUPTURE.jpg',
+                fileSize: 2840190,
+                sha256Hash: 'f910ea3810f274a01c9b4e72a819d40e1bc09a827364810feac88d92718290fa',
+                ocrStatus: 'success' as const,
+                ocrConfidence: 96,
+                ocrRawText: 'EQUIPMENT TAG: 50T-CRANE-01 HYDRAULIC LEAK HAZARD',
+                ocrDetectedTags: ['50T-CRANE-01'],
+                confirmedTag: '50T-CRANE-01',
+                confirmedBy: 'supervisor' as const,
+                confirmedAt: '2026-09-05T09:35:00Z',
               },
             ],
           };
@@ -433,9 +494,18 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     eventStatus: 'Started' | 'Completed' | 'In Progress';
     quantity?: string;
     supervisor?: string;
-    imageFile?: string; // base64 / svg
+    imageFile?: string; // base64 / svg / url
     imageType?: 'completion' | 'issue' | 'progress';
     caption?: string;
+    filename?: string;
+    fileSize?: number;
+    sha256Hash?: string;
+    ocrStatus?: 'idle' | 'scanning' | 'success' | 'failed' | 'no_text';
+    ocrConfidence?: number;
+    ocrRawText?: string;
+    ocrDetectedTags?: string[];
+    confirmedTag?: string;
+    confirmedBy?: 'supervisor' | 'planner' | 'unconfirmed';
     issueFlag?: string;
     issueSeverity?: 'low' | 'medium' | 'critical';
   }) => {
@@ -443,6 +513,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const newImages: ImageEvidence[] = [];
 
     if (entry.imageFile) {
+      const hash = entry.sha256Hash || (await calculateImageFingerprint(entry.imageFile));
       newImages.push({
         id: `IMG-${newId}-1`,
         url: entry.imageFile,
@@ -450,6 +521,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         caption: entry.caption || 'Field supervisor photo proof attached',
         timestamp: new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
         supervisor: entry.supervisor || 'Site Supervisor',
+        filename: entry.filename || `PHOTO_${newId}_PROOF.jpg`,
+        fileSize: entry.fileSize || 1024000,
+        sha256Hash: hash,
+        ocrStatus: entry.ocrStatus || 'idle',
+        ocrConfidence: entry.ocrConfidence,
+        ocrRawText: entry.ocrRawText,
+        ocrDetectedTags: entry.ocrDetectedTags,
+        confirmedTag: entry.confirmedTag,
+        confirmedBy: entry.confirmedBy || (entry.confirmedTag ? 'supervisor' : 'unconfirmed'),
+        confirmedAt: entry.confirmedTag ? new Date().toISOString() : undefined,
       });
     }
 
@@ -466,6 +547,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       quantity: entry.quantity,
       supervisor: entry.supervisor || 'Field Supervisor',
       images: newImages.length > 0 ? newImages : undefined,
+      confirmedTag: entry.confirmedTag,
       issueFlag: entry.issueFlag,
       issueSeverity: entry.issueSeverity,
     };
@@ -501,11 +583,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       updateId: newId,
       rawText: newUpdate.rawText,
       sourceFile: 'Supervisor Mobile Ingestion',
-      action: 'Supervisor Ingested Progress Entry with Photo Proof',
+      action: entry.confirmedTag
+        ? `Supervisor Ingested Progress Entry with Confirmed Photo Tag [${entry.confirmedTag}]`
+        : 'Supervisor Ingested Progress Entry with Photo Proof',
       originalConfidence: newMatch ? newMatch.confidenceScore : 0,
       originalCategory: newMatch ? newMatch.category : 'review',
       finalActivityId: newMatch ? newMatch.candidateActivityId : null,
-      plannerNote: `Submitted via Supervisor Field Portal ${entry.issueFlag ? `[ISSUE: ${entry.issueFlag}]` : ''}`,
+      plannerNote: `Submitted via Supervisor Field Portal ${entry.issueFlag ? `[ISSUE: ${entry.issueFlag}]` : ''} ${
+        entry.confirmedTag ? `[CONFIRMED TAG: ${entry.confirmedTag}]` : ''
+      }`,
       userRole: currentRole,
     };
 
@@ -514,7 +600,118 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     addToast({
       type: entry.issueFlag ? 'warning' : 'success',
       title: entry.issueFlag ? 'Report Logged with Blocker' : 'Field Report Ingested',
-      message: `Report ${newId} created (${entry.discipline} • ${entry.area}).${entry.issueFlag ? ` Flagged: ${entry.issueFlag}` : ''}`,
+      message: `Report ${newId} created (${entry.discipline} • ${entry.area}).${entry.confirmedTag ? ` Tag: ${entry.confirmedTag}.` : ''}`,
+    });
+  };
+
+  // Confirm or correct equipment tag for an update's photo evidence
+  const handleConfirmImageTag = async (
+    updateId: string,
+    imageId: string,
+    confirmedTag: string,
+    confirmedBy: 'supervisor' | 'planner' = currentRole === 'admin' ? 'planner' : 'supervisor'
+  ) => {
+    const normTag = confirmedTag.toUpperCase().trim();
+    const update = siteUpdates.find(u => u.id === updateId);
+    if (!update) return;
+
+    const updatedImages = (update.images || []).map(img =>
+      img.id === imageId
+        ? {
+            ...img,
+            confirmedTag: normTag,
+            confirmedBy,
+            confirmedAt: new Date().toISOString(),
+          }
+        : img
+    );
+
+    const updatedUpdate: SiteUpdate = {
+      ...update,
+      confirmedTag: normTag,
+      images: updatedImages,
+    };
+
+    const newSiteUpdates = siteUpdates.map(u => (u.id === updateId ? updatedUpdate : u));
+    setSiteUpdates(newSiteUpdates);
+
+    // Re-evaluate matches
+    const reMatchMap = processAllMatches([updatedUpdate], schedule);
+    const newMatch = reMatchMap.get(updateId);
+    if (newMatch) {
+      setMatchResults(prev => ({
+        ...prev,
+        [updateId]: newMatch,
+      }));
+    }
+
+    const newAuditLog: AuditLog = {
+      id: `AUDIT-TAG-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      updateId,
+      rawText: update.rawText,
+      sourceFile: update.sourceFile,
+      action: `Confirmed Photo Equipment Tag [${normTag}] (${confirmedBy})`,
+      originalConfidence: newMatch ? newMatch.confidenceScore : 0,
+      originalCategory: newMatch ? newMatch.category : 'review',
+      finalActivityId: newMatch ? newMatch.candidateActivityId : null,
+      plannerNote: `Photo evidence verified: equipment tag "${normTag}" assigned.`,
+      userRole: currentRole,
+    };
+
+    setAuditLogs(prev => [newAuditLog, ...prev]);
+
+    addToast({
+      type: 'success',
+      title: 'Equipment Tag Confirmed',
+      message: `Confirmed tag "${normTag}" for ${updateId}. Schedule matching evidence updated.`,
+    });
+  };
+
+  // Remove photo evidence from an update
+  const handleRemoveImageFromUpdate = async (updateId: string, imageId: string) => {
+    const update = siteUpdates.find(u => u.id === updateId);
+    if (!update) return;
+
+    const updatedImages = (update.images || []).filter(img => img.id !== imageId);
+    const updatedUpdate: SiteUpdate = {
+      ...update,
+      images: updatedImages.length > 0 ? updatedImages : undefined,
+      confirmedTag: updatedImages.length > 0 ? update.confirmedTag : undefined,
+    };
+
+    const newSiteUpdates = siteUpdates.map(u => (u.id === updateId ? updatedUpdate : u));
+    setSiteUpdates(newSiteUpdates);
+
+    const reMatchMap = processAllMatches([updatedUpdate], schedule);
+    const newMatch = reMatchMap.get(updateId);
+    if (newMatch) {
+      setMatchResults(prev => ({
+        ...prev,
+        [updateId]: newMatch,
+      }));
+    }
+
+    const newAuditLog: AuditLog = {
+      id: `AUDIT-IMG-REM-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      updateId,
+      rawText: update.rawText,
+      sourceFile: update.sourceFile,
+      action: `Photo Evidence Removed from ${updateId}`,
+      originalConfidence: newMatch ? newMatch.confidenceScore : 0,
+      originalCategory: newMatch ? newMatch.category : 'review',
+      finalActivityId: newMatch ? newMatch.candidateActivityId : null,
+      plannerNote: 'Supervisor/Planner detached photo proof from field record.',
+      userRole: currentRole,
+    };
+
+    setAuditLogs(prev => [newAuditLog, ...prev]);
+
+    addToast({
+      type: 'info',
+      title: 'Photo Evidence Removed',
+      message: `Removed photo proof from update ${updateId}.`,
     });
   };
 
@@ -901,7 +1098,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         'Match Category',
         'Planner Action Status',
         'Planner Note',
+        'Confirmed Tag',
         'Has Photo Evidence',
+        'Photo Fingerprint (SHA256)',
         'Issue Blocker',
       ],
     ];
@@ -910,6 +1109,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const match = matchResults[update.id];
       const decision = plannerDecisions[update.id];
       const linkedId = decision ? decision.linkedActivityId : (match?.category === 'ready' ? match?.candidateActivityId : '');
+      const firstImage = update.images?.[0];
 
       rows.push([
         update.id,
@@ -924,7 +1124,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         match?.category || 'unplanned',
         decision?.status || 'auto',
         `"${(decision?.plannerNote || '').replace(/"/g, '""')}"`,
-        update.images && update.images.length > 0 ? 'YES' : 'NO',
+        update.confirmedTag || firstImage?.confirmedTag || 'N/A',
+        firstImage ? 'YES' : 'NO',
+        firstImage?.sha256Hash || 'N/A',
         `"${(update.issueFlag || '').replace(/"/g, '""')}"`,
       ]);
     });
@@ -993,6 +1195,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         loadDemoData,
         handleCustomUpload,
         handleAddNewFieldEntry,
+        handleConfirmImageTag,
+        handleRemoveImageFromUpdate,
         handlePlannerAction,
         handleEditUpdate,
         exportAlignmentCSV,

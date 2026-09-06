@@ -49,11 +49,26 @@ export function evaluateMatch(
   }
 
   // 3. Specific Tag & Alias Keyword Match (max 50 points)
+  // Check for confirmed photo evidence tag (OCR assisted or manually verified)
+  const confirmedTag = (update.confirmedTag || update.images?.[0]?.confirmedTag || '').toUpperCase().trim();
+  if (confirmedTag) {
+    const isTagInActivity =
+      activity.activityId.toUpperCase().includes(confirmedTag) ||
+      activity.activityName.toUpperCase().includes(confirmedTag) ||
+      activity.aliases.some(a => a.toUpperCase().includes(confirmedTag)) ||
+      (activity.rawAliases && activity.rawAliases.toUpperCase().includes(confirmedTag));
+
+    if (isTagInActivity) {
+      keywordScore += 25;
+      reasons.push(`Photo evidence: confirmed tag ${confirmedTag}`);
+    }
+  }
+
   // Specific line/system tag checks:
-  const isCWInUpdate = /\b(cw|cooling water|24-cw-017|cooling-water)\b/i.test(descLower);
+  const isCWInUpdate = /\b(cw|cooling water|24-cw-017|cooling-water)\b/i.test(descLower) || confirmedTag.includes('CW');
   const isCWInActivity = /\b(cw|cooling water|24-cw-017|cooling-water)\b/i.test(actNameLower) || activity.aliases.some(a => /\bcw\b/i.test(a));
 
-  const isFWInUpdate = /\b(fw|fire water|fire-water|18-fw-008)\b/i.test(descLower);
+  const isFWInUpdate = /\b(fw|fire water|fire-water|18-fw-008)\b/i.test(descLower) || confirmedTag.includes('FW');
   const isFWInActivity = /\b(fw|fire water|fire-water|18-fw-008)\b/i.test(actNameLower) || activity.aliases.some(a => /\bfw\b/i.test(a));
 
   const isSuctionInUpdate = /\b(suction|inlet)\b/i.test(descLower);
@@ -97,7 +112,7 @@ export function evaluateMatch(
   // Alias array checking
   let bestAliasMatchScore = 0;
   for (const alias of activity.aliases) {
-    if (descLower.includes(alias)) {
+    if (descLower.includes(alias) || (confirmedTag && alias.toUpperCase().includes(confirmedTag))) {
       bestAliasMatchScore = Math.max(bestAliasMatchScore, 20);
       reasons.push(`Matched schedule alias: "${alias}"`);
     }

@@ -11,6 +11,16 @@ export interface ImageEvidence {
   caption: string;
   timestamp: string;
   supervisor: string;
+  filename?: string;
+  fileSize?: number; // bytes
+  sha256Hash?: string; // Integrity fingerprint (Web Crypto SHA-256)
+  ocrStatus?: 'idle' | 'scanning' | 'success' | 'failed' | 'no_text';
+  ocrConfidence?: number; // 0 to 100
+  ocrRawText?: string;
+  ocrDetectedTags?: string[];
+  confirmedTag?: string; // e.g. "24-CW-017"
+  confirmedBy?: 'supervisor' | 'planner' | 'unconfirmed';
+  confirmedAt?: string;
 }
 
 export interface ScheduleActivity {
@@ -51,6 +61,7 @@ export interface SiteUpdate {
   lineEvidence?: string | number; // line number or row number
   isExplicitUnplanned?: boolean;
   images?: ImageEvidence[];
+  confirmedTag?: string; // Confirmed equipment/line tag (e.g. "24-CW-017")
   issueFlag?: string; // Optional site blocker / obstacle note
   issueSeverity?: 'low' | 'medium' | 'critical';
 }

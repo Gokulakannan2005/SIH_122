@@ -324,7 +324,14 @@ export const PlannerReviewView: React.FC = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                       <span className="mono-pill" style={{ fontSize: '0.675rem' }}>{item.discipline}</span>
-                      <span>Area: {item.area || 'General'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {item.images && item.images.length > 0 && (
+                          <span style={{ fontSize: '0.675rem', color: '#0284c7', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 700 }}>
+                            <Camera size={11} /> {item.images[0].confirmedTag ? item.images[0].confirmedTag : 'Photo Attached'}
+                          </span>
+                        )}
+                        <span>Area: {item.area || 'General'}</span>
+                      </div>
                     </div>
 
                     {decision && (
@@ -395,11 +402,11 @@ export const PlannerReviewView: React.FC = () => {
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '0.4rem',
-                        background: '#f0f7fc',
+                        gap: '0.5rem',
+                        background: '#f0f9ff',
                         border: '1px solid #bae6fd',
-                        color: '#0284c7',
-                        padding: '4px 8px',
+                        color: '#0369a1',
+                        padding: '5px 10px',
                         borderRadius: 'var(--radius-sm)',
                         fontSize: '0.75rem',
                         fontWeight: 700,
@@ -407,8 +414,20 @@ export const PlannerReviewView: React.FC = () => {
                       }}
                       onClick={() => setSelectedInspectorUpdateId(currentUpdate.id)}
                     >
-                      <Camera size={14} />
-                      <span>{currentUpdate.images.length} Photo Proof Attached (Inspect)</span>
+                      <Camera size={15} />
+                      <span>Photo Proof Attached</span>
+                      {currentUpdate.images[0].confirmedTag ? (
+                        <span style={{ background: '#0284c7', color: '#ffffff', padding: '1px 6px', borderRadius: '3px', fontSize: '0.7rem', fontFamily: 'var(--font-mono)' }}>
+                          Tag: {currentUpdate.images[0].confirmedTag}
+                        </span>
+                      ) : (
+                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: '3px', fontSize: '0.7rem' }}>
+                          Unconfirmed Tag
+                        </span>
+                      )}
+                      <span style={{ fontSize: '0.7rem', textDecoration: 'underline', marginLeft: 4 }}>
+                        View / Verify Tag →
+                      </span>
                     </div>
                   )}
 
@@ -470,50 +489,91 @@ export const PlannerReviewView: React.FC = () => {
                 
                 {/* Algorithmic Recommended Candidate Card */}
                 {recommendedActivityObj ? (
-                  <div
-                    style={{
-                      border: selectedActivityId === recommendedActivityObj.activityId ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '0.85rem 1rem',
-                      background: selectedActivityId === recommendedActivityObj.activityId ? 'var(--brand-surface)' : '#ffffff',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: '1rem',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease-out',
-                    }}
-                    onClick={() => setSelectedActivityId(recommendedActivityObj.activityId)}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 3 }}>
-                        <span style={{ background: '#047857', color: '#ffffff', fontSize: '0.675rem', fontWeight: 800, padding: '1px 6px', borderRadius: 'var(--radius-xs)' }}>
-                          ★ AI Top Recommendation
-                        </span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)', fontSize: '0.9rem' }}>
-                          {recommendedActivityObj.activityId}
-                        </span>
-                        <span className="mono-pill">WBS {recommendedActivityObj.wbs}</span>
-                        <span className="mono-pill">{recommendedActivityObj.discipline}</span>
+                  <>
+                    <div
+                      style={{
+                        border: selectedActivityId === recommendedActivityObj.activityId ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '0.85rem 1rem',
+                        background: selectedActivityId === recommendedActivityObj.activityId ? 'var(--brand-surface)' : '#ffffff',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease-out',
+                      }}
+                      onClick={() => setSelectedActivityId(recommendedActivityObj.activityId)}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 3 }}>
+                          <span style={{ background: '#047857', color: '#ffffff', fontSize: '0.675rem', fontWeight: 800, padding: '1px 6px', borderRadius: 'var(--radius-xs)' }}>
+                            ★ AI Top Recommendation
+                          </span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)', fontSize: '0.9rem' }}>
+                            {recommendedActivityObj.activityId}
+                          </span>
+                          <span className="mono-pill">WBS {recommendedActivityObj.wbs}</span>
+                          <span className="mono-pill">{recommendedActivityObj.discipline}</span>
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                          {recommendedActivityObj.activityName}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                          Area: <strong>{recommendedActivityObj.area}</strong> | Window: {recommendedActivityObj.plannedStart} to {recommendedActivityObj.plannedFinish}
+                        </div>
                       </div>
-                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                        {recommendedActivityObj.activityName}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                        Area: <strong>{recommendedActivityObj.area}</strong> | Window: {recommendedActivityObj.plannedStart} to {recommendedActivityObj.plannedFinish}
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <input
+                          type="radio"
+                          name="activeMatch"
+                          checked={selectedActivityId === recommendedActivityObj.activityId}
+                          onChange={() => setSelectedActivityId(recommendedActivityObj.activityId)}
+                          style={{ width: 18, height: 18, cursor: 'pointer' }}
+                        />
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <input
-                        type="radio"
-                        name="activeMatch"
-                        checked={selectedActivityId === recommendedActivityObj.activityId}
-                        onChange={() => setSelectedActivityId(recommendedActivityObj.activityId)}
-                        style={{ width: 18, height: 18, cursor: 'pointer' }}
-                      />
-                    </div>
-                  </div>
+                    {/* Match Evidence Rationale & Photo Tag Attribution */}
+                    {currentMatch.matchReasons && currentMatch.matchReasons.length > 0 && (
+                      <div style={{ background: '#f8fafc', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '0.65rem 0.85rem' }}>
+                        <div style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
+                          Matching Evidence Breakdown:
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: 6 }}>
+                          {currentMatch.matchReasons.map((reason, idx) => {
+                            const isPhotoTag = reason.toLowerCase().includes('photo evidence') || reason.toLowerCase().includes('confirmed tag');
+                            return (
+                              <span
+                                key={idx}
+                                style={{
+                                  fontSize: '0.725rem',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  background: isPhotoTag ? '#f0f9ff' : '#ffffff',
+                                  border: isPhotoTag ? '1px solid #bae6fd' : '1px solid var(--border-subtle)',
+                                  color: isPhotoTag ? '#0369a1' : 'var(--text-primary)',
+                                  fontWeight: isPhotoTag ? 700 : 500,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                }}
+                              >
+                                {isPhotoTag ? '📷 ' : '✓ '} {reason}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, fontSize: '0.675rem', color: 'var(--text-secondary)' }}>
+                          <div>Keyword/Tag: <strong>{currentMatch.scoreBreakdown.keywordScore}/50</strong></div>
+                          <div>Discipline: <strong>{currentMatch.scoreBreakdown.disciplineScore}/20</strong></div>
+                          <div>Spatial Area: <strong>{currentMatch.scoreBreakdown.areaScore}/15</strong></div>
+                          <div>Fuzzy Sim: <strong>{currentMatch.scoreBreakdown.fuzzyScore}/15</strong></div>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div style={{ padding: '0.85rem', background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 'var(--radius-md)', color: '#991b1b', fontSize: '0.825rem' }}>
                     <strong>No deterministic match found.</strong> Choose a suggested alternative below or search the schedule baseline.

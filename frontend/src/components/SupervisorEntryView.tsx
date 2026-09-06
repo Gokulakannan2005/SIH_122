@@ -15,9 +15,21 @@ import {
   Eye,
   Check,
   Zap,
-  Info
+  Info,
+  Scan,
+  X,
+  RefreshCw,
+  Tag,
+  ShieldCheck,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle
 } from 'lucide-react';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
+import { runLocalOCR, calculateImageFingerprint, normalizeEquipmentTag, OCRScanResult } from '../utils/ocrService';
+
+const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8 MB
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export const SupervisorEntryView: React.FC = () => {
   const {
@@ -28,6 +40,7 @@ export const SupervisorEntryView: React.FC = () => {
     setSelectedInspectorUpdateId,
     setActiveTab,
     offlineMode,
+    addToast,
   } = useProject();
 
   // Active Sub-Tab
@@ -44,8 +57,25 @@ export const SupervisorEntryView: React.FC = () => {
 
   // Photo Evidence State
   const [imagePreview, setImagePreview] = useState<string | null>(SAMPLE_EVIDENCE_IMAGES.pipeWeld);
+  const [imageFilename, setImageFilename] = useState<string>('PHOTO_CW_017_WELD_QA.jpg');
+  const [imageFileSize, setImageFileSize] = useState<number>(2450890);
+  const [imageFingerprint, setImageFingerprint] = useState<string>('a7c3f910e52b89d412c091ea28f73b6490e21bc08192a543881efac99d428901');
   const [imageType, setImageType] = useState<'completion' | 'issue' | 'progress'>('completion');
   const [imageCaption, setImageCaption] = useState('Visual inspection verified for pipe joint erection');
+
+  // OCR Scan State
+  const [isScanningOCR, setIsScanningOCR] = useState<boolean>(false);
+  const [ocrResult, setOcrResult] = useState<OCRScanResult | null>({
+    rawText: 'LINE 24-CW-017 SPOOL WELD SEAM #03 NDT CLEARED PUMP BAY',
+    detectedTags: ['24-CW-017', 'CW-017'],
+    ocrConfidence: 94,
+    status: 'success',
+  });
+  const [showRawOCR, setShowRawOCR] = useState<boolean>(false);
+
+  // Human Tag Confirmation State
+  const [manualTagInput, setManualTagInput] = useState<string>('24-CW-017');
+  const [confirmedTag, setConfirmedTag] = useState<string>('24-CW-017');
 
   // Issue Blocker State
   const [isIssueReport, setIsIssueReport] = useState(false);
@@ -59,21 +89,145 @@ export const SupervisorEntryView: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchCsvRef = useRef<HTMLInputElement>(null);
 
-  // Handle custom image file selection
-  const handleCustomImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Process File Selection & Validation
+  const processImageFile = async (file: File) => {
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      addToast({
+        type: 'error',
+        title: 'Unsupported File Format',
+        message: `File format "${file.type || file.name.split('.').pop()}" is not supported. Please upload JPEG, PNG, or WebP.`,
+      });
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      addToast({
+        type: 'error',
+        title: 'File Size Limit Exceeded',
+        message: `File size is ${(file.size / (1024 * 1024)).toFixed(1)} MB. Maximum allowed limit is 8 MB.`,
+      });
+      return;
+    }
+
     const reader = new FileReader();
-    reader.onload = event => {
-      setImagePreview(event.target?.result as string);
+    reader.onload = async event => {
+      const dataUrl = event.target?.result as string;
+      const hash = await calculateImageFingerprint(file);
+      setImagePreview(dataUrl);
+      setImageFilename(file.name);
+      setImageFileSize(file.size);
+      setImageFingerprint(hash);
+      setOcrResult(null);
+      setConfirmedTag('');
+      setManualTagInput('');
+      addToast({
+        type: 'info',
+        title: 'Photo Evidence Attached',
+        message: `Attached "${file.name}" (${(file.size / 1024).toFixed(0)} KB). Ready for OCR Tag Scan.`,
+      });
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleCustomImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processImageFile(file);
+  };
+
+  // Run Local OCR Scan on Demand
+  const handleRunOCR = async () => {
+    if (!imagePreview) {
+      addToast({
+        type: 'warning',
+        title: 'No Image Attached',
+        message: 'Please attach a photo before running OCR tag scan.',
+      });
+      return;
+    }
+
+    setIsScanningOCR(true);
+    addToast({
+      type: 'info',
+      title: 'OCR Scan Started',
+      message: 'Analyzing photo locally for construction & equipment tags...',
+    });
+
+    try {
+      const res = await runLocalOCR(imagePreview);
+      setOcrResult(res);
+
+      if (res.detectedTags.length > 0) {
+        // Pre-fill first detected candidate
+        setManualTagInput(res.detectedTags[0]);
+        addToast({
+          type: 'success',
+          title: 'OCR Scan Complete',
+          message: `Detected ${res.detectedTags.length} candidate tag(s): ${res.detectedTags.join(', ')} (OCR Confidence: ${res.ocrConfidence}%).`,
+        });
+      } else {
+        addToast({
+          type: 'warning',
+          title: 'No Confident Tag Detected',
+          message: 'No equipment tag was confidently detected. Please enter or confirm a tag manually.',
+        });
+      }
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'OCR Scan Error',
+        message: 'Could not process image text. You can still enter equipment tags manually.',
+      });
+    } finally {
+      setIsScanningOCR(false);
+    }
+  };
+
+  // Human Tag Confirmation Handler
+  const handleConfirmTag = (tagToConfirm: string) => {
+    const norm = normalizeEquipmentTag(tagToConfirm);
+    if (!norm) {
+      addToast({
+        type: 'warning',
+        title: 'Invalid Tag Format',
+        message: 'Please enter a valid equipment tag (e.g. 24-CW-017).',
+      });
+      return;
+    }
+    setConfirmedTag(norm);
+    setManualTagInput(norm);
+    addToast({
+      type: 'success',
+      title: 'Tag Confirmed by Supervisor',
+      message: `Confirmed tag "${norm}" as matching evidence.`,
+    });
+  };
+
+  const handleRemovePhoto = () => {
+    setImagePreview(null);
+    setImageFilename('');
+    setImageFileSize(0);
+    setImageFingerprint('');
+    setOcrResult(null);
+    setConfirmedTag('');
+    setManualTagInput('');
+    addToast({
+      type: 'info',
+      title: 'Photo Evidence Detached',
+      message: 'Cleared attached image and OCR evidence.',
+    });
   };
 
   // Submit field entry
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!description.trim()) return;
+    if (!description.trim()) {
+      addToast({
+        type: 'warning',
+        title: 'Description Required',
+        message: 'Please provide a formal activity description before submitting.',
+      });
+      return;
+    }
 
     await handleAddNewFieldEntry({
       discipline,
@@ -86,6 +240,15 @@ export const SupervisorEntryView: React.FC = () => {
       imageFile: imagePreview || undefined,
       imageType,
       caption: imageCaption,
+      filename: imageFilename || undefined,
+      fileSize: imageFileSize || undefined,
+      sha256Hash: imageFingerprint || undefined,
+      ocrStatus: ocrResult ? ocrResult.status : undefined,
+      ocrConfidence: ocrResult ? ocrResult.ocrConfidence : undefined,
+      ocrRawText: ocrResult ? ocrResult.rawText : undefined,
+      ocrDetectedTags: ocrResult ? ocrResult.detectedTags : undefined,
+      confirmedTag: confirmedTag || undefined,
+      confirmedBy: confirmedTag ? 'supervisor' : 'unconfirmed',
       issueFlag: isIssueReport ? issueFlag : undefined,
       issueSeverity: isIssueReport ? issueSeverity : undefined,
     });
@@ -111,6 +274,9 @@ export const SupervisorEntryView: React.FC = () => {
     img: string;
     imgType: 'completion' | 'issue' | 'progress';
     caption: string;
+    tag: string;
+    detectedTags: string[];
+    filename: string;
     issue?: { flag: string; severity: 'low' | 'medium' | 'critical' };
   }) => {
     setDiscipline(preset.disp);
@@ -121,6 +287,18 @@ export const SupervisorEntryView: React.FC = () => {
     setImagePreview(preset.img);
     setImageType(preset.imgType);
     setImageCaption(preset.caption);
+    setImageFilename(preset.filename);
+    setImageFileSize(2450890);
+    setImageFingerprint('a7c3f910e52b89d412c091ea28f73b6490e21bc08192a543881efac99d428901');
+    setOcrResult({
+      rawText: `VERIFIED TAG: ${preset.tag} INSPECTION CLEARED`,
+      detectedTags: preset.detectedTags,
+      ocrConfidence: 94,
+      status: 'success',
+    });
+    setConfirmedTag(preset.tag);
+    setManualTagInput(preset.tag);
+
     if (preset.issue) {
       setIsIssueReport(true);
       setIssueFlag(preset.issue.flag);
@@ -129,12 +307,16 @@ export const SupervisorEntryView: React.FC = () => {
       setIsIssueReport(false);
       setIssueFlag('');
     }
+
+    addToast({
+      type: 'info',
+      title: 'Template Applied',
+      message: `Loaded template for ${preset.disp} (${preset.tag}).`,
+    });
   };
 
   // Batch file processing trigger
   const handleBatchFileDrop = async (file: File) => {
-    const isTxt = file.name.endsWith('.txt');
-    const isCsv = file.name.endsWith('.csv');
     const isXlsx = file.name.endsWith('.xlsx');
 
     if (isXlsx) {
@@ -150,11 +332,7 @@ export const SupervisorEntryView: React.FC = () => {
       const reader = new FileReader();
       reader.onload = async (e) => {
         const content = e.target?.result as string;
-        if (isTxt) {
-          await handleCustomUpload({ dailyReportTxt: content });
-        } else {
-          await handleCustomUpload({ dailyReportTxt: content });
-        }
+        await handleCustomUpload({ dailyReportTxt: content });
         setSubmitSuccess(`File "${file.name}" parsed and ingested into Datum engine!`);
         setTimeout(() => setSubmitSuccess(null), 4000);
       };
@@ -162,7 +340,6 @@ export const SupervisorEntryView: React.FC = () => {
     }
   };
 
-  // Recent supervisor submissions
   const recentSubmissions = siteUpdates.slice(0, 5);
 
   return (
@@ -171,32 +348,35 @@ export const SupervisorEntryView: React.FC = () => {
       <div className="banner-card">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-            <span className="brand-badge" style={{ background: '#e9f2ff', color: '#0c66e4', borderColor: '#cce0ff' }}>
+            <span className="brand-badge" style={{ background: '#f0f7fc', color: '#0284c7', borderColor: '#bae6fd' }}>
               Field Supervisor Hub
+            </span>
+            <span className="mono-pill" style={{ background: '#f8fafc', color: 'var(--text-muted)' }}>
+              OCR-Assisted Evidence Verification
             </span>
             {offlineMode && (
               <span className="mono-pill" style={{ background: '#fff4e5', color: '#974f0c', borderColor: '#fec195', fontWeight: 700 }}>
-                ⚡ Offline Field Queue Active
+                ⚡ Offline Queue Active
               </span>
             )}
           </div>
           <h1 className="banner-title">
             <Camera size={22} style={{ color: 'var(--brand-primary)' }} />
-            <span>Site Progress & Execution Evidence Portal</span>
+            <span>Site Progress & Photo Evidence Verification</span>
           </h1>
           <p className="banner-desc">
-            Submit daily progress logs, drag-and-drop batch spreadsheets, or record site blockers with photo evidence.
+            Submit daily progress reports, attach photo proof with on-demand local OCR tag extraction, and verify equipment tags for schedule matching.
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem' }}>
           <button
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-sm"
             onClick={() => setActiveTab('site-updates')}
             type="button"
           >
-            <span>View Full Stream</span>
-            <ArrowRight size={14} />
+            <span>View Full Feed</span>
+            <ArrowRight size={13} />
           </button>
         </div>
       </div>
@@ -246,30 +426,11 @@ export const SupervisorEntryView: React.FC = () => {
             fontSize: '0.875rem',
             padding: '0.65rem 1rem',
             borderRadius: 'var(--radius-md)',
-            boxShadow: activeSubTab === 'quick-report' ? '0 1px 3px rgba(12, 102, 228, 0.3)' : 'none',
+            boxShadow: activeSubTab === 'quick-report' ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
           }}
         >
           <FileText size={16} />
           <span>1. Direct Daily Report</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('file-upload')}
-          className="btn"
-          style={{
-            flex: 1,
-            background: activeSubTab === 'file-upload' ? 'var(--brand-primary)' : 'transparent',
-            color: activeSubTab === 'file-upload' ? '#ffffff' : 'var(--text-secondary)',
-            fontWeight: activeSubTab === 'file-upload' ? 700 : 600,
-            fontSize: '0.875rem',
-            padding: '0.65rem 1rem',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: activeSubTab === 'file-upload' ? '0 1px 3px rgba(12, 102, 228, 0.3)' : 'none',
-          }}
-        >
-          <FileSpreadsheet size={16} />
-          <span>2. CSV / XLSX / TXT Upload</span>
         </button>
 
         <button
@@ -284,11 +445,30 @@ export const SupervisorEntryView: React.FC = () => {
             fontSize: '0.875rem',
             padding: '0.65rem 1rem',
             borderRadius: 'var(--radius-md)',
-            boxShadow: activeSubTab === 'photo-proof' ? '0 1px 3px rgba(12, 102, 228, 0.3)' : 'none',
+            boxShadow: activeSubTab === 'photo-proof' ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
           }}
         >
           <Camera size={16} />
-          <span>3. Photo Proof & Blocker Studio</span>
+          <span>2. Photo Evidence & OCR Tag Studio</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('file-upload')}
+          className="btn"
+          style={{
+            flex: 1,
+            background: activeSubTab === 'file-upload' ? 'var(--brand-primary)' : 'transparent',
+            color: activeSubTab === 'file-upload' ? '#ffffff' : 'var(--text-secondary)',
+            fontWeight: activeSubTab === 'file-upload' ? 700 : 600,
+            fontSize: '0.875rem',
+            padding: '0.65rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: activeSubTab === 'file-upload' ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
+          }}
+        >
+          <FileSpreadsheet size={16} />
+          <span>3. Batch Spreadsheet & TXT Upload</span>
         </button>
       </div>
 
@@ -298,23 +478,32 @@ export const SupervisorEntryView: React.FC = () => {
         {/* Left Column: Interactive Form */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
-          {/* TAB 1: DIRECT REPORT */}
-          {activeSubTab === 'quick-report' && (
+          {/* TAB 1: DIRECT REPORT & FORM */}
+          {(activeSubTab === 'quick-report' || activeSubTab === 'photo-proof') && (
             <div className="card">
               <div className="card-header">
                 <div>
                   <h3 className="card-title">
-                    <FileText size={18} style={{ color: 'var(--brand-primary)' }} />
-                    Write Direct Daily Progress Report
+                    {activeSubTab === 'quick-report' ? (
+                      <>
+                        <FileText size={18} style={{ color: 'var(--brand-primary)' }} />
+                        <span>Log Field Execution Event</span>
+                      </>
+                    ) : (
+                      <>
+                        <Scan size={18} style={{ color: 'var(--brand-primary)' }} />
+                        <span>Photo Evidence & OCR-Assisted Verification</span>
+                      </>
+                    )}
                   </h3>
                   <div className="card-desc">
-                    Enter execution details below. Datum AI will automatically match them against schedule milestones.
+                    Attach visual proof, extract OCR candidate tags on demand, and confirm equipment tag evidence.
                   </div>
                 </div>
               </div>
 
               <div className="card-body">
-                {/* 1-Click Field Scenarios */}
+                {/* 1-Click Field Scenarios Toolbar */}
                 <div
                   style={{
                     marginBottom: '1.25rem',
@@ -338,7 +527,7 @@ export const SupervisorEntryView: React.FC = () => {
                     }}
                   >
                     <Zap size={13} style={{ color: 'var(--brand-primary)' }} />
-                    Quick Field Scenarios (1-Click Fill)
+                    Quick Field Scenarios (1-Click Sample Fill):
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                     <button
@@ -349,17 +538,21 @@ export const SupervisorEntryView: React.FC = () => {
                         applyQuickTemplate({
                           disp: 'Piping',
                           area: 'Pump Bay',
-                          desc: 'Hydrostatic testing completed for 8-inch cooling water headers at Pump Bay with zero pressure drop.',
-                          raw: 'Hydro testing completed on cooling water header line 8in Pump Bay zero leaks',
+                          desc: 'Erected 24-inch cooling water line spool Line 24-CW-017 in Pump Bay with full penetration weld clearance.',
+                          raw: 'Line 24-CW-017 spool erected in pump bay NDT test cleared 100% finished',
                           status: 'Completed',
                           img: SAMPLE_EVIDENCE_IMAGES.pipeWeld,
                           imgType: 'completion',
-                          caption: 'Hydro test pressure gauge reading 15.4 bar held for 4 hours',
+                          caption: 'Visual QA Inspection: Weld seam 24-CW-017 completed with full penetration.',
+                          tag: '24-CW-017',
+                          detectedTags: ['24-CW-017', 'CW-017'],
+                          filename: 'PHOTO_CW_017_WELD_QA.jpg',
                         })
                       }
                     >
-                      <span>💧 Hydro Testing Complete</span>
+                      <span>CW-017 Pipe Erection</span>
                     </button>
+
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
@@ -367,18 +560,22 @@ export const SupervisorEntryView: React.FC = () => {
                       onClick={() =>
                         applyQuickTemplate({
                           disp: 'Civil',
-                          area: 'Substation #2',
-                          desc: 'Foundation raft rebar binding finished. 450 m3 concrete pour underway with 2 pump trucks.',
-                          raw: 'Civil foundation raft pour started Substation 2 450 cum pump in place',
-                          status: 'In Progress',
+                          area: 'Pump Bay',
+                          desc: 'Concreting of cooling water pump foundation raft completed. Curing checklist initiated.',
+                          raw: 'Pump foundation concrete pour finished slump test verified M35 mix',
+                          status: 'Completed',
                           img: SAMPLE_EVIDENCE_IMAGES.pumpFoundation,
-                          imgType: 'progress',
-                          caption: 'Slump test checked at 110mm, concrete pour underway',
+                          imgType: 'completion',
+                          caption: 'Concrete Pour & Curing Checklist Verified for Pump Foundation.',
+                          tag: 'CIV-L6-002',
+                          detectedTags: ['CIV-L6-002', 'PUMP-FDN'],
+                          filename: 'CIV_FDN_CONCRETE_POUR_04.jpg',
                         })
                       }
                     >
-                      <span>🏗️ Raft Concrete Pour</span>
+                      <span>Pump Bay Concreting</span>
                     </button>
+
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
@@ -386,25 +583,28 @@ export const SupervisorEntryView: React.FC = () => {
                       onClick={() =>
                         applyQuickTemplate({
                           disp: 'Electrical',
-                          area: 'Switchyard Bay 4',
-                          desc: 'Main 33kV cable tray installation blocked due to heavy mobile crane hydraulic oil leak.',
-                          raw: 'Cable tray work halted at Switchyard Bay 4 due to 50T crane breakdown blocking access',
-                          status: 'Started',
-                          img: SAMPLE_EVIDENCE_IMAGES.craneIssue,
-                          imgType: 'issue',
-                          caption: '50T crane hydraulic oil spill blocking cable route access',
-                          issue: { flag: '50T Mobile Crane Hydraulic Failure — Access road blocked', severity: 'critical' },
+                          area: 'Switchgear Rm',
+                          desc: 'Pulling 415V switchgear feeder cable through tier-2 tray to MCC-415V in progress.',
+                          raw: 'Cable pull in progress tier 2 tray 415V switchgear to MCC 450m pulled',
+                          status: 'In Progress',
+                          img: SAMPLE_EVIDENCE_IMAGES.cableTray,
+                          imgType: 'progress',
+                          caption: '415V Switchgear feeder cable pull in progress.',
+                          tag: 'MCC-415V',
+                          detectedTags: ['MCC-415V', 'ELE-L6-021'],
+                          filename: 'ELE_TRAY_PULL_SWG01.jpg',
                         })
                       }
                     >
-                      <span>⚠️ Site Blocker / Breakdown</span>
+                      <span>MCC-415V Cable Pull</span>
                     </button>
                   </div>
                 </div>
 
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-                  {/* Row 1: Discipline & Area */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  
+                  {/* Row 1: Discipline, Work Area, Status */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
                     <div className="form-group">
                       <label className="form-label">Discipline</label>
                       <select
@@ -413,29 +613,27 @@ export const SupervisorEntryView: React.FC = () => {
                         onChange={e => setDiscipline(e.target.value)}
                       >
                         <option value="Piping">Piping</option>
-                        <option value="Civil">Civil / Structural</option>
-                        <option value="Electrical">Electrical & Power</option>
-                        <option value="Instrumentation">Instrumentation & Control</option>
-                        <option value="Mechanical">Mechanical Equipment</option>
+                        <option value="Civil">Civil</option>
+                        <option value="Electrical">Electrical</option>
+                        <option value="Instrumentation">Instrumentation</option>
+                        <option value="HSE">HSE</option>
                       </select>
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Work Area / Grid Reference</label>
+                      <label className="form-label">Work Area / Front</label>
                       <input
                         type="text"
                         className="form-input"
-                        placeholder="e.g. Pump Bay, Substation #2"
+                        placeholder="e.g. Pump Bay, Substation, Pipe Rack"
                         value={area}
                         onChange={e => setArea(e.target.value)}
+                        required
                       />
                     </div>
-                  </div>
 
-                  {/* Row 2: Status, Quantity & Supervisor */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '1rem' }}>
                     <div className="form-group">
-                      <label className="form-label">Execution Status</label>
+                      <label className="form-label">Event Status</label>
                       <select
                         className="form-select"
                         value={eventStatus}
@@ -446,30 +644,9 @@ export const SupervisorEntryView: React.FC = () => {
                         <option value="Started">Started</option>
                       </select>
                     </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Quantity / Progress</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="e.g. 100%, 450 m3, 12 joints"
-                        value={quantity}
-                        onChange={e => setQuantity(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Reporting Supervisor</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={supervisorName}
-                        onChange={e => setSupervisorName(e.target.value)}
-                      />
-                    </div>
                   </div>
 
-                  {/* Row 3: Formal Activity Description */}
+                  {/* Row 2: Formal Description & Verbatim Text */}
                   <div className="form-group">
                     <label className="form-label">
                       <span>Formal Activity Description</span>
@@ -477,7 +654,7 @@ export const SupervisorEntryView: React.FC = () => {
                     </label>
                     <textarea
                       className="form-textarea"
-                      rows={3}
+                      rows={2}
                       placeholder="e.g. Hydrostatic testing of 8in cooling water line completed at Pump Bay."
                       value={description}
                       onChange={e => setDescription(e.target.value)}
@@ -485,19 +662,309 @@ export const SupervisorEntryView: React.FC = () => {
                     />
                   </div>
 
-                  {/* Row 4: Raw Field Log / Voice Transcript */}
                   <div className="form-group">
                     <label className="form-label">
-                      <span>Raw Field Voice Note / Log Text</span>
+                      <span>Raw Field Log Text</span>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Preserves original site note verbatim</span>
                     </label>
-                    <textarea
-                      className="form-textarea"
-                      rows={3}
-                      placeholder="e.g. Hydro completed on cooling water header line 8in Pump Bay zero leaks"
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Line 24-CW-017 spool erected in pump bay NDT cleared"
                       value={rawText}
                       onChange={e => setRawText(e.target.value)}
                     />
+                  </div>
+
+                  {/* PHOTO EVIDENCE & OCR ATTACHMENT STUDIO SECTION */}
+                  <div
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '1.15rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '1rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Camera size={18} style={{ color: 'var(--brand-primary)' }} />
+                        <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                          Construction Photo Evidence & OCR Tag Verification
+                        </span>
+                      </div>
+                      <span className="mono-pill">JPEG, PNG, WebP &bull; Max 8 MB</span>
+                    </div>
+
+                    {/* Drag-and-Drop / File Selector Zone */}
+                    {!imagePreview ? (
+                      <div
+                        style={{
+                          border: '2px dashed var(--border-default)',
+                          borderRadius: 'var(--radius-md)',
+                          padding: '1.75rem 1rem',
+                          textAlign: 'center',
+                          background: '#ffffff',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                        }}
+                        onClick={() => fileInputRef.current?.click()}
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={e => {
+                          e.preventDefault();
+                          if (e.dataTransfer.files?.[0]) {
+                            processImageFile(e.dataTransfer.files[0]);
+                          }
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: '50%',
+                            background: 'var(--brand-surface)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--brand-primary)',
+                          }}
+                        >
+                          <UploadCloud size={24} />
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                          Click to Attach Construction Photo or Drag & Drop Here
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Attach site progress photo, weld seam inspection, or equipment nameplate
+                        </div>
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          accept=".jpg,.jpeg,.png,.webp"
+                          style={{ display: 'none' }}
+                          onChange={handleCustomImageUpload}
+                        />
+                      </div>
+                    ) : (
+                      /* Attached Image Preview & OCR Operations */
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '130px minmax(0, 1fr)',
+                            gap: '1rem',
+                            background: '#ffffff',
+                            padding: '0.85rem',
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid var(--border-subtle)',
+                          }}
+                        >
+                          <img
+                            src={imagePreview}
+                            alt="Attached Evidence"
+                            style={{
+                              width: '130px',
+                              height: '95px',
+                              objectFit: 'cover',
+                              borderRadius: 'var(--radius-xs)',
+                              border: '1px solid var(--border-subtle)',
+                            }}
+                          />
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {imageFilename || 'Attached Photo'}
+                                </div>
+                                <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                                  Size: {(imageFileSize / 1024).toFixed(0)} KB &bull; Type: {imageType.toUpperCase()}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '2px 6px', fontSize: '0.7rem' }}
+                                  onClick={() => fileInputRef.current?.click()}
+                                >
+                                  Replace
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '2px 6px', fontSize: '0.7rem', color: '#b91c1c' }}
+                                  onClick={handleRemovePhoto}
+                                  title="Remove attached photo"
+                                >
+                                  <X size={12} />
+                                </button>
+                                <input
+                                  type="file"
+                                  ref={fileInputRef}
+                                  accept=".jpg,.jpeg,.png,.webp"
+                                  style={{ display: 'none' }}
+                                  onChange={handleCustomImageUpload}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Integrity Fingerprint Badge */}
+                            {imageFingerprint && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.675rem', color: 'var(--text-subtle)' }}>
+                                <ShieldCheck size={12} style={{ color: 'var(--brand-primary)', flexShrink: 0 }} />
+                                <span style={{ fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  SHA-256 Fingerprint: {imageFingerprint.slice(0, 20)}...
+                                </span>
+                              </div>
+                            )}
+
+                            {/* On-Demand OCR Action Button */}
+                            <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                style={{ padding: '4px 10px', fontSize: '0.775rem' }}
+                                onClick={handleRunOCR}
+                                disabled={isScanningOCR}
+                              >
+                                {isScanningOCR ? (
+                                  <>
+                                    <RefreshCw size={13} className="spin" />
+                                    <span>Scanning Photo with Local OCR...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Scan size={13} />
+                                    <span>Run OCR Tag Scan</span>
+                                  </>
+                                )}
+                              </button>
+
+                              {ocrResult && (
+                                <span className="mono-pill" style={{ fontSize: '0.675rem' }}>
+                                  OCR Confidence: <strong>{ocrResult.ocrConfidence}%</strong>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* OCR Detected Candidates & Confirmation Card */}
+                        {ocrResult && (
+                          <div
+                            style={{
+                              background: '#ffffff',
+                              border: '1px solid var(--border-subtle)',
+                              borderRadius: 'var(--radius-sm)',
+                              padding: '0.85rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '0.65rem',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                                Candidate Equipment Tags Detected:
+                              </span>
+                              {ocrResult.rawText && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowRawOCR(!showRawOCR)}
+                                  style={{ background: 'none', border: 'none', color: 'var(--brand-primary)', fontSize: '0.725rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}
+                                >
+                                  <span>{showRawOCR ? 'Hide' : 'View'} Raw OCR Text</span>
+                                  {showRawOCR ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Raw OCR Text Collapsible Dropdown */}
+                            {showRawOCR && ocrResult.rawText && (
+                              <div className="raw-code-box" style={{ fontSize: '0.725rem', padding: '0.5rem' }}>
+                                {ocrResult.rawText}
+                              </div>
+                            )}
+
+                            {/* Candidate Tag Selectable Chips */}
+                            {ocrResult.detectedTags.length > 0 ? (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', alignItems: 'center' }}>
+                                {ocrResult.detectedTags.map(tag => (
+                                  <button
+                                    key={tag}
+                                    type="button"
+                                    onClick={() => handleConfirmTag(tag)}
+                                    className={`btn btn-sm ${confirmedTag === tag ? 'btn-primary' : 'btn-secondary'}`}
+                                    style={{ fontSize: '0.775rem', padding: '3px 8px', fontFamily: 'var(--font-mono)' }}
+                                  >
+                                    <Tag size={12} />
+                                    <span>{tag}</span>
+                                    {confirmedTag === tag && <Check size={12} style={{ marginLeft: 3 }} />}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                No equipment tag was confidently detected. Enter or confirm a tag manually below.
+                              </div>
+                            )}
+
+                            {/* Human Tag Confirmation & Correction Input */}
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: 4 }}>
+                              <div style={{ flex: 1 }}>
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+                                  placeholder="Type or correct equipment tag (e.g. 24-CW-017)..."
+                                  value={manualTagInput}
+                                  onChange={e => setManualTagInput(e.target.value)}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleConfirmTag(manualTagInput)}
+                              >
+                                <span>Confirm Tag</span>
+                              </button>
+                            </div>
+
+                            {/* Confirmed Tag Status Banner */}
+                            {confirmedTag ? (
+                              <div
+                                style={{
+                                  background: 'var(--status-ready-bg)',
+                                  border: '1px solid var(--status-ready-border)',
+                                  color: 'var(--status-ready-fg)',
+                                  padding: '0.45rem 0.65rem',
+                                  borderRadius: 'var(--radius-xs)',
+                                  fontSize: '0.75rem',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                }}
+                              >
+                                <CheckCircle2 size={14} />
+                                <span>
+                                  Confirmed tag <strong>{confirmedTag}</strong> will be considered as matching evidence. It will not automatically approve the schedule link.
+                                </span>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                                Status: <strong>No tag confirmed</strong>. Human confirmation is required to strengthen schedule matching.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Blocker / Issue Toggle Card */}
@@ -579,7 +1046,7 @@ export const SupervisorEntryView: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 2: FILE UPLOAD (CSV, XLSX, TXT) */}
+          {/* TAB 3: FILE UPLOAD (CSV, XLSX, TXT) */}
           {activeSubTab === 'file-upload' && (
             <div className="card">
               <div className="card-header">
@@ -595,7 +1062,6 @@ export const SupervisorEntryView: React.FC = () => {
               </div>
 
               <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                {/* File Dropzone */}
                 <div
                   style={{
                     border: '2px dashed var(--brand-primary)',
@@ -651,173 +1117,6 @@ export const SupervisorEntryView: React.FC = () => {
                     }}
                   />
                 </div>
-
-                {/* Pre-formatted Sample Loaders */}
-                <div style={{ background: '#f1f5f9', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.65rem' }}>
-                    ⚡ Instant Sample Data Ingestion (One-Click Test)
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => {
-                        const sampleCSV = `SiteUpdate_ID,Discipline,Activity_Description,Raw_Text,Work_Area,Status,Quantity,Supervisor
-SUP-101,Piping,Erection of 12-inch main steam header spool,Erected 12in spool on rack line B,Rack Line B,Completed,1 spool,R. Sharma
-SUP-102,Civil,Concreting of turbine deck pier foundation,Poured 80 m3 concrete pier foundation,Turbine Area,Completed,80 m3,A. Verma
-SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable to MCC-2,Switchgear Rm,In Progress,650m,M. Gupta`;
-                        handleCustomUpload({ dailyReportTxt: sampleCSV });
-                        setSubmitSuccess('Loaded 3 sample CSV entries and matched to schedule!');
-                        setTimeout(() => setSubmitSuccess(null), 4000);
-                      }}
-                    >
-                      <FileCode size={15} />
-                      <span>Load Sample Daily CSV</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => {
-                        const sampleTXT = `Daily Supervisor Site Note - 06 Sept 2026
--------------------------------------------
-1. Hydro test 8in CW header Pump Bay completed zero pressure loss.
-2. Foundation raft rebar binding 100% finished Substation 2.
-3. 33kV cable tray work stopped switchyard bay 4 due to crane spill.`;
-                        handleCustomUpload({ dailyReportTxt: sampleTXT });
-                        setSubmitSuccess('Parsed text file into structured execution events!');
-                        setTimeout(() => setSubmitSuccess(null), 4000);
-                      }}
-                    >
-                      <FileText size={15} />
-                      <span>Load Raw Text Log</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: PHOTO PROOF & BLOCKER STUDIO */}
-          {activeSubTab === 'photo-proof' && (
-            <div className="card">
-              <div className="card-header">
-                <div>
-                  <h3 className="card-title">
-                    <Camera size={18} style={{ color: 'var(--brand-primary)' }} />
-                    Photo Evidence & Visual Proof Ingestion
-                  </h3>
-                  <div className="card-desc">
-                    Attach visual proof of completed work or document site blockers and equipment breakdowns.
-                  </div>
-                </div>
-              </div>
-
-              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                {/* Photo Previews & Presets */}
-                <div>
-                  <label className="form-label">Select Realistic Construction Evidence Sample</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
-                    {[
-                      { key: 'pipeWeld', label: 'Pipe Weld NDT', src: SAMPLE_EVIDENCE_IMAGES.pipeWeld, type: 'completion' as const, cap: 'Visual inspection verified for pipe joint erection' },
-                      { key: 'pumpFoundation', label: 'Raft Concreting', src: SAMPLE_EVIDENCE_IMAGES.pumpFoundation, type: 'progress' as const, cap: 'Slump test checked at 110mm, concrete pour underway' },
-                      { key: 'cableTray', label: 'Cable Tray Pull', src: SAMPLE_EVIDENCE_IMAGES.cableTray, type: 'completion' as const, cap: 'Tier 3 cable tray support brackets bolted and torqued' },
-                      { key: 'craneIssue', label: 'Crane Breakdown', src: SAMPLE_EVIDENCE_IMAGES.craneIssue, type: 'issue' as const, cap: '50T crane hydraulic oil leak blocking access road' },
-                    ].map(item => (
-                      <div
-                        key={item.key}
-                        onClick={() => {
-                          setImagePreview(item.src);
-                          setImageType(item.type);
-                          setImageCaption(item.cap);
-                          if (item.type === 'issue') {
-                            setIsIssueReport(true);
-                            setIssueFlag('Equipment Breakdown — Access blocked');
-                            setIssueSeverity('critical');
-                          }
-                        }}
-                        style={{
-                          border: imagePreview === item.src ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
-                          borderRadius: 'var(--radius-md)',
-                          overflow: 'hidden',
-                          cursor: 'pointer',
-                          background: '#ffffff',
-                          boxShadow: imagePreview === item.src ? 'var(--shadow-card-hover)' : 'var(--shadow-xs)',
-                        }}
-                      >
-                        <img src={item.src} alt={item.label} style={{ width: '100%', height: '80px', objectFit: 'cover' }} />
-                        <div style={{ padding: '6px 8px', fontSize: '0.75rem', fontWeight: 600, textAlign: 'center' }}>
-                          {item.label}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Custom Upload Option */}
-                <div>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <UploadCloud size={15} />
-                      <span>Upload Custom Image From Device</span>
-                    </button>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      accept="image/*"
-                      style={{ display: 'none' }}
-                      onChange={handleCustomImageUpload}
-                    />
-                  </div>
-                </div>
-
-                {/* Selected Image Detail & Caption */}
-                {imagePreview && (
-                  <div
-                    style={{
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '1rem',
-                      background: '#f8fafc',
-                      display: 'flex',
-                      gap: '1rem',
-                    }}
-                  >
-                    <img
-                      src={imagePreview}
-                      alt="Selected Evidence"
-                      style={{ width: 140, height: 95, objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)' }}
-                    />
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span
-                          className="mono-pill"
-                          style={{
-                            background: imageType === 'issue' ? '#ffebe6' : '#dcfff1',
-                            color: imageType === 'issue' ? '#ae2e24' : '#1f845a',
-                            borderColor: imageType === 'issue' ? '#fd9891' : '#7ee2b8',
-                            fontSize: '0.725rem',
-                            fontWeight: 700,
-                          }}
-                        >
-                          {imageType.toUpperCase()}
-                        </span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Timestamp: 2026-09-06 13:05 IST</span>
-                      </div>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="Caption / Inspection Note"
-                        value={imageCaption}
-                        onChange={e => setImageCaption(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -832,31 +1131,31 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
               <div>
                 <h4 className="card-title">
                   <Sparkles size={16} style={{ color: 'var(--brand-primary)' }} />
-                  Datum NLP & Spatial Engine
+                  Deterministic Evidence Standards
                 </h4>
-                <div className="card-desc">Deterministic multi-factor matching intelligence.</div>
+                <div className="card-desc">Explainable matching and photo provenance.</div>
               </div>
             </div>
 
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', fontSize: '0.8125rem' }}>
-                <CheckCircle2 size={16} style={{ color: '#1f845a', marginTop: 2, flexShrink: 0 }} />
+                <CheckCircle2 size={16} style={{ color: '#047857', marginTop: 2, flexShrink: 0 }} />
                 <div>
-                  <strong>Semantic Fuzzy Matching:</strong> Evaluates Jaccard, Token Sort, and Levenshtein similarity against schedule titles.
+                  <strong>OCR Tag Evidence:</strong> Extracted tags (e.g. <code>24-CW-017</code>) provide verified keyword match points upon human confirmation.
                 </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', fontSize: '0.8125rem' }}>
-                <CheckCircle2 size={16} style={{ color: '#1f845a', marginTop: 2, flexShrink: 0 }} />
+                <CheckCircle2 size={16} style={{ color: '#047857', marginTop: 2, flexShrink: 0 }} />
                 <div>
-                  <strong>Discipline & Spatial Filter:</strong> Enforces discipline taxonomy boundaries (Piping vs Civil vs Electrical).
+                  <strong>Mandatory Human Gate:</strong> OCR output is strictly candidate evidence. Planners must explicitly approve or relink.
                 </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', fontSize: '0.8125rem' }}>
-                <CheckCircle2 size={16} style={{ color: '#1f845a', marginTop: 2, flexShrink: 0 }} />
+                <CheckCircle2 size={16} style={{ color: '#047857', marginTop: 2, flexShrink: 0 }} />
                 <div>
-                  <strong>Photo Provenance Hash:</strong> Hashes attached photo files and stores SHA256 in immutable audit log.
+                  <strong>Integrity Fingerprint:</strong> Attached photos are hashed via Web Crypto SHA-256 for tamper-evident provenance.
                 </div>
               </div>
             </div>
@@ -901,15 +1200,20 @@ SUP-103,Electrical,Cable pulling for 415V MCC motor feeds,Pulled 650m 3.5C cable
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                           <span className="mono-pill" style={{ fontSize: '0.7rem' }}>{item.id}</span>
                           <span style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>{item.discipline}</span>
+                          {item.confirmedTag && (
+                            <span className="mono-pill" style={{ fontSize: '0.65rem', color: 'var(--brand-primary)', fontWeight: 700 }}>
+                              Tag: {item.confirmedTag}
+                            </span>
+                          )}
                         </div>
                         <span
                           className="mono-pill"
                           style={{
                             fontSize: '0.675rem',
                             fontWeight: 700,
-                            background: matchCategory === 'ready' ? '#dcfff1' : matchCategory === 'unplanned' ? '#ffebe6' : '#fff4e5',
-                            color: matchCategory === 'ready' ? '#1f845a' : matchCategory === 'unplanned' ? '#ae2e24' : '#974f0c',
-                            borderColor: matchCategory === 'ready' ? '#7ee2b8' : matchCategory === 'unplanned' ? '#fd9891' : '#fec195',
+                            background: matchCategory === 'ready' ? '#ecfdf5' : matchCategory === 'unplanned' ? '#fff1f2' : '#fffbeb',
+                            color: matchCategory === 'ready' ? '#047857' : matchCategory === 'unplanned' ? '#991b1b' : '#b45309',
+                            borderColor: matchCategory === 'ready' ? '#6ee7b7' : matchCategory === 'unplanned' ? '#fca5a5' : '#fde68a',
                           }}
                         >
                           {matchCategory.toUpperCase()}

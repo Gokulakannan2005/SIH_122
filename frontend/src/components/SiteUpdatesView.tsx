@@ -532,18 +532,19 @@ export const SiteUpdatesView: React.FC = () => {
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: 2,
+                                  gap: 3,
                                   fontSize: '0.675rem',
-                                  color: 'var(--brand-primary)',
+                                  color: '#0369a1',
                                   background: '#f0f9ff',
-                                  padding: '1px 5px',
+                                  padding: '1px 6px',
                                   borderRadius: 3,
                                   border: '1px solid #bae6fd',
+                                  fontWeight: 600,
                                 }}
-                                title="Site supervisor photo evidence attached"
+                                title={`Site photo attached: ${update.images[0].confirmedTag ? `Tag [${update.images[0].confirmedTag}]` : 'Unconfirmed tag'}`}
                               >
                                 <Camera size={10} />
-                                <span>Photo</span>
+                                <span>{update.images[0].confirmedTag || 'Photo'}</span>
                               </span>
                             )}
                             <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
@@ -689,8 +690,8 @@ export const SiteUpdatesView: React.FC = () => {
                       </td>
                       <td>
                         {update.images && update.images.length > 0 ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--brand-primary)', fontSize: '0.75rem', fontWeight: 600 }}>
-                            <Camera size={13} /> {update.images.length}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#0369a1', fontSize: '0.75rem', fontWeight: 600 }}>
+                            <Camera size={13} /> {update.images[0].confirmedTag || 'Photo'}
                           </span>
                         ) : (
                           <span style={{ color: 'var(--text-subtle)', fontSize: '0.75rem' }}>—</span>

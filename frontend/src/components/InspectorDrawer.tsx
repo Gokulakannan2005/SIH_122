@@ -31,6 +31,8 @@ export const InspectorDrawer: React.FC = () => {
     plannerDecisions,
     handlePlannerAction,
     handleEditUpdate,
+    handleConfirmImageTag,
+    handleRemoveImageFromUpdate,
     currentRole,
   } = useProject();
 
@@ -53,6 +55,11 @@ export const InspectorDrawer: React.FC = () => {
   const [editDate, setEditDate] = useState<string>('');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Photo Evidence State
+  const [selectedTagInput, setSelectedTagInput] = useState<string>('');
+  const [showRawOcr, setShowRawOcr] = useState(false);
+  const [copiedHash, setCopiedHash] = useState(false);
+
   useEffect(() => {
     if (update) {
       setEditDesc(update.extractedDescription);
@@ -64,6 +71,9 @@ export const InspectorDrawer: React.FC = () => {
       setSelectedActivityId(curDec?.linkedActivityId || curMatch?.candidateActivityId || null);
       setPlannerNote(curDec?.plannerNote || '');
       setSaveSuccess(false);
+
+      const firstImg = update.images && update.images.length > 0 ? update.images[0] : null;
+      setSelectedTagInput(firstImg?.confirmedTag || update.confirmedTag || '');
     }
   }, [selectedInspectorUpdateId, siteUpdates, matchResults, plannerDecisions]);
 
@@ -95,10 +105,31 @@ export const InspectorDrawer: React.FC = () => {
   };
 
   const isSupervisor = currentRole === 'supervisor';
+  const attachedImage = update.images && update.images.length > 0 ? update.images[0] : null;
+
+  const copyHashToClipboard = (hash: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(hash);
+      setCopiedHash(true);
+      setTimeout(() => setCopiedHash(false), 2000);
+    }
+  };
+
+  const submitTagConfirmation = (tagToConfirm: string) => {
+    if (!attachedImage) return;
+    const cleanTag = tagToConfirm.trim().toUpperCase();
+    if (!cleanTag) return;
+    handleConfirmImageTag(
+      update.id,
+      attachedImage.id,
+      cleanTag,
+      isSupervisor ? 'supervisor' : 'planner'
+    );
+  };
 
   return (
     <div className="drawer-backdrop" onClick={() => setSelectedInspectorUpdateId(null)}>
-      <div className="drawer-pane" onClick={e => e.stopPropagation()} style={{ width: '480px', maxWidth: '95vw' }}>
+      <div className="drawer-pane" onClick={e => e.stopPropagation()} style={{ width: '500px', maxWidth: '95vw' }}>
         
         {/* Drawer Header */}
         <div className="drawer-header" style={{ background: '#f8fafc', borderBottom: '1px solid var(--border-subtle)', padding: '1rem 1.25rem' }}>
@@ -117,7 +148,7 @@ export const InspectorDrawer: React.FC = () => {
               {isSupervisor ? (
                 <>
                   <HardHat size={18} style={{ color: 'var(--brand-primary)' }} />
-                  <span>Field Record & Photo Inspector</span>
+                  <span>Field Record & Evidence Inspector</span>
                 </>
               ) : (
                 <>
@@ -141,20 +172,174 @@ export const InspectorDrawer: React.FC = () => {
         {/* Drawer Body */}
         <div className="drawer-body" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           
-          {/* Section 0: Attached Photo Evidence */}
-          {update.images && update.images.length > 0 && (
-            <div className="card" style={{ padding: '0.85rem 1rem', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {/* Section 0: Attached Photo Evidence & OCR Verification */}
+          {attachedImage && (
+            <div className="card" style={{ padding: '0.9rem 1.1rem', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.65rem', border: '1px solid #bae6fd' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.775rem', fontWeight: 800, color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <Camera size={15} /> Attached Field Photo Proof ({update.images.length})
+                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Camera size={16} /> Construction Photo Proof
                 </span>
-                <span className="mono-pill" style={{ textTransform: 'capitalize' }}>{update.images[0].type}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="mono-pill" style={{ textTransform: 'capitalize', fontSize: '0.7rem' }}>
+                    {attachedImage.type}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImageFromUpdate(update.id, attachedImage.id)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--status-unplanned-fg)',
+                      cursor: 'pointer',
+                      padding: '2px 4px',
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 3,
+                    }}
+                    title="Remove Photo Evidence"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
-              <div style={{ borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: '#0f172a', maxHeight: 200, display: 'flex', justifyContent: 'center' }}>
-                <img src={update.images[0].url} alt="Photo Evidence" style={{ maxHeight: 200, width: '100%', objectFit: 'contain' }} />
+
+              {/* Image Preview Container */}
+              <div style={{ borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: '#0f172a', maxHeight: 220, display: 'flex', justifyContent: 'center' }}>
+                <img src={attachedImage.url} alt="Photo Evidence" style={{ maxHeight: 220, width: '100%', objectFit: 'contain' }} />
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: 1.4 }}>
-                &ldquo;{update.images[0].caption}&rdquo; &bull; {update.images[0].timestamp} ({update.images[0].supervisor})
+
+              {/* File Details & SHA-256 Integrity Hash */}
+              <div style={{ background: '#f8fafc', padding: '0.5rem 0.65rem', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
+                  <span>File: <strong>{attachedImage.filename || 'PHOTO_PROOF.jpg'}</strong></span>
+                  <span>{attachedImage.fileSize ? `${(attachedImage.fileSize / 1024).toFixed(1)} KB` : 'Local Capture'}</span>
+                </div>
+                {attachedImage.sha256Hash && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)' }} title={`SHA-256: ${attachedImage.sha256Hash}`}>
+                      Fingerprint: <strong>{attachedImage.sha256Hash.substring(0, 16)}...</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyHashToClipboard(attachedImage.sha256Hash || '')}
+                      style={{ background: 'none', border: 'none', color: 'var(--brand-primary)', cursor: 'pointer', fontSize: '0.675rem', fontWeight: 700 }}
+                    >
+                      {copiedHash ? '✓ Copied' : 'Copy Hash'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* OCR Tag Extraction & Confidence Section */}
+              <div style={{ padding: '0.6rem 0.75rem', background: '#f0f9ff', borderRadius: 'var(--radius-xs)', border: '1px solid #e0f2fe', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    OCR Equipment Tag Detection
+                  </span>
+                  {attachedImage.ocrConfidence !== undefined && (
+                    <span className="mono-pill" style={{ fontSize: '0.675rem', background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd' }}>
+                      {attachedImage.ocrConfidence}% OCR Confidence
+                    </span>
+                  )}
+                </div>
+
+                {/* Candidate Tag Chips */}
+                {attachedImage.ocrDetectedTags && attachedImage.ocrDetectedTags.length > 0 ? (
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 4 }}>
+                      Detected Candidates (Click to select & confirm):
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                      {attachedImage.ocrDetectedTags.map(tag => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTagInput(tag);
+                            submitTagConfirmation(tag);
+                          }}
+                          style={{
+                            background: attachedImage.confirmedTag === tag ? 'var(--brand-primary)' : '#ffffff',
+                            color: attachedImage.confirmedTag === tag ? '#ffffff' : 'var(--brand-primary)',
+                            border: '1px solid var(--brand-primary)',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            fontFamily: 'var(--font-mono)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <span>{tag}</span>
+                          {attachedImage.confirmedTag === tag && <span>✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
+                    {attachedImage.ocrStatus === 'scanning'
+                      ? 'Analyzing photo text locally...'
+                      : 'No equipment tag was confidently detected. Enter or confirm a tag manually.'}
+                  </div>
+                )}
+
+                {/* Tag Confirmation Box */}
+                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ fontSize: '0.775rem', padding: '4px 8px', fontFamily: 'var(--font-mono)', flex: 1 }}
+                    placeholder="e.g. 24-CW-017, PT-2401"
+                    value={selectedTagInput}
+                    onChange={e => setSelectedTagInput(e.target.value.toUpperCase())}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: '0.725rem', whiteSpace: 'nowrap' }}
+                    onClick={() => submitTagConfirmation(selectedTagInput)}
+                  >
+                    Confirm Tag
+                  </button>
+                </div>
+
+                {/* Confirmed Tag Notice & Non-Auto-Approve Disclaimer */}
+                {attachedImage.confirmedTag ? (
+                  <div style={{ fontSize: '0.725rem', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', padding: '4px 8px', borderRadius: '4px', lineHeight: 1.35 }}>
+                    <strong>✓ Confirmed Tag: {attachedImage.confirmedTag}</strong> ({attachedImage.confirmedBy || 'confirmed'}).
+                    <div style={{ fontSize: '0.675rem', color: '#047857', marginTop: 2 }}>
+                      Confirmed tag will be considered as matching evidence for L5/L6 milestone linkage. It will not automatically approve the schedule link.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+                    Status: <strong>No tag confirmed</strong>. Human confirmation is required before matching integration.
+                  </div>
+                )}
+
+                {/* Collapsible Raw OCR Text */}
+                {attachedImage.ocrRawText && (
+                  <div style={{ marginTop: 2 }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowRawOcr(!showRawOcr)}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.675rem', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                    >
+                      {showRawOcr ? 'Hide Raw OCR Text' : 'View Raw OCR Extracted Text'}
+                    </button>
+                    {showRawOcr && (
+                      <div className="raw-code-box" style={{ marginTop: 4, maxHeight: 90, fontSize: '0.675rem', padding: '4px 6px' }}>
+                        {attachedImage.ocrRawText}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

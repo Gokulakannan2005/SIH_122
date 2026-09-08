@@ -122,7 +122,7 @@ export const AuditTrailModal: React.FC = () => {
                   style={{
                     padding: '0.65rem 0.85rem',
                     borderRadius: 'var(--radius-xs)',
-                    background: '#ffffff',
+                    background: 'var(--bg-surface-secondary)',
                     border: '1px solid var(--border-subtle)',
                     fontSize: '0.775rem',
                   }}

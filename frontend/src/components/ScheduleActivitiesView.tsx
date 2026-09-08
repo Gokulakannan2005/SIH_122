@@ -9,8 +9,14 @@ import {
   List,
   Layers,
   Calendar,
-  Clock
+  Clock,
+  Activity,
+  FileDown,
+  Sparkles,
+  Download
 } from 'lucide-react';
+import { GanttTimelineView } from './GanttTimelineView';
+import { exportPrimaveraP6XER, exportMSProjectXML } from '../utils/scheduleExportService';
 
 export const ScheduleActivitiesView: React.FC = () => {
   const {
@@ -19,10 +25,14 @@ export const ScheduleActivitiesView: React.FC = () => {
     plannerDecisions,
     matchResults,
     setSelectedScheduleActivityId,
+    addToast,
+    currentRole,
   } = useProject();
 
-  // View Mode: 'table' vs 'cards'
-  const [viewMode, setViewMode] = useState<'table' | 'cards'>('cards');
+  const isSupervisor = currentRole === 'supervisor';
+
+  // View Mode: 'table' vs 'cards' vs 'gantt'
+  const [viewMode, setViewMode] = useState<'table' | 'cards' | 'gantt'>('gantt');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -121,41 +131,90 @@ export const ScheduleActivitiesView: React.FC = () => {
     }).length;
   };
 
-  // Discipline Color Map for Trello-style Label Chips
+  // Discipline Color Map for Label Chips (Clean theme-adaptive translucent colors)
   const getDisciplineColor = (disc: string) => {
     switch (disc) {
       case 'Civil':
-        return { bg: '#e9f2ff', text: '#0c66e4', border: '#cce0ff' };
+        return { bg: 'rgba(59, 130, 246, 0.14)', text: 'var(--brand-primary)', border: 'rgba(59, 130, 246, 0.3)' };
       case 'Piping':
-        return { bg: '#dcfff1', text: '#1f845a', border: '#7ee2b8' };
+        return { bg: 'rgba(16, 185, 129, 0.14)', text: 'var(--status-ready-fg)', border: 'rgba(16, 185, 129, 0.3)' };
       case 'Electrical':
-        return { bg: '#fff4e5', text: '#974f0c', border: '#fec195' };
+        return { bg: 'rgba(245, 158, 11, 0.14)', text: 'var(--status-review-fg)', border: 'rgba(245, 158, 11, 0.3)' };
       case 'Instrumentation':
-        return { bg: '#f3f0ff', text: '#6e5dc6', border: '#d3cbfb' };
+        return { bg: 'rgba(168, 85, 247, 0.14)', text: '#a855f7', border: 'rgba(168, 85, 247, 0.3)' };
       case 'HSE':
-        return { bg: '#ffebe6', text: '#ae2e24', border: '#fd9891' };
+        return { bg: 'rgba(239, 68, 68, 0.14)', text: 'var(--status-unplanned-fg)', border: 'rgba(239, 68, 68, 0.3)' };
       default:
-        return { bg: '#f1f2f4', text: '#44546f', border: '#dfe1e6' };
+        return { bg: 'var(--bg-surface-secondary)', text: 'var(--text-secondary)', border: 'var(--border-subtle)' };
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div id="demo-target-parsed-activities" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
             <CalendarCheck size={20} style={{ color: 'var(--brand-primary)' }} />
-            Master Schedule Activities
+            {isSupervisor ? 'Project Schedule Baseline & Workfront Deliverables' : 'Master Schedule Activities & 4D Progress Intelligence'}
           </h2>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
-            Baseline L5/L6 deliverables, progress tracking, planned vs. actual windows, and delay variance.
+            {isSupervisor
+              ? 'Active engineering milestones, planned execution windows, WBS Level 5 deliverables, and site progress.'
+              : 'Oracle Primavera P6 & MS Project WBS baselines, 4D Critical Path Gantt, Earned Value S-Curves, and real-time field progress.'}
           </p>
         </div>
 
-        {/* View Mode Toggle (Cards vs Table) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+        {/* Action Controls: Exporters & View Mode Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+          {/* 1-Click Export Action Buttons */}
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            style={{ fontSize: '0.725rem', padding: '0.35rem 0.65rem' }}
+            onClick={() => {
+              exportPrimaveraP6XER(enrichedSchedule, siteUpdates, plannerDecisions);
+              addToast({
+                type: 'success',
+                title: 'Oracle Primavera P6 XER Exported',
+                message: `Exported ${enrichedSchedule.length} WBS activities with reconciled actual start/finish dates.`,
+              });
+            }}
+            title="Download Oracle Primavera P6 compatible .XER file"
+          >
+            <Download size={12} />
+            <span>Export P6 (.XER)</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            style={{ fontSize: '0.725rem', padding: '0.35rem 0.65rem' }}
+            onClick={() => {
+              exportMSProjectXML(enrichedSchedule);
+              addToast({
+                type: 'success',
+                title: 'Microsoft Project XML Exported',
+                message: `Exported ${enrichedSchedule.length} milestone activities into MS-Project XML format.`,
+              });
+            }}
+            title="Download Microsoft Project XML file"
+          >
+            <FileDown size={12} />
+            <span>Export MSP (.XML)</span>
+          </button>
+
+          {/* View Mode Toggle (4D Gantt vs Cards vs Table) */}
           <div className="view-mode-toggle">
+            <button
+              className={`view-mode-btn ${viewMode === 'gantt' ? 'active' : ''}`}
+              onClick={() => setViewMode('gantt')}
+              type="button"
+              style={{ fontWeight: viewMode === 'gantt' ? 800 : 600 }}
+            >
+              <Activity size={13} style={{ color: viewMode === 'gantt' ? 'var(--brand-primary)' : 'inherit' }} />
+              <span>4D Gantt & S-Curve</span>
+            </button>
             <button
               className={`view-mode-btn ${viewMode === 'cards' ? 'active' : ''}`}
               onClick={() => setViewMode('cards')}
@@ -266,8 +325,14 @@ export const ScheduleActivitiesView: React.FC = () => {
         )}
       </div>
 
-      {/* Main Content: Card Grid Mode vs Table View Mode */}
-      {viewMode === 'cards' ? (
+      {/* Main Content: 4D Gantt View vs Card Grid Mode vs Table View Mode */}
+      {viewMode === 'gantt' ? (
+        <GanttTimelineView
+          activities={filteredActivities}
+          siteUpdates={siteUpdates}
+          onSelectActivity={setSelectedScheduleActivityId}
+        />
+      ) : viewMode === 'cards' ? (
         /* Card Grid View (Trello/Linear Project Cards) */
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '0.85rem' }}>
           {filteredActivities.length === 0 ? (

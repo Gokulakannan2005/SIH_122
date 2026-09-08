@@ -190,8 +190,8 @@ export const ScheduleActivityDrawer: React.FC = () => {
                       key={u.id}
                       style={{
                         padding: '0.65rem 0.75rem',
-                        background: '#ffffff',
-                        border: '1px solid var(--border-subtle)',
+                        background: 'var(--bg-surface-secondary)',
+                        border: '1px solid var(--border-default)',
                         borderRadius: 'var(--radius-xs)',
                         display: 'flex',
                         flexDirection: 'column',

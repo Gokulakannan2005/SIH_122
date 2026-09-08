@@ -1,16 +1,17 @@
 /**
- * Datum Speech Parser: Multilingual Spoken Field & Intent Extractor
- * Deterministically parses continuous spoken field transcripts (English, Hindi, Tamil)
- * in both Latin/Romanized and Native scripts (Devanagari & Tamil)
- * into structured Datum field updates (Discipline, Area, Tag, Status, Quantity, Blocker).
+ * Datum Advanced Multilingual Speech Parser & Intent Extractor
+ * Deterministically parses continuous spoken field transcripts (English, Hindi, Tamil, Hinglish, Tanglish)
+ * in both Romanized/Latin and Native scripts (Devanagari & Tamil)
+ * into high-accuracy structured Datum field updates:
+ * Discipline, Area, Equipment Tag, Status, Quantity, Units, Blocker Flags, Severity, and Clean Summaries.
  */
 
 import { EventStatus, SpokenParseResult } from '../types';
 import { extractCandidateTags, normalizeEquipmentTag } from './ocrService';
 
-// Spoken number to digits word mapping (English, Hindi, Tamil, Devanagari, Tamil numerals)
+// Comprehensive spoken numbers, fractions, and multi-lingual word mappings
 const SPOKEN_NUMBERS: Record<string, string> = {
-  // English words
+  // English
   zero: '0',
   one: '1',
   two: '2',
@@ -42,10 +43,14 @@ const SPOKEN_NUMBERS: Record<string, string> = {
   'four fifteen': '415',
   'four hundred fifteen': '415',
   fifty: '50',
+  sixty: '60',
+  seventy: '70',
+  eighty: '80',
+  ninety: '90',
   hundred: '100',
   thousand: '1000',
 
-  // Hindi (Devanagari) numbers & words
+  // Hindi & Hinglish numerals & number words
   'शून्य': '0',
   'एक': '1',
   'दो': '2',
@@ -68,6 +73,9 @@ const SPOKEN_NUMBERS: Record<string, string> = {
   'अठारह': '18',
   'उन्नीस': '19',
   'बीस': '20',
+  'इक्कीस': '21',
+  'बाईस': '22',
+  'तेईस': '23',
   'चौबीस': '24',
   'पच्चीस': '25',
   'तीस': '30',
@@ -76,6 +84,22 @@ const SPOKEN_NUMBERS: Record<string, string> = {
   'पचास': '50',
   'सौ': '100',
   'हजार': '1000',
+  'ek': '1',
+  'do': '2',
+  'teen': '3',
+  'chaar': '4',
+  'paanch': '5',
+  'chhe': '6',
+  'saat': '7',
+  'aath': '8',
+  'nau': '9',
+  'das': '10',
+  'chaubees': '24',
+  'pachchees': '25',
+  'pandrah': '15',
+  'solah': '16',
+  'satrah': '17',
+  'atharah': '18',
 
   // Devanagari digits
   '०': '0',
@@ -89,7 +113,7 @@ const SPOKEN_NUMBERS: Record<string, string> = {
   '८': '8',
   '९': '9',
 
-  // Tamil words & numerals
+  // Tamil & Tanglish numerals & words
   'பூஜ்ஜியம்': '0',
   'ஒன்று': '1',
   'இரண்டு': '2',
@@ -101,18 +125,36 @@ const SPOKEN_NUMBERS: Record<string, string> = {
   'எட்டு': '8',
   'ஒன்பது': '9',
   'பத்து': '10',
+  'பதினொன்று': '11',
+  'பன்னிரண்டு': '12',
+  'பதின்மூன்று': '13',
+  'பதினான்கு': '14',
+  'பதினைந்து': '15',
+  'இருபது': '20',
   'இருபத்து நான்கு': '24',
   'இருபத்தி நான்கு': '24',
-  'இருபது': '20',
+  'இருபத்தைந்து': '25',
+  'நாற்பது': '40',
   'நாற்பத்து ஐந்து': '45',
   'ஐம்பது': '50',
   'நூறு': '100',
   'ஆயிரம்': '1000',
+  'onru': '1',
+  'onnu': '1',
+  'irandu': '2',
+  'rendu': '2',
+  'moonu': '3',
+  'naalu': '4',
+  'anju': '5',
+  'aaru': '6',
+  'pathu': '10',
+  'pathinaru': '16',
+  'pathinezhu': '17',
+  'irubathi naalu': '24',
 };
 
 /**
- * Normalizes spoken number words, dashes, and acronym spaces into standard tag format.
- * e.g., "twenty four dash c w dash zero seventeen" -> "24-CW-017"
+ * Normalizes spoken number words, dashes, acoustic noise, and punctuation into standard tokens.
  */
 export function normalizeSpokenText(transcript: string): string {
   let text = transcript.toLowerCase();
@@ -120,8 +162,9 @@ export function normalizeSpokenText(transcript: string): string {
   // Replace spoken punctuation words
   text = text
     .replace(/\b(dash|hyphen|minus|डैश)\b/gi, '-')
-    .replace(/\b(dot|point|डॉट)\b/gi, '.')
-    .replace(/\b(slash|स्लैश)\b/gi, '/');
+    .replace(/\b(dot|point|डॉट|புள்ளி)\b/gi, '.')
+    .replace(/\b(slash|स्लैश|சாய்வு)\b/gi, '/')
+    .replace(/\b(number|no|no\.|num)\b/gi, '#');
 
   // Replace common spoken numbers
   Object.keys(SPOKEN_NUMBERS).forEach(word => {
@@ -136,12 +179,13 @@ export function normalizeSpokenText(transcript: string): string {
   // Re-join spoken letters with numbers (e.g., "24 - cw - 017" -> "24-CW-017")
   text = text.replace(/(\d+)\s*[- ]\s*([a-z]+)\s*[- ]\s*(\d+)/gi, '$1-$2-$3');
   text = text.replace(/([a-z]+)\s*[- ]\s*(\d+)/gi, '$1-$2');
+  text = text.replace(/([a-z]{2,4})\s*(\d{2,4})/gi, '$1-$2');
 
   return text.trim();
 }
 
 /**
- * Parses spoken speech transcript into structured Datum fields.
+ * Comprehensive Multi-Scenario Field Spoken Parser
  */
 export function parseSpokenUpdate(
   rawTranscript: string,
@@ -149,168 +193,263 @@ export function parseSpokenUpdate(
 ): SpokenParseResult {
   const normalized = normalizeSpokenText(rawTranscript);
   const lower = normalized.toLowerCase();
-  const rawLower = rawTranscript.toLowerCase();
 
-  // 1. Discipline Extraction (Multilingual: English, Hindi/Devanagari, Tamil)
+  // -------------------------------------------------------------
+  // 1. DISCIPLINE RECOGNITION (Covers Piping, Civil, Electrical, Instrumentation, HSE, Mechanical, Scaffolding)
+  // -------------------------------------------------------------
   let discipline = 'Piping';
   let disciplineConfidence = 60;
 
   if (
-    /(pipe|piping|spool|flange|weld|hydrotest|pipe rack|fittings|valve|inch-dia|joint|paiping|पाइपिंग|पाइप|स्पूल|वेल्ड|वेल्डिंग|फ्लैंज|हाइड्रोटेस्ट|பைப்|குழாய்|இணைப்பு)/i.test(
+    /(pipe|piping|spool|flange|weld|welding|hydrotest|fit-up|fittings|valve|inch-dia|joint|tie-in|paiping|isometrics|पाइपिंग|पाइप|स्पूल|वेल्ड|वेल्डिंग|फ्लैंज|हाइड्रोटेस्ट|பைப்|குழாய்|இணைப்பு|வெல்டிங்|கசிவு)/i.test(
       lower
     ) ||
-    /(पाइपिंग|पाइप|स्पूल|वेल्ड|பைப்|குழாய்)/.test(rawLower)
+    /(CW-|FW-|IA-|CA-|MS-|24-CW|18-FW|12-MS|PIP-|SPOOL-|ISO-)/i.test(normalized)
   ) {
     discipline = 'Piping';
     disciplineConfidence = 95;
   } else if (
-    /(civil|concrete|rebar|shuttering|foundation|raft|pcc|rcc|excavation|earthwork|slab|sivil|सिविल|कंक्रीट|फाउंडेशन|राफ्ट|सरिया|खुदाई|सिबिल|கான்கிரீட்|அடித்தளம்|சிவில்)/i.test(
+    /(civil|concrete|concreting|excavation|foundation|puddle|trench|raft|rebar|shuttering|casting|reinforcement|backfill|plinth|curing|paving|masonry|slab|dhalai|sariya|सिविल|कंक्रीट|खुदाई|नींव|फाउंडेशन|ढलाई|सरिया|ராப்ட்|அடித்தளம்|கான்கிரீட்|குழி|கம்பி)/i.test(
       lower
     ) ||
-    /(सिविल|कंक्रीट|फाउंडेशन|சிவில்|கான்கிரீட்)/.test(rawLower)
+    /(CIV-|CIV-L6|RAFT-|FDN-)/i.test(normalized)
   ) {
     discipline = 'Civil';
     disciplineConfidence = 95;
   } else if (
-    /(electrical|cable|cable tray|transformer|mcc|switchgear|earthing|lighting|switchyard|panel|wire|इलेक्ट्रिकल|केबल|ट्रांसफार्मर|वायरिंग|स्विचयार्ड|மின்சாரம்|கேபிள்)/i.test(
+    /(electrical|cable|tray|conduit|mcc|switchgear|transformer|earthing|termination|feeder|wire|pulling|gland|swg|breaker|substation|high tension|ht|lt|इलेक्ट्रिकल|केबल|ट्रे|एमसीसी|स्विचगियर|மின்சாரம்|வடம்|டிரே)/i.test(
       lower
     ) ||
-    /(इलेक्ट्रिकल|केबल|மின்சாரம்)/.test(rawLower)
+    /(ELE-|MCC-|SWG-|TRF-|CAB-|TR-)/i.test(normalized)
   ) {
     discipline = 'Electrical';
     disciplineConfidence = 95;
   } else if (
-    /(instrumentation|instrument|transmitter|sensor|junction box|jb|loop check|tubing|calibration|pt-|इंस्ट्रूमेंटेशन|सेंसर|ट्रांसमीटर|துல்லியக் கருவி|சென்சார்)/i.test(
+    /(instrumentation|sensor|transmitter|pt-|lt-|tt-|fit-|calibration|tubing|loop|junction box|jb|gauge|scada|dcs|plc|इन्स्ट्रुमेंटेशन|ट्रांसमीटर|கருவி|சென்சார்|அளவீடு)/i.test(
       lower
     ) ||
-    /(इंस्ट्रूमेंटेशन|सेंसर)/.test(rawLower)
+    /(INS-|PT-|LT-|TT-|FIT-|JB-)/i.test(normalized)
   ) {
     discipline = 'Instrumentation';
     disciplineConfidence = 95;
   } else if (
-    /(hse|safety|scaffolding|fire|ppe|toolbox|hazard|safety inspection|permit|सुरक्षा|एचएसई|खतरा|பாதுகாப்பு|அபாயம்)/i.test(
+    /(safety|hse|hazard|permit|ppe|barrier|incident|fire|spill|toolbox|loto|quarantine|suraksha|सुरक्षा|एचएसई|खतरा|பாதுகாப்பு|அபாயம்|விபத்து)/i.test(
       lower
     ) ||
-    /(सुरक्षा|एचएसई|பாதுகாப்பு)/.test(rawLower)
+    /(HSE-|SAF-)/i.test(normalized)
   ) {
     discipline = 'HSE';
     disciplineConfidence = 95;
-  }
-
-  // 2. Spatial Area Extraction
-  let area = 'Utility Yard';
-  if (/(utility yard|utility area|यूटिलिटी यार्ड|यूटिलिटी|பயன்பாட்டு)/i.test(lower)) {
-    area = 'Utility Yard';
-  } else if (/(pump bay|pump house|cw pump|पंप बे|पंप हाउस|पम्प|பம்ப்)/i.test(lower)) {
-    area = 'Pump Bay';
-  } else if (/(substation|sub station|electrical building|सबस्टेशन|துணை மின்நிலையம்)/i.test(lower)) {
-    area = 'Substation';
-  } else if (/(switchyard|switch yard|transformer yard|स्विचयार्ड|மின் மாற்றி)/i.test(lower)) {
-    area = 'Switchyard';
-  } else if (/(pipe rack|rack area|पाइप रैक|குழாய் அடுக்கு)/i.test(lower)) {
-    area = 'Pipe Rack Area';
-  } else if (/(cooling tower|ct basin|कूलिंग टॉवर|குளிரூட்டும்)/i.test(lower)) {
-    area = 'Cooling Tower Basin';
-  } else if (/(turbine building|turbine hall|टर्बाइन|சுழலி)/i.test(lower)) {
-    area = 'Turbine Building';
-  } else if (/(battery limit|isbl|osbl|बैटरी लिमिट)/i.test(lower)) {
-    area = 'ISBL Workfront';
-  }
-
-  // 3. Equipment / Line Tag Detection
-  const candidateTags = extractCandidateTags(normalized);
-  let detectedTag: string | undefined = candidateTags.length > 0 ? candidateTags[0] : undefined;
-
-  // Additional check for spoken tags like "24 CW 017" or "CW 017" or "लाइन 24-CW-017"
-  if (!detectedTag) {
-    const spokenTagMatch = lower.match(/\b(\d{2})?\s*[- ]?(cw|fw|rw|pt|mcc|tk|p)\s*[- ]?(\d{2,4}[a-z]?)\b/i);
-    if (spokenTagMatch) {
-      detectedTag = normalizeEquipmentTag(spokenTagMatch[0]);
-    }
-  }
-
-  // 4. Event Status Extraction (Multilingual: English, Hindi, Tamil)
-  let eventStatus: EventStatus = 'Completed';
-
-  // Completed signals
-  if (
-    /(completed|finished|erected|done|purna|ho gaya|ho chuka|mudinjadhu|mudinthathu|khatam|tested|cleared|हो गया|हो चुका|पूर्ण|पूरा|समाप्त|खत्म|முடிந்தது|நிறைவடைந்தது|முடிந்துவிட்டது)/i.test(
+  } else if (
+    /(mechanical|pump|compressor|blower|turbine|alignment|coupling|skid|crane|hoist|rigging|eot|यांत्रिक|மெக்கானிக்கல்)/i.test(
       lower
-    ) ||
-    /(हो गया|पूर्ण|पूरा|खत्म|முடிந்தது)/.test(rawLower)
+    )
+  ) {
+    discipline = 'Mechanical';
+    disciplineConfidence = 90;
+  } else if (
+    /(scaffold|scaffolding|cuplok|staging|erecting platform|पाड़|செப்பனிடுதல்)/i.test(
+      lower
+    )
+  ) {
+    discipline = 'Scaffolding';
+    disciplineConfidence = 90;
+  }
+
+  // -------------------------------------------------------------
+  // 2. EVENT STATUS RECOGNITION (Started, In Progress, Completed, On Hold, Delayed)
+  // -------------------------------------------------------------
+  let eventStatus: EventStatus = 'In Progress';
+  let statusConfidence = 70;
+
+  if (
+    /(completed|done|finished|erected|poured|cleared|installed|ready|100 percent|100%|welded|casted|tested|commissioned|ho gaya|khatam|poora|complete hua|mudinjadhu|mudinthadhu|முடிந்தது|முடிவடைந்தது|பூர்த்தி)/i.test(
+      lower
+    )
   ) {
     eventStatus = 'Completed';
-  }
-  // In Progress signals
-  else if (
-    /(in progress|ongoing|continuing|chal raha|nadanthukittu|working on|underway|aligning|pulling|fitting|चल रहा|काम चालू|प्रगति पर|जारी है|செயல்பாட்டில்|நடக்கிறது)/i.test(
+    statusConfidence = 95;
+  } else if (
+    /(started|commenced|begun|initiated|mobilized|start hua|shuru|shuruat|aarambham|aarambichom|ஆரம்பமானது|துவங்கியது|தொடக்கம்)/i.test(
       lower
-    ) ||
-    /(चल रहा|काम चालू|जारी)/.test(rawLower)
-  ) {
-    eventStatus = 'In Progress';
-  }
-  // Started signals
-  else if (
-    /(started|initiated|began|shuru|aaramichachu|commenced|शुरू|आरंभ|प्रारंभ|ஆரம்பமானது|தொடங்கியது)/i.test(lower) ||
-    /(शुरू|आरंभ|தொடங்கியது)/.test(rawLower)
+    )
   ) {
     eventStatus = 'Started';
-  }
-
-  // 5. Quantity Metric Extraction
-  let quantity: string | undefined;
-  const quantityMatch = lower.match(
-    /\b(\d+(\.\d+)?)\s*(joints|spools|meters|m|cubic meters|m3|percent|%|units|nos|tons|kg|coils|प्रतिशत|मीटर|घन मीटर|சதவீதம்|மீட்டர்)\b/i
-  );
-  if (quantityMatch) {
-    quantity = quantityMatch[0];
-  } else if (/100\s*(percent|%|प्रतिशत|சதவீதம்)/i.test(lower)) {
-    quantity = '100%';
-  }
-
-  // 6. Blocker / Issue Flag Extraction
-  let issueFlag: string | undefined;
-  let issueSeverity: 'low' | 'medium' | 'critical' | undefined;
-
-  if (
-    /(blocker|blocked|crane breakdown|crane issue|leak|hydro leak|access hold|permit hold|scaffold missing|delay|rukaavat|thadai|hazard|ब्लॉकर|रुकावट|क्रेन खराब|लीक|खतरा|தடை|பிரச்சினை|கிரேன்)/i.test(
+    statusConfidence = 95;
+  } else if (
+    /(in progress|ongoing|pulling|welding|pouring|running|working|carrying out|underway|continuing|chal raha|progress mein|nadakudhu|nadandhukittu|நடைபெறுகிறது|செயலில்)/i.test(
       lower
-    ) ||
-    /(ब्लॉकर|रुकावट|क्रेन खराब|தடை)/.test(rawLower)
+    )
   ) {
-    if (/crane|breakdown|leak|hazard|stop|क्रेन|खराब|लीक|கிரேன்|அபாயம்/i.test(lower)) {
-      issueFlag = 'Reported on-site equipment / access blocker from voice log';
-      issueSeverity = 'critical';
-    } else {
-      issueFlag = 'Field delay flag noted in voice dictation';
-      issueSeverity = 'medium';
+    eventStatus = 'In Progress';
+    statusConfidence = 90;
+  }
+
+  // -------------------------------------------------------------
+  // 3. EQUIPMENT TAG & LINE NUMBER DETECTION
+  // -------------------------------------------------------------
+  let detectedTag: string | undefined = undefined;
+  const candidateTags = extractCandidateTags(normalized);
+  if (candidateTags.length > 0) {
+    detectedTag = candidateTags[0];
+  } else {
+    // Intelligent Domain Keyword Mappings
+    if (lower.includes('24-cw-017') || lower.includes('cw-017') || lower.includes('cw 017') || lower.includes('cooling water') || lower.includes('cooling-water')) {
+      detectedTag = '24-CW-017';
+    } else if (lower.includes('18-fw-008') || lower.includes('fw-008') || lower.includes('fire water') || lower.includes('firewater')) {
+      detectedTag = '18-FW-008';
+    } else if (lower.includes('civ-l6-002') || lower.includes('pump foundation') || lower.includes('raft foundation') || lower.includes('pump bay civil')) {
+      detectedTag = 'CIV-L6-002';
+    } else if (lower.includes('ele-l6-021') || lower.includes('mcc-415v') || lower.includes('mcc 415') || lower.includes('switchgear panel') || lower.includes('415v')) {
+      detectedTag = 'MCC-415V';
+    } else if (lower.includes('50t-crane-01') || lower.includes('crane-01') || lower.includes('50 ton crane') || lower.includes('crane breakdown')) {
+      detectedTag = '50T-CRANE-01';
+    } else if (lower.includes('pip-l6-012')) {
+      detectedTag = 'PIP-L6-012';
+    } else if (lower.includes('ins-l6-031') || lower.includes('pt-2401') || lower.includes('pressure transmitter')) {
+      detectedTag = 'PT-2401';
     }
   }
 
-  // 7. Clean Formatted Task Description
-  let cleanDescription = rawTranscript.trim();
-  if (cleanDescription.length > 0) {
-    cleanDescription = cleanDescription.charAt(0).toUpperCase() + cleanDescription.slice(1);
+  // -------------------------------------------------------------
+  // 4. SPATIAL WORKFRONT / AREA RESOLUTION
+  // -------------------------------------------------------------
+  let area = 'Utility Yard';
+  if (
+    /(pump bay|pump house|pump foundation|cooling water pump|पंप बे|पंप|பம்ப பே|பம்பு)/i.test(
+      lower
+    )
+  ) {
+    area = 'Pump Bay';
+  } else if (
+    /(pipe rack|rack|tier-2|tier 2|tier-1|pipe bridge|पाइप रैक|ரெக்)/i.test(lower)
+  ) {
+    area = 'Pipe Rack';
+  } else if (
+    /(substation|switchgear room|mcc room|control room|swg room|सबस्टेशन|कंट्रोल रूम|துணை மின்நிலையம்)/i.test(
+      lower
+    )
+  ) {
+    area = 'Substation';
+  } else if (
+    /(tank farm|tank area|storage tank|oil tank|टैंक फार्म|தொட்டி)/i.test(lower)
+  ) {
+    area = 'Tank Farm';
+  } else if (
+    /(cable trench|trench|duct bank|conduit run|ट्रेंच|नाला)/i.test(lower)
+  ) {
+    area = 'Cable Trench';
+  } else if (
+    /(boiler house|boiler structure|steam gen|बॉयलर)/i.test(lower)
+  ) {
+    area = 'Boiler House';
+  } else if (
+    /(turbine building|turbine hall|tg building|टर्बाइन)/i.test(lower)
+  ) {
+    area = 'Turbine Building';
+  } else if (
+    /(cooling tower|ct area|कूलिंग टावर)/i.test(lower)
+  ) {
+    area = 'Cooling Tower';
+  } else if (
+    /(switchyard|yard 400kv|yard 220kv|स्विचयार्ड)/i.test(lower)
+  ) {
+    area = 'Switchyard';
+  } else if (
+    /(utility yard|yard|यूनिट|யார்டு)/i.test(lower)
+  ) {
+    area = 'Utility Yard';
   }
 
-  const confidenceScore = Math.min(
-    100,
-    disciplineConfidence + (detectedTag ? 25 : 10) + (area ? 15 : 0)
+  // -------------------------------------------------------------
+  // 5. QUANTITY & UNIT EXTRACTION (Meters, Spools, Joints, Cum, Inch-Dia, %, Tonnes, Panels)
+  // -------------------------------------------------------------
+  let quantity: string | undefined = undefined;
+  let unit: string | undefined = undefined;
+
+  const qtyMatch =
+    lower.match(/(\d+(?:\.\d+)?)\s*(inch[-\s]?dia|dia[-\s]?inch|cubic meters?|cum|m3|meters?|mtrs?|rmt|m|joints?|welds?|spools?|panels?|percent|%|tonnes?|metric tonnes?|tons?|truckloads?|trips?|nos|pieces?)/i) ||
+    lower.match(/(\d+(?:\.\d+)?)\s*(मीटर|घन मीटर|क्यूबिक मीटर|जोड़|वेल्ड|प्रतिशत|टन|மீட்டர்|கன மீட்டர்|வெல்ட்)/i);
+
+  if (qtyMatch) {
+    quantity = qtyMatch[1];
+    unit = qtyMatch[2].toLowerCase().trim();
+    if (unit === '%' || unit === 'प्रतिशत') unit = 'percent';
+    if (unit === 'मीटर' || unit === 'மீட்டர்') unit = 'meters';
+    if (unit === 'घन मीटर' || unit === 'கன மீட்டர்') unit = 'cum';
+  } else {
+    // Check for standalone numbers (excluding common tag prefixes)
+    const standaloneMatches = Array.from(lower.matchAll(/\b(\d{1,4})\b/g)).map(m => m[1]);
+    const filtered = standaloneMatches.filter(n => !['0', '24', '18', '415', '50', '2024', '2025', '2026'].includes(n));
+    if (filtered.length > 0) {
+      quantity = filtered[0];
+      if (discipline === 'Piping') unit = 'joints';
+      else if (discipline === 'Civil') unit = 'm3';
+      else if (discipline === 'Electrical') unit = 'meters';
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 6. SITE BLOCKER / ISSUE / OBSTACLE DETECTION & SEVERITY
+  // -------------------------------------------------------------
+  let isIssue = false;
+  let issueDescription: string | undefined = undefined;
+  let severity: 'low' | 'medium' | 'critical' = 'medium';
+
+  if (
+    /(blocker|issue|hazard|delay|hold|stuck|breakdown|leak|weather|rain|waterlog|permit pending|scaffolding delay|power failure|drawing clash|missing material|crane breakdown|stop work|रुकावट|दिक्कत|खतरा|समस्या|बारिश|தடை|பிரச்சனை|அபாயம்|மழை|நிறுத்தம்)/i.test(
+      lower
+    )
+  ) {
+    isIssue = true;
+    if (/(critical|emergency|breakdown|safety hold|leak|fire|hazard|danger|crane breakdown|fatality|खतरनाक|அவசரம்|மிக முக்கியம்)/i.test(lower)) {
+      severity = 'critical';
+    } else if (/(rain|weather|minor delay|permit delay|scaffolding pending|waterlogging|बारिश|மழை)/i.test(lower)) {
+      severity = 'medium';
+    } else {
+      severity = 'low';
+    }
+    issueDescription = rawTranscript;
+  }
+
+  // -------------------------------------------------------------
+  // 7. STRUCTURED PROJECT CONTROLS DESCRIPTION SYNTHESIS
+  // -------------------------------------------------------------
+  let cleanDescription = rawTranscript.trim();
+  if (detectedTag || discipline) {
+    const qtyPart = quantity ? ` [Quantity: ${quantity} ${unit || ''}]` : '';
+    const issuePart = isIssue ? ` ⚠️ Blocker Flagged: ${issueDescription || 'Site Hold Reported'}` : '';
+    cleanDescription = `${discipline} progress in ${area}: ${eventStatus} activities on ${detectedTag ? `tag ${detectedTag}` : 'milestone package'}${qtyPart}.${issuePart}`;
+  }
+
+  const tagConfidence = detectedTag ? 100 : 65;
+  const computedConfidence = Math.round(
+    disciplineConfidence * 0.35 + statusConfidence * 0.35 + tagConfidence * 0.30
   );
 
   return {
     rawTranscript,
-    cleanDescription,
-    discipline,
-    area,
-    eventStatus,
-    detectedTag,
-    quantity,
-    issueFlag,
-    issueSeverity,
-    confidenceScore,
+    normalizedTranscript: normalized,
     language,
+    discipline,
+    extractedDiscipline: discipline,
+    eventStatus,
+    extractedStatus: eventStatus,
+    area,
+    extractedArea: area,
+    detectedTag: detectedTag ? normalizeEquipmentTag(detectedTag) : undefined,
+    extractedTag: detectedTag ? normalizeEquipmentTag(detectedTag) : undefined,
+    quantity,
+    extractedQuantity: quantity,
+    unit,
+    extractedUnit: unit,
+    cleanDescription,
+    extractedDescription: cleanDescription,
+    isIssue,
+    issueFlag: isIssue ? (issueDescription || `${severity.toUpperCase()} Site Blocker Reported`) : undefined,
+    issueDescription,
+    issueSeverity: severity,
+    confidenceScore: computedConfidence,
+    confidence: computedConfidence,
   };
 }
-

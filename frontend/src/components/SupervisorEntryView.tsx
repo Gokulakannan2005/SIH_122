@@ -1,21 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useProject } from '../context/ProjectContext';
 import {
   Camera,
   UploadCloud,
   FileSpreadsheet,
   FileText,
-  AlertOctagon,
   CheckCircle2,
-  Sparkles,
   ArrowRight,
   Send,
-  Radio,
-  FileCode,
-  Eye,
-  Check,
-  Zap,
-  Info,
   Scan,
   X,
   RefreshCw,
@@ -27,14 +19,28 @@ import {
   Mic,
   MicOff,
   Volume2,
-  Globe,
-  Loader2
+  Loader2,
+  Check,
+  Info,
+  Layers,
+  Sparkles,
+  Calendar,
+  Clock,
+  CheckSquare,
+  Bell,
+  ChevronRight,
+  AlertCircle,
+  Filter,
+  ArrowUpRight,
+  HardHat,
+  MapPin,
+  RotateCcw,
 } from 'lucide-react';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
 import { runLocalOCR, calculateImageFingerprint, normalizeEquipmentTag, OCRScanResult } from '../utils/ocrService';
-import { speechService, SAMPLE_VOICE_PRESETS, SpeechLanguage, VoicePreset, isOperaBrowser, RecordedAudioData, transcribeAudioBlob } from '../utils/speechService';
+import { speechService, SpeechLanguage, VoicePreset, SAMPLE_VOICE_PRESETS, isOperaBrowser, RecordedAudioData, transcribeAudioBlob } from '../utils/speechService';
 import { parseSpokenUpdate } from '../utils/speechParser';
-import { SpokenParseResult } from '../types';
+import { SpokenParseResult, ExtractedHandwrittenTask, ScheduleActivity } from '../types';
 
 const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8 MB
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -44,15 +50,122 @@ export const SupervisorEntryView: React.FC = () => {
     handleAddNewFieldEntry,
     handleCustomUpload,
     siteUpdates,
-    matchResults,
-    setSelectedInspectorUpdateId,
+    schedule,
+    enrichedSchedule,
+    activeScheduleVersion,
+    systemNotifications,
+    acknowledgeScheduleUpdates,
+    currentUser,
     setActiveTab,
     offlineMode,
     addToast,
+    isGuidedDemoActive,
+    guidedDemoStepIndex,
   } = useProject();
 
-  // Active Sub-Tab
-  const [activeSubTab, setActiveSubTab] = useState<'quick-report' | 'file-upload' | 'photo-proof'>('quick-report');
+  const [selectedDisciplineFilter, setSelectedDisciplineFilter] = useState<string>('ALL');
+  const [showUpcomingTasks, setShowUpcomingTasks] = useState<boolean>(false);
+
+  // Derive today's tasks for current field workfront
+  const todaysActivities = useMemo(() => {
+    const activeTasks = enrichedSchedule.filter(act => {
+      return (
+        act.status === 'In Progress' ||
+        act.status === 'Delayed' ||
+        act.activityId === 'PIP-L6-012' ||
+        act.activityId === 'CIV-L6-002' ||
+        act.activityId === 'ELE-L6-021' ||
+        act.activityId === 'INS-L6-031' ||
+        act.activityId === 'PIP-L6-013' ||
+        act.activityId === 'CIV-L6-003'
+      );
+    });
+
+    if (selectedDisciplineFilter === 'ALL') return activeTasks;
+    return activeTasks.filter(t => t.discipline.toLowerCase() === selectedDisciplineFilter.toLowerCase());
+  }, [enrichedSchedule, selectedDisciplineFilter]);
+
+  const upcomingActivities = useMemo(() => {
+    return enrichedSchedule.filter(act => {
+      return (
+        act.status === 'Not Started' &&
+        !todaysActivities.some(t => t.activityId === act.activityId)
+      );
+    }).slice(0, 5);
+  }, [enrichedSchedule, todaysActivities]);
+
+  // Schedule revision notification
+  const scheduleRevisionNotif = useMemo(() => {
+    return systemNotifications.find(
+      n => n.targetRole === 'supervisor' && n.type === 'update' && !n.acknowledged
+    );
+  }, [systemNotifications]);
+
+  // 4 Focused Workflow Tabs
+  const [activeSubTab, setActiveSubTab] = useState<'direct-report' | 'voice-input' | 'photo-ocr' | 'batch-upload'>('direct-report');
+
+  // Pre-populate direct report from assigned task
+  const handleSelectTaskForProgress = (task: ScheduleActivity) => {
+    setDiscipline(task.discipline);
+    setArea(task.area);
+    const tag = task.aliases && task.aliases.length > 0 ? task.aliases[0] : '';
+    if (tag) {
+      setConfirmedTag(tag);
+      setManualTagInput(tag);
+    }
+    setDescription(`Field execution progress for ${task.activityName} (${task.activityId}) at ${task.area}.`);
+    setRawText(`Field installation progress for ${task.activityName} [${task.l5Code || task.activityId}]`);
+    setEventStatus(task.status === 'Completed' ? 'Completed' : 'In Progress');
+    setActiveSubTab('direct-report');
+
+    addToast({
+      type: 'info',
+      title: `Task Selected: ${task.activityId}`,
+      message: `Prepopulated details for "${task.activityName}". Enter progress metrics and submit.`,
+    });
+
+    const formElem = document.getElementById('field-submission-studio');
+    if (formElem) {
+      formElem.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleSelectTaskForPhotoProof = (task: ScheduleActivity) => {
+    const tag = task.aliases && task.aliases.length > 0 ? task.aliases[0] : '';
+    if (tag) {
+      setConfirmedTag(tag);
+      setManualTagInput(tag);
+    }
+    setActiveSubTab('photo-ocr');
+    addToast({
+      type: 'info',
+      title: `Attach Proof for ${task.activityId}`,
+      message: `Ready to attach inspection photo for ${task.activityName} (Tag: ${tag || 'N/A'}).`,
+    });
+    const formElem = document.getElementById('field-submission-studio');
+    if (formElem) {
+      formElem.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleSelectTaskForVoice = (task: ScheduleActivity) => {
+    setActiveSubTab('voice-input');
+    addToast({
+      type: 'info',
+      title: `Voice Dictation for ${task.activityId}`,
+      message: `Ready to dictate field progress for ${task.activityName}.`,
+    });
+    const formElem = document.getElementById('field-submission-studio');
+    if (formElem) {
+      formElem.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  React.useEffect(() => {
+    if (isGuidedDemoActive && guidedDemoStepIndex === 2) {
+      setActiveSubTab('photo-ocr');
+    }
+  }, [isGuidedDemoActive, guidedDemoStepIndex]);
 
   // Form State
   const [discipline, setDiscipline] = useState('Piping');
@@ -64,7 +177,6 @@ export const SupervisorEntryView: React.FC = () => {
   const [supervisorName, setSupervisorName] = useState('R. Sharma (Lead Piping Supv)');
 
   // Voice Dictation & Audio Engine State
-  const [showVoiceCard, setShowVoiceCard] = useState<boolean>(true);
   const [voiceLang, setVoiceLang] = useState<SpeechLanguage>('en-IN');
   const [isVoiceRecording, setIsVoiceRecording] = useState<boolean>(false);
   const [isMicActive, setIsMicActive] = useState<boolean>(false);
@@ -109,7 +221,7 @@ export const SupervisorEntryView: React.FC = () => {
 
   // File Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const batchCsvRef = useRef<HTMLInputElement>(null);
+  const batchFileRef = useRef<HTMLInputElement>(null);
 
   // Transcribe recorded audio with real ASR
   const handleTranscribeRecordedAudio = async (blob: Blob, lang: SpeechLanguage = voiceLang) => {
@@ -141,7 +253,7 @@ export const SupervisorEntryView: React.FC = () => {
     }
   };
 
-  // Voice Recording Toggle (with Hardware Mic Stream, MediaRecorder & Audio Analyzer)
+  // Voice Recording Toggle
   const handleToggleVoiceRecording = async (lang: SpeechLanguage = voiceLang) => {
     if (isVoiceRecording || isMicActive) {
       const audioData = await speechService.stop();
@@ -150,7 +262,6 @@ export const SupervisorEntryView: React.FC = () => {
       setAudioLevel(0);
       if (audioData) {
         setRecordedAudio(audioData);
-        // Automatically transcribe if no live transcript was captured
         if (!voiceTranscript && audioData.durationSec >= 0.8) {
           handleTranscribeRecordedAudio(audioData.blob, lang);
         }
@@ -165,12 +276,8 @@ export const SupervisorEntryView: React.FC = () => {
     setRecordedAudio(null);
 
     const started = await speechService.start(lang, {
-      onAudioLevel: lvl => {
-        setAudioLevel(lvl);
-      },
-      onMicConnected: connected => {
-        setIsMicActive(connected);
-      },
+      onAudioLevel: lvl => setAudioLevel(lvl),
+      onMicConnected: connected => setIsMicActive(connected),
       onInterimTranscript: text => {
         setInterimVoiceText(text);
         const parsed = parseSpokenUpdate(text, lang);
@@ -185,20 +292,13 @@ export const SupervisorEntryView: React.FC = () => {
         });
         setInterimVoiceText('');
       },
-      onAudioRecorded: audio => {
-        setRecordedAudio(audio);
-      },
+      onAudioRecorded: audio => setRecordedAudio(audio),
       onStateChange: state => {
         setIsVoiceRecording(state === 'listening');
-        if (state === 'transcribing') {
-          setIsTranscribing(true);
-        } else if (state !== 'listening' && !isMicActive) {
-          setAudioLevel(0);
-        }
+        if (state === 'transcribing') setIsTranscribing(true);
+        else if (state !== 'listening' && !isMicActive) setAudioLevel(0);
       },
-      onError: err => {
-        setVoiceErrorMsg(err);
-      },
+      onError: err => setVoiceErrorMsg(err),
     });
 
     if (!started) {
@@ -260,14 +360,15 @@ export const SupervisorEntryView: React.FC = () => {
       setIssueSeverity(parsedVoiceResult.issueSeverity || 'medium');
     }
 
+    setActiveSubTab('direct-report');
     addToast({
       type: 'success',
       title: 'Spoken Fields Applied to Form',
-      message: `Set ${parsedVoiceResult.discipline} • ${parsedVoiceResult.area}${parsedVoiceResult.detectedTag ? ` • Tag [${parsedVoiceResult.detectedTag}]` : ''}.`,
+      message: `Populated ${parsedVoiceResult.discipline} • ${parsedVoiceResult.area}${parsedVoiceResult.detectedTag ? ` • Tag [${parsedVoiceResult.detectedTag}]` : ''}.`,
     });
   };
 
-  // Process File Selection & Validation
+  // Process File Selection
   const processImageFile = async (file: File) => {
     if (!ACCEPTED_TYPES.includes(file.type)) {
       addToast({
@@ -312,7 +413,7 @@ export const SupervisorEntryView: React.FC = () => {
     if (file) processImageFile(file);
   };
 
-  // Run Local OCR Scan on Demand
+  // Run Local OCR Scan
   const handleRunOCR = async () => {
     if (!imagePreview) {
       addToast({
@@ -335,18 +436,17 @@ export const SupervisorEntryView: React.FC = () => {
       setOcrResult(res);
 
       if (res.detectedTags.length > 0) {
-        // Pre-fill first detected candidate
         setManualTagInput(res.detectedTags[0]);
         addToast({
           type: 'success',
           title: 'OCR Scan Complete',
-          message: `Detected ${res.detectedTags.length} candidate tag(s): ${res.detectedTags.join(', ')} (OCR Confidence: ${res.ocrConfidence}%).`,
+          message: `Detected ${res.detectedTags.length} candidate tag(s): ${res.detectedTags.join(', ')} (Confidence: ${res.ocrConfidence}%).`,
         });
       } else {
         addToast({
           type: 'warning',
           title: 'No Confident Tag Detected',
-          message: 'No equipment tag was confidently detected. Please enter or confirm a tag manually.',
+          message: 'No equipment tag was confidently detected. Please confirm a tag manually.',
         });
       }
     } catch (err) {
@@ -360,7 +460,6 @@ export const SupervisorEntryView: React.FC = () => {
     }
   };
 
-  // Human Tag Confirmation Handler
   const handleConfirmTag = (tagToConfirm: string) => {
     const norm = normalizeEquipmentTag(tagToConfirm);
     if (!norm) {
@@ -375,8 +474,8 @@ export const SupervisorEntryView: React.FC = () => {
     setManualTagInput(norm);
     addToast({
       type: 'success',
-      title: 'Tag Confirmed by Supervisor',
-      message: `Confirmed tag "${norm}" as matching evidence.`,
+      title: 'Tag Confirmed by User',
+      message: `Confirmed tag "${norm}" as verified matching evidence.`,
     });
   };
 
@@ -395,7 +494,25 @@ export const SupervisorEntryView: React.FC = () => {
     });
   };
 
-  // Submit field entry
+  const handleSelectSampleEvidence = async (sampleKey: keyof typeof SAMPLE_EVIDENCE_IMAGES, label: string) => {
+    const src = SAMPLE_EVIDENCE_IMAGES[sampleKey];
+    if (!src) return;
+    const hash = await calculateImageFingerprint(src);
+    setImagePreview(src);
+    setImageFilename(`${label.replace(/\s+/g, '_').toLowerCase()}.svg`);
+    setImageFileSize(src.length);
+    setImageFingerprint(hash);
+    setOcrResult(null);
+    setConfirmedTag('');
+    setManualTagInput('');
+    addToast({
+      type: 'info',
+      title: `Sample Attached: ${label}`,
+      message: 'Ready for OCR tag analysis and human confirmation.',
+    });
+  };
+
+  // Submit Field Report
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim()) {
@@ -431,7 +548,7 @@ export const SupervisorEntryView: React.FC = () => {
       issueSeverity: isIssueReport ? issueSeverity : undefined,
     });
 
-    setSubmitSuccess(`Progress entry submitted & processed with AI multi-factor matching!`);
+    setSubmitSuccess(`Progress entry submitted & processed with explainable schedule matching!`);
     setDescription('');
     setRawText('');
     setQuantity('100%');
@@ -442,50 +559,21 @@ export const SupervisorEntryView: React.FC = () => {
     }, 4000);
   };
 
-  // Quick preset loader for supervisors
   const applyQuickTemplate = (preset: {
     disp: string;
     area: string;
     desc: string;
     raw: string;
     status: 'Started' | 'Completed' | 'In Progress';
-    img: string;
-    imgType: 'completion' | 'issue' | 'progress';
-    caption: string;
     tag: string;
-    detectedTags: string[];
-    filename: string;
-    issue?: { flag: string; severity: 'low' | 'medium' | 'critical' };
   }) => {
     setDiscipline(preset.disp);
     setArea(preset.area);
     setDescription(preset.desc);
     setRawText(preset.raw);
     setEventStatus(preset.status);
-    setImagePreview(preset.img);
-    setImageType(preset.imgType);
-    setImageCaption(preset.caption);
-    setImageFilename(preset.filename);
-    setImageFileSize(2450890);
-    setImageFingerprint('a7c3f910e52b89d412c091ea28f73b6490e21bc08192a543881efac99d428901');
-    setOcrResult({
-      rawText: `VERIFIED TAG: ${preset.tag} INSPECTION CLEARED`,
-      detectedTags: preset.detectedTags,
-      ocrConfidence: 94,
-      status: 'success',
-    });
     setConfirmedTag(preset.tag);
     setManualTagInput(preset.tag);
-
-    if (preset.issue) {
-      setIsIssueReport(true);
-      setIssueFlag(preset.issue.flag);
-      setIssueSeverity(preset.issue.severity);
-    } else {
-      setIsIssueReport(false);
-      setIssueFlag('');
-    }
-
     addToast({
       type: 'info',
       title: 'Template Applied',
@@ -493,10 +581,8 @@ export const SupervisorEntryView: React.FC = () => {
     });
   };
 
-  // Batch file processing trigger
   const handleBatchFileDrop = async (file: File) => {
     const isXlsx = file.name.endsWith('.xlsx');
-
     if (isXlsx) {
       const reader = new FileReader();
       reader.onload = async (e) => {
@@ -518,1327 +604,1579 @@ export const SupervisorEntryView: React.FC = () => {
     }
   };
 
-  const recentSubmissions = siteUpdates.slice(0, 5);
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* Top Banner Header */}
-      <div className="banner-card">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Page Header matching Reference Screen 1 */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', paddingBottom: '0.25rem' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-            <span className="brand-badge" style={{ background: '#f0f7fc', color: '#0284c7', borderColor: '#bae6fd' }}>
-              Field Supervisor Hub
-            </span>
-            <span className="mono-pill" style={{ background: '#f8fafc', color: 'var(--text-muted)' }}>
-              OCR-Assisted Evidence Verification
-            </span>
-            {offlineMode && (
-              <span className="mono-pill" style={{ background: '#fff4e5', color: '#974f0c', borderColor: '#fec195', fontWeight: 700 }}>
-                ⚡ Offline Queue Active
-              </span>
-            )}
-          </div>
-          <h1 className="banner-title">
-            <Camera size={22} style={{ color: 'var(--brand-primary)' }} />
-            <span>Site Progress & Photo Evidence Verification</span>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+            Good morning, {currentUser?.username || 'Rajesh'}
+          </span>
+          <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginTop: '0.15rem', marginBottom: '0.25rem' }}>
+            Your Field Tasks for Today
           </h1>
-          <p className="banner-desc">
-            Submit daily progress reports, attach photo proof with on-demand local OCR tag extraction, and verify equipment tags for schedule matching.
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            Stay on track. Capture progress. Keep the project moving.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.6rem' }}>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => setActiveTab('site-updates')}
-            type="button"
+        {/* Header Right: Date, Location, Weather Context */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+              Mon, 8 Sep 2026
+            </div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+              Pump Bay, Unit 01
+            </div>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-default)',
+              padding: '0.4rem 0.75rem',
+              borderRadius: 'var(--radius-sm)',
+              boxShadow: 'var(--shadow-xs)',
+            }}
           >
-            <span>View Full Feed</span>
-            <ArrowRight size={13} />
-          </button>
+            <span style={{ fontSize: '1rem' }}>⛅</span>
+            <div>
+              <div style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>32°C</div>
+              <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>Partly cloudy</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Success Alert */}
+      {/* Success Notification */}
       {submitSuccess && (
         <div
           style={{
             background: 'var(--status-ready-bg)',
             border: '1px solid var(--status-ready-border)',
             color: 'var(--status-ready-fg)',
-            padding: '0.85rem 1.15rem',
+            padding: '0.75rem 1rem',
             borderRadius: 'var(--radius-md)',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.6rem',
+            gap: '0.5rem',
             fontWeight: 600,
-            fontSize: '0.875rem',
+            fontSize: '0.85rem',
           }}
         >
-          <CheckCircle2 size={20} />
+          <CheckCircle2 size={18} />
           <span>{submitSuccess}</span>
         </div>
       )}
 
-      {/* 3-Tab Mode Navigation Pill */}
-      <div
-        style={{
-          display: 'flex',
-          background: '#ffffff',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '5px',
-          gap: '6px',
-          boxShadow: 'var(--shadow-xs)',
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('quick-report')}
-          className="btn"
+      {/* TOP KPI ROW (4 Compact Cards) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem' }}>
+        {/* KPI 1: Today's Tasks */}
+        <div className="card" style={{ padding: '0.9rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 'var(--radius-sm)', background: 'rgba(5, 150, 105, 0.1)', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <CheckSquare size={18} />
+          </div>
+          <div>
+            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+              {todaysActivities.length || 4}
+            </div>
+            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: 3 }}>
+              Today's Tasks
+            </div>
+          </div>
+        </div>
+
+        {/* KPI 2: Pending Evidence */}
+        <div className="card" style={{ padding: '0.9rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 'var(--radius-sm)', background: 'rgba(217, 119, 6, 0.1)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Camera size={18} />
+          </div>
+          <div>
+            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+              2
+            </div>
+            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: 3 }}>
+              Pending Evidence
+            </div>
+          </div>
+        </div>
+
+        {/* KPI 3: Overdue Tasks */}
+        <div className="card" style={{ padding: '0.9rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 'var(--radius-sm)', background: 'rgba(220, 38, 38, 0.1)', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <AlertTriangle size={18} />
+          </div>
+          <div>
+            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+              1
+            </div>
+            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: 3 }}>
+              Overdue Task
+            </div>
+          </div>
+        </div>
+
+        {/* KPI 4: Issues Reported */}
+        <div className="card" style={{ padding: '0.9rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 'var(--radius-sm)', background: 'rgba(100, 116, 139, 0.1)', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <AlertCircle size={18} />
+          </div>
+          <div>
+            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+              0
+            </div>
+            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: 3 }}>
+              Issues Reported
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* TODAY'S TASKS WORKSPACE TABLE */}
+      <div id="demo-target-supervisor-tasks" className="card" style={{ padding: '1.25rem', boxShadow: 'var(--shadow-sm)' }}>
+        {/* Table Top Controls & Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+          {/* Sub-Tabs */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg-subtle)', padding: 3, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+            <button
+              type="button"
+              onClick={() => setSelectedDisciplineFilter('ALL')}
+              style={{
+                padding: '0.3rem 0.75rem',
+                fontSize: '0.75rem',
+                fontWeight: selectedDisciplineFilter === 'ALL' ? 700 : 500,
+                borderRadius: 'var(--radius-xs)',
+                background: selectedDisciplineFilter === 'ALL' ? 'var(--bg-surface)' : 'transparent',
+                color: selectedDisciplineFilter === 'ALL' ? 'var(--brand-primary)' : 'var(--text-secondary)',
+                border: selectedDisciplineFilter === 'ALL' ? '1px solid var(--border-default)' : 'none',
+                boxShadow: selectedDisciplineFilter === 'ALL' ? 'var(--shadow-xs)' : 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Today's Tasks ({todaysActivities.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowUpcomingTasks(true)}
+              style={{
+                padding: '0.3rem 0.75rem',
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                borderRadius: 'var(--radius-xs)',
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Upcoming ({upcomingActivities.length || 6})
+            </button>
+            <button
+              type="button"
+              style={{
+                padding: '0.3rem 0.75rem',
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                borderRadius: 'var(--radius-xs)',
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Completed (12)
+            </button>
+          </div>
+
+          {/* Filter and Sort Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <select
+              value={selectedDisciplineFilter}
+              onChange={e => setSelectedDisciplineFilter(e.target.value)}
+              className="form-input"
+              style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', height: 'auto' }}
+            >
+              <option value="ALL">All Disciplines</option>
+              <option value="Piping">Piping</option>
+              <option value="Civil">Civil</option>
+              <option value="Electrical">Electrical</option>
+              <option value="Instrumentation">Instrumentation</option>
+            </select>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem' }}
+            >
+              <Filter size={12} />
+              <span>Sort: Priority ▾</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Enterprise Task Table */}
+        <div className="table-responsive">
+          <table className="industrial-table">
+            <thead>
+              <tr>
+                <th style={{ width: 32 }}></th>
+                <th>Activity</th>
+                <th>Discipline</th>
+                <th>Location</th>
+                <th>Planned</th>
+                <th>Progress</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {todaysActivities.map(task => {
+                const isComplete = Boolean(task.status === 'Completed' || (typeof task.progressPercent === 'number' && task.progressPercent >= 100));
+                const progressVal = isComplete ? 100 : (task.progressPercent ?? (task.activityId === 'CIV-L6-002' ? 25 : 0));
+
+                return (
+                  <tr key={task.activityId}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={isComplete}
+                        readOnly
+                        style={{ cursor: 'pointer', accentColor: 'var(--brand-primary)' }}
+                      />
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)' }}>
+                          {task.activityId}
+                        </span>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {task.activityName}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        {task.discipline}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        {task.area}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        {task.plannedStart || '5 Sep'} – {task.plannedFinish || '7 Sep'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 100 }}>
+                        <div style={{ flex: 1, height: 6, background: 'var(--border-subtle)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${progressVal}%`,
+                              height: '100%',
+                              background: isComplete ? '#059669' : progressVal > 0 ? '#2563eb' : '#94a3b8',
+                              borderRadius: 3,
+                            }}
+                          />
+                        </div>
+                        <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-primary)', minWidth: 32 }}>
+                          {progressVal}%
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        className={`status-badge ${
+                          isComplete ? 'ready' : progressVal > 0 ? 'review' : 'rejected'
+                        }`}
+                        style={{ fontSize: '0.65rem' }}
+                      >
+                        {isComplete ? 'Completed' : progressVal > 0 ? 'In Progress' : 'Not Started'}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.35rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleSelectTaskForProgress(task)}
+                          style={{ padding: '0.25rem 0.55rem', fontSize: '0.7rem' }}
+                        >
+                          {isComplete ? 'View' : 'Update'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* BOTTOM SPLIT ROW: RECENT SCHEDULE UPDATES & SUBMIT FIELD UPDATE */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1rem' }}>
+        {/* Left Card: Recent Schedule Updates */}
+        <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
+              <RotateCcw size={15} style={{ color: 'var(--brand-primary)' }} />
+              <h3 style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Recent Schedule Updates
+              </h3>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', background: 'var(--bg-subtle)', padding: '0.85rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669', marginTop: 5, flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Rev-03 is now active
+                  </span>
+                  <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>2 hours ago</span>
+                </div>
+                <div style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
+                  Uploaded by Lead Planner • 27 activities modified
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '0.85rem', display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setActiveTab('schedule-activities')}
+              style={{ fontSize: '0.725rem', padding: '0.3rem 0.65rem' }}
+            >
+              <span>View Changes</span>
+              <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* Right Card: Submit Field Update Action Grid */}
+        <div className="card" style={{ padding: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <FileText size={15} style={{ color: 'var(--brand-primary)' }} />
+            <h3 style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Submit Field Update
+            </h3>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className={`field-action-tile ${activeSubTab === 'direct-report' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveSubTab('direct-report');
+                const el = document.getElementById('field-submission-studio');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                padding: '0.85rem 0.4rem',
+                borderRadius: 'var(--radius-sm)',
+                background: activeSubTab === 'direct-report' ? 'var(--brand-surface)' : 'var(--bg-subtle)',
+                border: `1px solid ${activeSubTab === 'direct-report' ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
+                cursor: 'pointer',
+                textAlign: 'center',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <FileText size={18} style={{ color: 'var(--brand-primary)' }} />
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-primary)' }}>Text Report</span>
+            </button>
+
+            <button
+              type="button"
+              className={`field-action-tile ${activeSubTab === 'photo-ocr' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveSubTab('photo-ocr');
+                const el = document.getElementById('field-submission-studio');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                padding: '0.85rem 0.4rem',
+                borderRadius: 'var(--radius-sm)',
+                background: activeSubTab === 'photo-ocr' ? 'var(--brand-surface)' : 'var(--bg-subtle)',
+                border: `1px solid ${activeSubTab === 'photo-ocr' ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
+                cursor: 'pointer',
+                textAlign: 'center',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Camera size={18} style={{ color: 'var(--brand-primary)' }} />
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-primary)' }}>Photo Evidence</span>
+            </button>
+
+            <button
+              type="button"
+              className={`field-action-tile ${activeSubTab === 'voice-input' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveSubTab('voice-input');
+                const el = document.getElementById('field-submission-studio');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                padding: '0.85rem 0.4rem',
+                borderRadius: 'var(--radius-sm)',
+                background: activeSubTab === 'voice-input' ? 'var(--brand-surface)' : 'var(--bg-subtle)',
+                border: `1px solid ${activeSubTab === 'voice-input' ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
+                cursor: 'pointer',
+                textAlign: 'center',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Mic size={18} style={{ color: 'var(--brand-primary)' }} />
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-primary)' }}>Voice Input</span>
+            </button>
+
+            <button
+              type="button"
+              className={`field-action-tile ${activeSubTab === 'batch-upload' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveSubTab('batch-upload');
+                const el = document.getElementById('field-submission-studio');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                padding: '0.85rem 0.4rem',
+                borderRadius: 'var(--radius-sm)',
+                background: activeSubTab === 'batch-upload' ? 'var(--brand-surface)' : 'var(--bg-subtle)',
+                border: `1px solid ${activeSubTab === 'batch-upload' ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
+                cursor: 'pointer',
+                textAlign: 'center',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <UploadCloud size={18} style={{ color: 'var(--brand-primary)' }} />
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-primary)' }}>Upload File</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 3: MULTIMODAL FIELD SUBMISSION STUDIO */}
+      <div id="field-submission-studio" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              FIELD SUBMISSION STUDIO
+            </h2>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Log site measurements, dictate voice notes, scan inspection photos, or upload shift files.
+            </div>
+          </div>
+        </div>
+
+        {/* 4-Tab Focused Workflow Navigation */}
+        <div
           style={{
-            flex: 1,
-            background: activeSubTab === 'quick-report' ? 'var(--brand-primary)' : 'transparent',
-            color: activeSubTab === 'quick-report' ? '#ffffff' : 'var(--text-secondary)',
-            fontWeight: activeSubTab === 'quick-report' ? 700 : 600,
-            fontSize: '0.875rem',
-            padding: '0.65rem 1rem',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
             borderRadius: 'var(--radius-md)',
-            boxShadow: activeSubTab === 'quick-report' ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
+            padding: '4px',
+            gap: '4px',
+            boxShadow: 'var(--shadow-xs)',
           }}
         >
-          <FileText size={16} />
-          <span>1. Direct Daily Report</span>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('direct-report')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            padding: '0.6rem 0.75rem',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.8125rem',
+            fontWeight: activeSubTab === 'direct-report' ? 700 : 500,
+            background: activeSubTab === 'direct-report' ? 'var(--brand-primary)' : 'transparent',
+            color: activeSubTab === 'direct-report' ? '#ffffff' : 'var(--text-secondary)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <FileText size={15} />
+          <span>Direct Report</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveSubTab('photo-proof')}
-          className="btn"
+          onClick={() => setActiveSubTab('voice-input')}
           style={{
-            flex: 1,
-            background: activeSubTab === 'photo-proof' ? 'var(--brand-primary)' : 'transparent',
-            color: activeSubTab === 'photo-proof' ? '#ffffff' : 'var(--text-secondary)',
-            fontWeight: activeSubTab === 'photo-proof' ? 700 : 600,
-            fontSize: '0.875rem',
-            padding: '0.65rem 1rem',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: activeSubTab === 'photo-proof' ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            padding: '0.6rem 0.75rem',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.8125rem',
+            fontWeight: activeSubTab === 'voice-input' ? 700 : 500,
+            background: activeSubTab === 'voice-input' ? 'var(--brand-primary)' : 'transparent',
+            color: activeSubTab === 'voice-input' ? '#ffffff' : 'var(--text-secondary)',
+            transition: 'all 0.15s ease',
           }}
         >
-          <Camera size={16} />
-          <span>2. Photo Evidence & OCR Tag Studio</span>
+          <Mic size={15} />
+          <span>Voice Input</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveSubTab('file-upload')}
-          className="btn"
+          onClick={() => setActiveSubTab('photo-ocr')}
           style={{
-            flex: 1,
-            background: activeSubTab === 'file-upload' ? 'var(--brand-primary)' : 'transparent',
-            color: activeSubTab === 'file-upload' ? '#ffffff' : 'var(--text-secondary)',
-            fontWeight: activeSubTab === 'file-upload' ? 700 : 600,
-            fontSize: '0.875rem',
-            padding: '0.65rem 1rem',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: activeSubTab === 'file-upload' ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            padding: '0.6rem 0.75rem',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.8125rem',
+            fontWeight: activeSubTab === 'photo-ocr' ? 700 : 500,
+            background: activeSubTab === 'photo-ocr' ? 'var(--brand-primary)' : 'transparent',
+            color: activeSubTab === 'photo-ocr' ? '#ffffff' : 'var(--text-secondary)',
+            transition: 'all 0.15s ease',
           }}
         >
-          <FileSpreadsheet size={16} />
-          <span>3. Batch Spreadsheet & TXT Upload</span>
+          <Scan size={15} />
+          <span>Photo Evidence + OCR</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('batch-upload')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            padding: '0.6rem 0.75rem',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.8125rem',
+            fontWeight: activeSubTab === 'batch-upload' ? 700 : 500,
+            background: activeSubTab === 'batch-upload' ? 'var(--brand-primary)' : 'transparent',
+            color: activeSubTab === 'batch-upload' ? '#ffffff' : 'var(--text-secondary)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <FileSpreadsheet size={15} />
+          <span>Batch Upload</span>
         </button>
       </div>
 
-      {/* Main Form Content Area */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(330px, 1fr)', gap: '1.5rem' }}>
-        
-        {/* Left Column: Interactive Form */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
-          {/* TAB 1: DIRECT REPORT & FORM */}
-          {(activeSubTab === 'quick-report' || activeSubTab === 'photo-proof') && (
-            <div className="card">
-              <div className="card-header">
-                <div>
-                  <h3 className="card-title">
-                    {activeSubTab === 'quick-report' ? (
-                      <>
-                        <FileText size={18} style={{ color: 'var(--brand-primary)' }} />
-                        <span>Log Field Execution Event</span>
-                      </>
-                    ) : (
-                      <>
-                        <Scan size={18} style={{ color: 'var(--brand-primary)' }} />
-                        <span>Photo Evidence & OCR-Assisted Verification</span>
-                      </>
-                    )}
-                  </h3>
-                  <div className="card-desc">
-                    Attach visual proof, extract OCR candidate tags on demand, and confirm equipment tag evidence.
-                  </div>
+      {/* =========================================================================
+          TAB 1: DIRECT REPORT WORKSPACE
+          ========================================================================= */}
+      {activeSubTab === 'direct-report' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(320px, 1fr)', gap: '1.25rem' }}>
+          {/* Form */}
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <h2 className="card-title">
+                  <FileText size={16} style={{ color: 'var(--brand-primary)' }} />
+                  <span>Log Field Progress Report</span>
+                </h2>
+                <div className="card-desc">
+                  Structured supervisor log with equipment tag and progress metrics.
                 </div>
               </div>
+            </div>
 
-              <div className="card-body">
-                {/* Multilingual Voice Dictation Assistant (Web Speech API + Hardware Audio Meter) */}
-                <div
-                  style={{
-                    marginBottom: '1.25rem',
-                    background: (isVoiceRecording || isMicActive) ? '#f0f9ff' : '#f8fafc',
-                    padding: '1rem 1.15rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: (isVoiceRecording || isMicActive) ? '2px solid var(--brand-primary)' : '1px solid #bae6fd',
-                    boxShadow: (isVoiceRecording || isMicActive) ? '0 0 16px rgba(2, 132, 199, 0.25)' : 'none',
-                    transition: 'all 0.2s ease-out',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span
-                        style={{
-                          background: isVoiceRecording ? '#ef4444' : isMicActive ? '#0284c7' : 'var(--brand-primary)',
-                          color: '#ffffff',
-                          padding: '3px 8px',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 800,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                      >
-                        <Mic size={13} />
-                        <span>{isVoiceRecording ? 'MIC LIVE & RECORDING' : isMicActive ? 'MIC CONNECTED' : 'VOICE DICTATION'}</span>
-                      </span>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                        Native Multilingual Speech-to-Field Dictation
-                      </span>
-                      {isOpera && (
-                        <span
-                          className="mono-pill"
-                          style={{
-                            fontSize: '0.675rem',
-                            background: '#fef3c7',
-                            color: '#92400e',
-                            borderColor: '#fde68a',
-                            fontWeight: 700,
-                          }}
-                        >
-                          Opera Mode Active
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Language Selector Chips */}
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {(
-                        [
-                          { id: 'en-IN', label: 'English (IN)' },
-                          { id: 'hi-IN', label: 'हिन्दी (Hindi)' },
-                          { id: 'ta-IN', label: 'தமிழ் (Tamil)' },
-                        ] as const
-                      ).map(l => (
-                        <button
-                          key={l.id}
-                          type="button"
-                          onClick={() => {
-                            setVoiceLang(l.id);
-                            if (isVoiceRecording) {
-                              handleToggleVoiceRecording(l.id);
-                            }
-                          }}
-                          style={{
-                            background: voiceLang === l.id ? 'var(--brand-primary)' : '#ffffff',
-                            color: voiceLang === l.id ? '#ffffff' : 'var(--text-secondary)',
-                            border: '1px solid var(--border-subtle)',
-                            padding: '2px 7px',
-                            borderRadius: '4px',
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {l.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Main Speech Interaction Area */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
-                    {/* Big Pulsing Mic Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleToggleVoiceRecording(voiceLang)}
-                      className="btn"
-                      style={{
-                        background: isVoiceRecording ? '#dc2626' : isMicActive ? '#0284c7' : 'var(--brand-primary)',
-                        color: '#ffffff',
-                        padding: '0.6rem 1.1rem',
-                        fontSize: '0.85rem',
-                        fontWeight: 700,
-                        borderRadius: 'var(--radius-sm)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        boxShadow: isVoiceRecording ? '0 0 12px rgba(220, 38, 38, 0.5)' : isMicActive ? '0 0 10px rgba(2, 132, 199, 0.4)' : 'none',
-                        cursor: 'pointer',
-                      }}
-                      title="Click to start/stop live microphone dictation"
-                    >
-                      {isVoiceRecording || isMicActive ? <MicOff size={16} /> : <Mic size={16} />}
-                      <span>{isVoiceRecording ? 'Stop Recording' : isMicActive ? 'Disconnect Mic' : 'Tap to Speak'}</span>
-                    </button>
-
-                    {/* Status Feedback & Dynamic Real-Time Audio Level VU Meter */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 220 }}>
-                      {(isVoiceRecording || isMicActive) ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-                          <span style={{ fontSize: '0.75rem', color: '#0284c7', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                            {isMicActive ? `Mic Active (Level: ${audioLevel}%)` : `Listening in ${voiceLang === 'en-IN' ? 'English' : voiceLang === 'hi-IN' ? 'Hindi' : 'Tamil'}...`}
-                          </span>
-                          {/* Live Dynamic Audio VU Visualizer Bars */}
-                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 26, paddingBottom: 2 }}>
-                            {[20, 45, 75, 100, 85, 60, 40, 90, 65, 30].map((barWeight, i) => {
-                              const dynamicHeight = Math.max(4, Math.min(24, Math.round((audioLevel / 100) * barWeight * 0.28) + 4));
-                              return (
-                                <span
-                                  key={i}
-                                  style={{
-                                    width: 3,
-                                    height: isMicActive && audioLevel > 0 ? `${dynamicHeight}px` : isVoiceRecording ? `${Math.max(6, (i % 4 + 1) * 5)}px` : '4px',
-                                    background: audioLevel > 40 ? '#10b981' : audioLevel > 15 ? '#0284c7' : '#94a3b8',
-                                    borderRadius: 2,
-                                    transition: 'height 0.08s ease-out',
-                                  }}
-                                />
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          Speak naturally, edit prompt text, or click a 1-click test scenario below.
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Apply Button (Visible when transcript is ready) */}
-                    {parsedVoiceResult && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        style={{ background: '#059669', borderColor: '#047857', fontWeight: 700, fontSize: '0.775rem' }}
-                        onClick={handleApplyVoiceToForm}
-                      >
-                        <Check size={14} />
-                        <span>Apply Spoken Fields to Form</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Opera Guidance Tip / Speech Notice */}
-                  {voiceErrorMsg ? (
-                    <div
-                      style={{
-                        padding: '0.5rem 0.75rem',
-                        background: '#fef2f2',
-                        border: '1px solid #fecdd3',
-                        color: '#991b1b',
-                        borderRadius: 'var(--radius-xs)',
-                        fontSize: '0.725rem',
-                        marginBottom: '0.65rem',
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      <strong>Speech Notice:</strong> {voiceErrorMsg}
-                    </div>
-                  ) : isOpera && (
-                    <div
-                      style={{
-                        padding: '0.45rem 0.75rem',
-                        background: '#eff6ff',
-                        border: '1px solid #bfdbfe',
-                        color: '#1e40af',
-                        borderRadius: 'var(--radius-xs)',
-                        fontSize: '0.725rem',
-                        marginBottom: '0.65rem',
-                        lineHeight: 1.35,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                      }}
-                    >
-                      <Info size={14} style={{ flexShrink: 0, color: '#2563eb' }} />
-                      <span>
-                        <strong>Opera Browser Compatibility:</strong> Web Audio hardware mic stream is fully active. You can speak into your mic, edit the spoken log box below, or click any quick preset to trigger real-time AI field structuring.
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Physical Recorded Audio Player (When Audio is Captured) */}
-                  {recordedAudio && (
-                    <div
-                      style={{
-                        background: '#f0fdf4',
-                        border: '1px solid #bbf7d0',
-                        borderRadius: 'var(--radius-xs)',
-                        padding: '0.5rem 0.75rem',
-                        marginBottom: '0.65rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 4,
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.725rem', fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <Volume2 size={13} />
-                          <span>Captured Spoken Audio ({recordedAudio.durationSec}s)</span>
-                        </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <button
-                            type="button"
-                            onClick={() => handleTranscribeRecordedAudio(recordedAudio.blob, voiceLang)}
-                            disabled={isTranscribing}
-                            style={{
-                              background: '#ffffff',
-                              border: '1px solid #86efac',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '0.675rem',
-                              fontWeight: 700,
-                              color: '#15803d',
-                              cursor: isTranscribing ? 'wait' : 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                          >
-                            {isTranscribing ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}
-                            <span>{isTranscribing ? 'Transcribing...' : 'Re-Transcribe Voice'}</span>
-                          </button>
-                          <span className="mono-pill" style={{ fontSize: '0.65rem', background: '#dcfce7', color: '#15803d', borderColor: '#86efac' }}>
-                            ✓ Audio Captured
-                          </span>
-                        </div>
-                      </div>
-                      <audio
-                        controls
-                        src={recordedAudio.url}
-                        style={{ width: '100%', height: 32, marginTop: 2 }}
-                      />
-                    </div>
-                  )}
-
-                  {/* Transcribing Status Indicator */}
-                  {isTranscribing && (
-                    <div
-                      style={{
-                        background: '#eff6ff',
-                        border: '1px solid #bfdbfe',
-                        color: '#1d4ed8',
-                        padding: '0.5rem 0.75rem',
-                        borderRadius: 'var(--radius-xs)',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        marginBottom: '0.65rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                      }}
-                    >
-                      <Loader2 size={14} className="spin" style={{ color: '#2563eb' }} />
-                      <span>Transcribing actual spoken audio via Speech Recognition Engine ({voiceLang})...</span>
-                    </div>
-                  )}
-
-                  {/* Interactive Editable Spoken Log Box */}
-                  <div
-                    style={{
-                      background: '#ffffff',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 'var(--radius-xs)',
-                      padding: '0.6rem 0.85rem',
-                      marginBottom: '0.65rem',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <div style={{ fontSize: '0.675rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                        SPOKEN DICTATION & PROMPT BUFFER:
-                      </div>
-                      {(voiceTranscript || interimVoiceText) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setVoiceTranscript('');
-                            setInterimVoiceText('');
-                            setParsedVoiceResult(null);
-                            setRecordedAudio(null);
-                          }}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#ef4444',
-                            fontSize: '0.675rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 2,
-                            padding: 0,
-                          }}
-                        >
-                          <X size={12} />
-                          <span>Clear Text</span>
-                        </button>
-                      )}
-                    </div>
-                    <textarea
-                      value={voiceTranscript}
-                      onChange={e => handleVoiceTextChange(e.target.value)}
-                      placeholder="Spoken words stream here in real time. You can also type or edit speech transcript directly..."
-                      rows={2}
-                      style={{
-                        width: '100%',
-                        border: 'none',
-                        outline: 'none',
-                        resize: 'vertical',
-                        fontSize: '0.8rem',
-                        color: 'var(--text-primary)',
-                        fontFamily: 'inherit',
-                        lineHeight: 1.4,
-                        padding: 0,
-                        background: 'transparent',
-                      }}
-                    />
-                    {interimVoiceText && (
-                      <div style={{ color: 'var(--brand-primary)', fontStyle: 'italic', fontSize: '0.75rem', marginTop: 2 }}>
-                        Streaming: {interimVoiceText}...
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Real-Time Parsed Entity Chips */}
-                  {parsedVoiceResult && (
-                    <div
-                      style={{
-                        background: '#ffffff',
-                        border: '1px solid #bae6fd',
-                        borderRadius: 'var(--radius-xs)',
-                        padding: '0.6rem 0.85rem',
-                        marginBottom: '0.65rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 4,
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--brand-primary)', textTransform: 'uppercase' }}>
-                          ✓ AI Structured Intent Extraction:
-                        </span>
-                        <span className="mono-pill" style={{ fontSize: '0.65rem', background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' }}>
-                          {parsedVoiceResult.confidenceScore}% Confidence
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: 2 }}>
-                        <span className="mono-pill" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd' }}>
-                          Trade: <strong>{parsedVoiceResult.discipline}</strong>
-                        </span>
-                        <span className="mono-pill" style={{ background: '#f8fafc', color: 'var(--text-secondary)' }}>
-                          Area: <strong>{parsedVoiceResult.area}</strong>
-                        </span>
-                        {parsedVoiceResult.detectedTag && (
-                          <span className="mono-pill" style={{ background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0', fontWeight: 800 }}>
-                            Tag: <strong>{parsedVoiceResult.detectedTag}</strong>
-                          </span>
-                        )}
-                        <span className="mono-pill" style={{ background: '#fef3c7', color: '#92400e', borderColor: '#fde68a' }}>
-                          Status: <strong>{parsedVoiceResult.eventStatus}</strong>
-                        </span>
-                        {parsedVoiceResult.quantity && (
-                          <span className="mono-pill" style={{ background: '#f3f0ff', color: '#6e5dc6', borderColor: '#d3cbfb' }}>
-                            Qty: <strong>{parsedVoiceResult.quantity}</strong>
-                          </span>
-                        )}
-                        {parsedVoiceResult.issueFlag && (
-                          <span className="mono-pill" style={{ background: '#fef2f2', color: '#991b1b', borderColor: '#fecdd3', fontWeight: 700 }}>
-                            Blocker: {parsedVoiceResult.issueFlag}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 1-Click Voice Presets (for instant evaluation in Opera/Firefox/offline) */}
-                  <div>
-                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>
-                      Quick Voice Scenarios (1-Click Test for Opera / Quiet Environments):
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                      {SAMPLE_VOICE_PRESETS.map(preset => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => handleSelectVoicePreset(preset)}
-                          style={{
-                            background: '#ffffff',
-                            border: '1px solid var(--border-subtle)',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontSize: '0.725rem',
-                            color: 'var(--text-secondary)',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                          }}
-                          title={preset.transcript}
-                        >
-                          <Volume2 size={12} style={{ color: 'var(--brand-primary)' }} />
-                          <span>{preset.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 1-Click Field Scenarios Toolbar */}
-                <div
-                  style={{
-                    marginBottom: '1.25rem',
-                    background: '#f8fafc',
-                    padding: '0.85rem 1rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-subtle)',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      color: 'var(--text-muted)',
-                      marginBottom: '0.5rem',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                    }}
-                  >
-                    <Zap size={13} style={{ color: 'var(--brand-primary)' }} />
-                    Quick Field Scenarios (1-Click Sample Fill):
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
-                      onClick={() =>
-                        applyQuickTemplate({
-                          disp: 'Piping',
-                          area: 'Pump Bay',
-                          desc: 'Erected 24-inch cooling water line spool Line 24-CW-017 in Pump Bay with full penetration weld clearance.',
-                          raw: 'Line 24-CW-017 spool erected in pump bay NDT test cleared 100% finished',
-                          status: 'Completed',
-                          img: SAMPLE_EVIDENCE_IMAGES.pipeWeld,
-                          imgType: 'completion',
-                          caption: 'Visual QA Inspection: Weld seam 24-CW-017 completed with full penetration.',
-                          tag: '24-CW-017',
-                          detectedTags: ['24-CW-017', 'CW-017'],
-                          filename: 'PHOTO_CW_017_WELD_QA.jpg',
-                        })
-                      }
-                    >
-                      <span>CW-017 Pipe Erection</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
-                      onClick={() =>
-                        applyQuickTemplate({
-                          disp: 'Civil',
-                          area: 'Pump Bay',
-                          desc: 'Concreting of cooling water pump foundation raft completed. Curing checklist initiated.',
-                          raw: 'Pump foundation concrete pour finished slump test verified M35 mix',
-                          status: 'Completed',
-                          img: SAMPLE_EVIDENCE_IMAGES.pumpFoundation,
-                          imgType: 'completion',
-                          caption: 'Concrete Pour & Curing Checklist Verified for Pump Foundation.',
-                          tag: 'CIV-L6-002',
-                          detectedTags: ['CIV-L6-002', 'PUMP-FDN'],
-                          filename: 'CIV_FDN_CONCRETE_POUR_04.jpg',
-                        })
-                      }
-                    >
-                      <span>Pump Bay Concreting</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
-                      onClick={() =>
-                        applyQuickTemplate({
-                          disp: 'Electrical',
-                          area: 'Switchgear Rm',
-                          desc: 'Pulling 415V switchgear feeder cable through tier-2 tray to MCC-415V in progress.',
-                          raw: 'Cable pull in progress tier 2 tray 415V switchgear to MCC 450m pulled',
-                          status: 'In Progress',
-                          img: SAMPLE_EVIDENCE_IMAGES.cableTray,
-                          imgType: 'progress',
-                          caption: '415V Switchgear feeder cable pull in progress.',
-                          tag: 'MCC-415V',
-                          detectedTags: ['MCC-415V', 'ELE-L6-021'],
-                          filename: 'ELE_TRAY_PULL_SWG01.jpg',
-                        })
-                      }
-                    >
-                      <span>MCC-415V Cable Pull</span>
-                    </button>
-                  </div>
-                </div>
-
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  
-                  {/* Row 1: Discipline, Work Area, Status */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                    <div className="form-group">
-                      <label className="form-label">Discipline</label>
-                      <select
-                        className="form-select"
-                        value={discipline}
-                        onChange={e => setDiscipline(e.target.value)}
-                      >
-                        <option value="Piping">Piping</option>
-                        <option value="Civil">Civil</option>
-                        <option value="Electrical">Electrical</option>
-                        <option value="Instrumentation">Instrumentation</option>
-                        <option value="HSE">HSE</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Work Area / Front</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="e.g. Pump Bay, Substation, Pipe Rack"
-                        value={area}
-                        onChange={e => setArea(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Event Status</label>
-                      <select
-                        className="form-select"
-                        value={eventStatus}
-                        onChange={e => setEventStatus(e.target.value as any)}
-                      >
-                        <option value="Completed">Completed</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Started">Started</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Row 2: Formal Description & Verbatim Text */}
+            <div className="card-body">
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.85rem' }}>
                   <div className="form-group">
-                    <label className="form-label">
-                      <span>Formal Activity Description</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Core input for NLP matching</span>
-                    </label>
-                    <textarea
-                      className="form-textarea"
-                      rows={2}
-                      placeholder="e.g. Hydrostatic testing of 8in cooling water line completed at Pump Bay."
-                      value={description}
-                      onChange={e => setDescription(e.target.value)}
+                    <label className="form-label">Discipline</label>
+                    <select
+                      className="form-select"
+                      value={discipline}
+                      onChange={e => setDiscipline(e.target.value)}
+                    >
+                      <option value="Piping">Piping</option>
+                      <option value="Civil">Civil</option>
+                      <option value="Electrical">Electrical</option>
+                      <option value="Instrumentation">Instrumentation</option>
+                      <option value="HSE">HSE</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Work Area / Zone</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Pump Bay, Pipe Rack"
+                      value={area}
+                      onChange={e => setArea(e.target.value)}
                       required
                     />
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">
-                      <span>Raw Field Log Text</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Preserves original site note verbatim</span>
-                    </label>
+                    <label className="form-label">Status</label>
+                    <select
+                      className="form-select"
+                      value={eventStatus}
+                      onChange={e => setEventStatus(e.target.value as any)}
+                    >
+                      <option value="Completed">Completed</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Started">Started</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>Formal Activity Description</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Core input for NLP reconciliation</span>
+                  </label>
+                  <textarea
+                    className="form-textarea"
+                    rows={2}
+                    placeholder="e.g. 24-inch cooling water spool erected near pump bay with NDT cleared."
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Equipment / Line Tag (Optional)</label>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="e.g. Line 24-CW-017 spool erected in pump bay NDT cleared"
-                      value={rawText}
-                      onChange={e => setRawText(e.target.value)}
+                      placeholder="e.g. 24-CW-017"
+                      value={confirmedTag}
+                      onChange={e => setConfirmedTag(e.target.value)}
                     />
                   </div>
 
-                  {/* PHOTO EVIDENCE & OCR ATTACHMENT STUDIO SECTION */}
-                  <div
-                    style={{
-                      background: '#f8fafc',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '1.15rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '1rem',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Camera size={18} style={{ color: 'var(--brand-primary)' }} />
-                        <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                          Construction Photo Evidence & OCR Tag Verification
-                        </span>
-                      </div>
-                      <span className="mono-pill">JPEG, PNG, WebP &bull; Max 8 MB</span>
-                    </div>
-
-                    {/* Drag-and-Drop / File Selector Zone */}
-                    {!imagePreview ? (
-                      <div
-                        style={{
-                          border: '2px dashed var(--border-default)',
-                          borderRadius: 'var(--radius-md)',
-                          padding: '1.75rem 1rem',
-                          textAlign: 'center',
-                          background: '#ffffff',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: '0.5rem',
-                        }}
-                        onClick={() => fileInputRef.current?.click()}
-                        onDragOver={e => e.preventDefault()}
-                        onDrop={e => {
-                          e.preventDefault();
-                          if (e.dataTransfer.files?.[0]) {
-                            processImageFile(e.dataTransfer.files[0]);
-                          }
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 44,
-                            height: 44,
-                            borderRadius: '50%',
-                            background: 'var(--brand-surface)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'var(--brand-primary)',
-                          }}
-                        >
-                          <UploadCloud size={24} />
-                        </div>
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                          Click to Attach Construction Photo or Drag & Drop Here
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          Attach site progress photo, weld seam inspection, or equipment nameplate
-                        </div>
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          accept=".jpg,.jpeg,.png,.webp"
-                          style={{ display: 'none' }}
-                          onChange={handleCustomImageUpload}
-                        />
-                      </div>
-                    ) : (
-                      /* Attached Image Preview & OCR Operations */
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: '130px minmax(0, 1fr)',
-                            gap: '1rem',
-                            background: '#ffffff',
-                            padding: '0.85rem',
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid var(--border-subtle)',
-                          }}
-                        >
-                          <img
-                            src={imagePreview}
-                            alt="Attached Evidence"
-                            style={{
-                              width: '130px',
-                              height: '95px',
-                              objectFit: 'cover',
-                              borderRadius: 'var(--radius-xs)',
-                              border: '1px solid var(--border-subtle)',
-                            }}
-                          />
-
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: 0 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                              <div style={{ minWidth: 0 }}>
-                                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {imageFilename || 'Attached Photo'}
-                                </div>
-                                <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                                  Size: {(imageFileSize / 1024).toFixed(0)} KB &bull; Type: {imageType.toUpperCase()}
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', gap: '0.35rem' }}>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ padding: '2px 6px', fontSize: '0.7rem' }}
-                                  onClick={() => fileInputRef.current?.click()}
-                                >
-                                  Replace
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ padding: '2px 6px', fontSize: '0.7rem', color: '#b91c1c' }}
-                                  onClick={handleRemovePhoto}
-                                  title="Remove attached photo"
-                                >
-                                  <X size={12} />
-                                </button>
-                                <input
-                                  type="file"
-                                  ref={fileInputRef}
-                                  accept=".jpg,.jpeg,.png,.webp"
-                                  style={{ display: 'none' }}
-                                  onChange={handleCustomImageUpload}
-                                />
-                              </div>
-                            </div>
-
-                            {/* Integrity Fingerprint Badge */}
-                            {imageFingerprint && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.675rem', color: 'var(--text-subtle)' }}>
-                                <ShieldCheck size={12} style={{ color: 'var(--brand-primary)', flexShrink: 0 }} />
-                                <span style={{ fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  SHA-256 Fingerprint: {imageFingerprint.slice(0, 20)}...
-                                </span>
-                              </div>
-                            )}
-
-                            {/* On-Demand OCR Action Button */}
-                            <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                              <button
-                                type="button"
-                                className="btn btn-primary btn-sm"
-                                style={{ padding: '4px 10px', fontSize: '0.775rem' }}
-                                onClick={handleRunOCR}
-                                disabled={isScanningOCR}
-                              >
-                                {isScanningOCR ? (
-                                  <>
-                                    <RefreshCw size={13} className="spin" />
-                                    <span>Scanning Photo with Local OCR...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Scan size={13} />
-                                    <span>Run OCR Tag Scan</span>
-                                  </>
-                                )}
-                              </button>
-
-                              {ocrResult && (
-                                <span className="mono-pill" style={{ fontSize: '0.675rem' }}>
-                                  OCR Confidence: <strong>{ocrResult.ocrConfidence}%</strong>
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* OCR Detected Candidates & Confirmation Card */}
-                        {ocrResult && (
-                          <div
-                            style={{
-                              background: '#ffffff',
-                              border: '1px solid var(--border-subtle)',
-                              borderRadius: 'var(--radius-sm)',
-                              padding: '0.85rem',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '0.65rem',
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                                Candidate Equipment Tags Detected:
-                              </span>
-                              {ocrResult.rawText && (
-                                <button
-                                  type="button"
-                                  onClick={() => setShowRawOCR(!showRawOCR)}
-                                  style={{ background: 'none', border: 'none', color: 'var(--brand-primary)', fontSize: '0.725rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}
-                                >
-                                  <span>{showRawOCR ? 'Hide' : 'View'} Raw OCR Text</span>
-                                  {showRawOCR ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Raw OCR Text Collapsible Dropdown */}
-                            {showRawOCR && ocrResult.rawText && (
-                              <div className="raw-code-box" style={{ fontSize: '0.725rem', padding: '0.5rem' }}>
-                                {ocrResult.rawText}
-                              </div>
-                            )}
-
-                            {/* Candidate Tag Selectable Chips */}
-                            {ocrResult.detectedTags.length > 0 ? (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', alignItems: 'center' }}>
-                                {ocrResult.detectedTags.map(tag => (
-                                  <button
-                                    key={tag}
-                                    type="button"
-                                    onClick={() => handleConfirmTag(tag)}
-                                    className={`btn btn-sm ${confirmedTag === tag ? 'btn-primary' : 'btn-secondary'}`}
-                                    style={{ fontSize: '0.775rem', padding: '3px 8px', fontFamily: 'var(--font-mono)' }}
-                                  >
-                                    <Tag size={12} />
-                                    <span>{tag}</span>
-                                    {confirmedTag === tag && <Check size={12} style={{ marginLeft: 3 }} />}
-                                  </button>
-                                ))}
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                                No equipment tag was confidently detected. Enter or confirm a tag manually below.
-                              </div>
-                            )}
-
-                            {/* Human Tag Confirmation & Correction Input */}
-                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: 4 }}>
-                              <div style={{ flex: 1 }}>
-                                <input
-                                  type="text"
-                                  className="form-input"
-                                  style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
-                                  placeholder="Type or correct equipment tag (e.g. 24-CW-017)..."
-                                  value={manualTagInput}
-                                  onChange={e => setManualTagInput(e.target.value)}
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => handleConfirmTag(manualTagInput)}
-                              >
-                                <span>Confirm Tag</span>
-                              </button>
-                            </div>
-
-                            {/* Confirmed Tag Status Banner */}
-                            {confirmedTag ? (
-                              <div
-                                style={{
-                                  background: 'var(--status-ready-bg)',
-                                  border: '1px solid var(--status-ready-border)',
-                                  color: 'var(--status-ready-fg)',
-                                  padding: '0.45rem 0.65rem',
-                                  borderRadius: 'var(--radius-xs)',
-                                  fontSize: '0.75rem',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 6,
-                                }}
-                              >
-                                <CheckCircle2 size={14} />
-                                <span>
-                                  Confirmed tag <strong>{confirmedTag}</strong> will be considered as matching evidence. It will not automatically approve the schedule link.
-                                </span>
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                                Status: <strong>No tag confirmed</strong>. Human confirmation is required to strengthen schedule matching.
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                  <div className="form-group">
+                    <label className="form-label">Quantity / Percent Complete</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. 100% or 450m"
+                      value={quantity}
+                      onChange={e => setQuantity(e.target.value)}
+                    />
                   </div>
+                </div>
 
-                  {/* Blocker / Issue Toggle Card */}
-                  <div
-                    style={{
-                      background: isIssueReport ? '#fff5f5' : '#f8fafc',
-                      border: `1px solid ${isIssueReport ? '#fca5a5' : 'var(--border-subtle)'}`,
-                      borderRadius: 'var(--radius-md)',
-                      padding: '1rem',
-                      transition: 'all var(--transition-fast)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <AlertOctagon size={18} style={{ color: isIssueReport ? '#dc2626' : 'var(--text-muted)' }} />
-                        <div>
-                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: isIssueReport ? '#dc2626' : 'var(--text-primary)' }}>
-                            Flag as Site Blocker / Delay Issue
-                          </span>
-                          <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-                            Instantly alerts project planners and flags critical path risk
-                          </div>
-                        </div>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={isIssueReport}
-                        onChange={e => setIsIssueReport(e.target.checked)}
-                        style={{ cursor: 'pointer', width: 18, height: 18 }}
-                      />
-                    </div>
+                <div className="form-group">
+                  <label className="form-label">Supervisor Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={supervisorName}
+                    onChange={e => setSupervisorName(e.target.value)}
+                  />
+                </div>
 
-                    {isIssueReport && (
-                      <div style={{ marginTop: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="Describe blocker reason (e.g. 50T crane breakdown, access road blocked, missing parts)"
-                          value={issueFlag}
-                          onChange={e => setIssueFlag(e.target.value)}
-                        />
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.775rem', fontWeight: 600, color: '#dc2626' }}>Severity:</span>
-                          {(['low', 'medium', 'critical'] as const).map(sev => (
-                            <button
-                              type="button"
-                              key={sev}
-                              onClick={() => setIssueSeverity(sev)}
-                              className="btn btn-sm"
-                              style={{
-                                textTransform: 'capitalize',
-                                fontSize: '0.75rem',
-                                padding: '0.3rem 0.75rem',
-                                background: issueSeverity === sev ? '#dc2626' : '#ffffff',
-                                color: issueSeverity === sev ? '#ffffff' : '#dc2626',
-                                borderColor: '#fca5a5',
-                                fontWeight: 700,
-                              }}
-                            >
-                              {sev}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                {/* Blocker Flag Toggle */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.65rem 0.85rem',
+                    background: isIssueReport ? 'var(--status-unplanned-bg)' : 'var(--bg-surface-secondary)',
+                    border: `1px solid ${isIssueReport ? 'var(--status-unplanned-border)' : 'var(--border-subtle)'}`,
+                    borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <AlertTriangle size={15} style={{ color: isIssueReport ? 'var(--status-unplanned-fg)' : 'var(--text-muted)' }} />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      Flag as Work Blocker / Issue
+                    </span>
                   </div>
+                  <input
+                    type="checkbox"
+                    checked={isIssueReport}
+                    onChange={e => setIsIssueReport(e.target.checked)}
+                    style={{ width: 16, height: 16, cursor: 'pointer' }}
+                  />
+                </div>
 
-                  {/* Submit Button */}
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    style={{ padding: '0.75rem 1.25rem', fontSize: '0.925rem', fontWeight: 700, justifyContent: 'center' }}
-                  >
-                    <Send size={16} />
-                    <span>Submit & Run AI Match Reconciliation</span>
+                {isIssueReport && (
+                  <div className="form-group">
+                    <label className="form-label">Blocker Description</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Awaiting 50T mobile crane availability"
+                      value={issueFlag}
+                      onChange={e => setIssueFlag(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                  <button type="submit" className="btn btn-primary" style={{ padding: '0.5rem 1.25rem', gap: 6 }}>
+                    <Send size={14} />
+                    <span>Submit Daily Report</span>
                   </button>
-                </form>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* Quick Presets & Guidance */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title" style={{ fontSize: '0.85rem' }}>
+                  <Sparkles size={14} style={{ color: 'var(--brand-primary)' }} />
+                  <span>1-Click Test Scenarios</span>
+                </h3>
+              </div>
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '0.5rem 0.75rem' }}
+                  onClick={() =>
+                    applyQuickTemplate({
+                      disp: 'Piping',
+                      area: 'Pump Bay',
+                      desc: 'Erection of 24-inch cooling water spool line 24-CW-017 completed with QA sign-off.',
+                      raw: '24 inch CW spool erected near pump bay NDT cleared',
+                      status: 'Completed',
+                      tag: '24-CW-017',
+                    })
+                  }
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.775rem' }}>Piping CW Spool (24-CW-017)</div>
+                    <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>Auto-Matches with 94% confidence</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '0.5rem 0.75rem' }}
+                  onClick={() =>
+                    applyQuickTemplate({
+                      disp: 'Civil',
+                      area: 'Pump Bay',
+                      desc: 'Concreting of cooling water pump foundation raft completed. Curing initiated.',
+                      raw: 'Pump foundation concrete pour finished slump test verified M35',
+                      status: 'Completed',
+                      tag: 'CIV-L6-002',
+                    })
+                  }
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.775rem' }}>Pump Foundation Concreting</div>
+                    <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>CIV-L6-002 Foundation Raft</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '0.5rem 0.75rem' }}
+                  onClick={() =>
+                    applyQuickTemplate({
+                      disp: 'Electrical',
+                      area: 'Substation',
+                      desc: 'Pulling 415V switchgear feeder cable through tier-2 tray to MCC-415V in progress.',
+                      raw: 'Cable pull in progress tier 2 tray 415V switchgear 450m pulled',
+                      status: 'In Progress',
+                      tag: 'ELE-L6-021',
+                    })
+                  }
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.775rem' }}>MCC-415V Feeder Cable Pull</div>
+                    <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>Tier-2 Cable Tray &bull; In Progress</div>
+                  </div>
+                </button>
               </div>
             </div>
-          )}
 
-          {/* TAB 3: FILE UPLOAD (CSV, XLSX, TXT) */}
-          {activeSubTab === 'file-upload' && (
+            {/* Standard Notice */}
+            <div
+              style={{
+                padding: '0.85rem',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.75rem',
+                color: 'var(--text-muted)',
+                lineHeight: 1.45,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <ShieldCheck size={14} style={{ color: 'var(--brand-primary)' }} />
+                <span>Explainable Human Gate</span>
+              </div>
+              Submitted updates are matched deterministically against the L5/L6 project schedule using multi-factor NLP. Planners retain final approval before schedule baselines update.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 2: VOICE INPUT WORKSPACE
+          ========================================================================= */}
+      {activeSubTab === 'voice-input' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(320px, 1fr)', gap: '1.25rem' }}>
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <h2 className="card-title">
+                  <Mic size={16} style={{ color: 'var(--brand-primary)' }} />
+                  <span>Multilingual Voice Dictation</span>
+                </h2>
+                <div className="card-desc">
+                  Speak in English, Hindi, or Tamil. Speech is transcribed and parsed into structured fields.
+                </div>
+              </div>
+            </div>
+
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+              {/* Language Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  Dictation Language:
+                </span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {(
+                    [
+                      { id: 'en-IN', label: 'English (India)' },
+                      { id: 'hi-IN', label: 'हिन्दी (Hindi)' },
+                      { id: 'ta-IN', label: 'தமிழ் (Tamil)' },
+                    ] as const
+                  ).map(l => (
+                    <button
+                      key={l.id}
+                      type="button"
+                      onClick={() => setVoiceLang(l.id)}
+                      style={{
+                        padding: '0.25rem 0.65rem',
+                        borderRadius: 'var(--radius-xs)',
+                        fontSize: '0.725rem',
+                        fontWeight: 600,
+                        background: voiceLang === l.id ? 'var(--brand-primary)' : 'var(--bg-surface-secondary)',
+                        color: voiceLang === l.id ? '#ffffff' : 'var(--text-secondary)',
+                        border: `1px solid ${voiceLang === l.id ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
+                      }}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Main Mic Trigger Bar */}
+              <div
+                style={{
+                  padding: '1.25rem',
+                  background: isVoiceRecording ? 'var(--status-unplanned-bg)' : 'var(--bg-surface-secondary)',
+                  border: `1px solid ${isVoiceRecording ? 'var(--status-unplanned-border)' : 'var(--border-subtle)'}`,
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => handleToggleVoiceRecording(voiceLang)}
+                  className="btn"
+                  style={{
+                    background: isVoiceRecording ? '#dc2626' : 'var(--brand-primary)',
+                    color: '#ffffff',
+                    padding: '0.65rem 1.25rem',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    borderRadius: 'var(--radius-sm)',
+                    gap: 6,
+                  }}
+                >
+                  {isVoiceRecording ? <MicOff size={16} /> : <Mic size={16} />}
+                  <span>{isVoiceRecording ? 'Stop Recording' : 'Tap to Speak'}</span>
+                </button>
+
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {isVoiceRecording ? 'Listening live...' : 'Click button above or test with audio presets.'}
+                  </div>
+                  {/* VU Meter Bars */}
+                  {isVoiceRecording && (
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 18, marginTop: 4 }}>
+                      {[20, 50, 80, 100, 70, 40, 90, 60, 30].map((bar, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            width: 3,
+                            height: `${Math.max(4, Math.round((audioLevel / 100) * bar * 0.18) + 4)}px`,
+                            background: '#10b981',
+                            borderRadius: 2,
+                            transition: 'height 0.08s ease-out',
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Editable Transcript Area */}
+              <div className="form-group">
+                <label className="form-label">
+                  <span>Recognized Spoken Transcript</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Editable buffer</span>
+                </label>
+                <textarea
+                  className="form-textarea"
+                  rows={3}
+                  placeholder="Spoken words stream here in real time. You can also type or edit speech transcript directly..."
+                  value={voiceTranscript || interimVoiceText}
+                  onChange={e => handleVoiceTextChange(e.target.value)}
+                />
+              </div>
+
+              {/* Parsed Structure Preview */}
+              {parsedVoiceResult && (
+                <div
+                  style={{
+                    padding: '0.85rem',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 'var(--radius-md)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                  }}
+                >
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+                    Structured Information Extracted:
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                    <span className="mono-pill">Discipline: {parsedVoiceResult.discipline}</span>
+                    <span className="mono-pill">Area: {parsedVoiceResult.area}</span>
+                    <span className="mono-pill">Status: {parsedVoiceResult.eventStatus}</span>
+                    {parsedVoiceResult.detectedTag && (
+                      <span className="status-badge ready">Tag: {parsedVoiceResult.detectedTag}</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={handleApplyVoiceToForm}
+                    >
+                      <Check size={13} />
+                      <span>Apply Spoken Fields to Report</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Voice Scenarios */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title" style={{ fontSize: '0.85rem' }}>
+                <Volume2 size={14} style={{ color: 'var(--brand-primary)' }} />
+                <span>Simulated Voice Scenarios</span>
+              </h3>
+            </div>
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {SAMPLE_VOICE_PRESETS.slice(0, 3).map(preset => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '0.5rem 0.75rem' }}
+                  onClick={() => handleSelectVoicePreset(preset)}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.775rem' }}>{preset.label}</div>
+                    <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>"{preset.transcript.slice(0, 48)}..."</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 3: PHOTO EVIDENCE + OCR GUIDED WORKFLOW PIPELINE
+          ========================================================================= */}
+      {activeSubTab === 'photo-ocr' && (
+        <div id="demo-target-photo-ocr" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* 5-Step Guided Visual Pipeline Ribbon */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(5, 1fr)',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem 1rem',
+              gap: '0.5rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <span style={{ width: 22, height: 22, borderRadius: '50%', background: imagePreview ? 'var(--brand-primary)' : 'var(--bg-surface-secondary)', color: imagePreview ? '#ffffff' : 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                1
+              </span>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>Upload Photo</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Select site evidence</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <span style={{ width: 22, height: 22, borderRadius: '50%', background: ocrResult ? 'var(--brand-primary)' : 'var(--bg-surface-secondary)', color: ocrResult ? '#ffffff' : 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                2
+              </span>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>OCR Analysis</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Extract tags & text</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <span style={{ width: 22, height: 22, borderRadius: '50%', background: ocrResult?.detectedTags.length ? 'var(--brand-primary)' : 'var(--bg-surface-secondary)', color: ocrResult?.detectedTags.length ? '#ffffff' : 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                3
+              </span>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>Candidate Tags</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>AI recommendations</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <span style={{ width: 22, height: 22, borderRadius: '50%', background: confirmedTag ? '#059669' : 'var(--bg-surface-secondary)', color: confirmedTag ? '#ffffff' : 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                4
+              </span>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>Human Gate</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>User confirmation</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <span style={{ width: 22, height: 22, borderRadius: '50%', background: confirmedTag ? '#047857' : 'var(--bg-surface-secondary)', color: confirmedTag ? '#ffffff' : 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                5
+              </span>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>Schedule Link</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Verified reconciliation</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Guided Workspace Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(340px, 1fr)', gap: '1.25rem' }}>
+            {/* Left: Upload & Image Workspace */}
             <div className="card">
               <div className="card-header">
                 <div>
-                  <h3 className="card-title">
-                    <FileSpreadsheet size={18} style={{ color: 'var(--brand-primary)' }} />
-                    Batch Spreadsheet & Text File Ingestion
-                  </h3>
+                  <h2 className="card-title">
+                    <Camera size={16} style={{ color: 'var(--brand-primary)' }} />
+                    <span>Step 1: Construction Photo Evidence</span>
+                  </h2>
                   <div className="card-desc">
-                    Upload daily field logs in CSV, Excel XLSX, or plain text format. Datum parses any format automatically.
+                    Attach site photo proof or test with preset construction inspection images.
                   </div>
                 </div>
               </div>
 
-              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div
-                  style={{
-                    border: '2px dashed var(--brand-primary)',
-                    borderRadius: 'var(--radius-lg)',
-                    padding: '2.5rem 1.5rem',
-                    textAlign: 'center',
-                    background: '#f8fafc',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '0.85rem',
-                    cursor: 'pointer',
-                    transition: 'all var(--transition-fast)',
-                  }}
-                  onClick={() => batchCsvRef.current?.click()}
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={e => {
-                    e.preventDefault();
-                    if (e.dataTransfer.files?.[0]) {
-                      handleBatchFileDrop(e.dataTransfer.files[0]);
-                    }
-                  }}
-                >
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {/* Preset Chips */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: '0.725rem', padding: '3px 8px' }}
+                    onClick={() => handleSelectSampleEvidence('pipeWeld', 'Field Weld 24-CW-017')}
+                  >
+                    📷 Weld Seam 24-CW-017
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: '0.725rem', padding: '3px 8px' }}
+                    onClick={() => handleSelectSampleEvidence('pumpFoundation', 'Pump Foundation Pour')}
+                  >
+                    🏗️ Pump Foundation CIV-L6-002
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: '0.725rem', padding: '3px 8px' }}
+                    onClick={() => handleSelectSampleEvidence('cableTray', '415V Cable Tray')}
+                  >
+                    🔌 Cable Tray MCC-415V
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: '0.725rem', padding: '3px 8px' }}
+                    onClick={() => handleSelectSampleEvidence('handwrittenLog', 'Handwritten Job Card #402')}
+                  >
+                    📝 Handwritten Job Card #402
+                  </button>
+                </div>
+
+                {/* Dropzone or Preview */}
+                {!imagePreview ? (
                   <div
                     style={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: '50%',
-                      background: 'var(--brand-surface)',
+                      border: '2px dashed var(--border-default)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '2rem 1rem',
+                      textAlign: 'center',
+                      background: 'var(--bg-surface-secondary)',
+                      cursor: 'pointer',
                       display: 'flex',
+                      flexDirection: 'column',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--brand-primary)',
+                      gap: '0.5rem',
                     }}
+                    onClick={() => fileInputRef.current?.click()}
                   >
-                    <UploadCloud size={28} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
-                      Drag & Drop CSV / XLSX / TXT Log Files Here
+                    <UploadCloud size={24} style={{ color: 'var(--brand-primary)' }} />
+                    <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                      Click to upload site photo or drag and drop
                     </div>
-                    <div style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                      Supports Daily Reports (.txt), Piping Progress (.xlsx), and Site Logs (.csv)
+                    <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                      JPEG, PNG, WebP up to 8 MB
                     </div>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept=".jpg,.jpeg,.png,.webp"
+                      style={{ display: 'none' }}
+                      onChange={handleCustomImageUpload}
+                    />
                   </div>
-                  <input
-                    type="file"
-                    ref={batchCsvRef}
-                    accept=".csv,.txt,.xlsx"
-                    style={{ display: 'none' }}
-                    onChange={e => {
-                      if (e.target.files?.[0]) handleBatchFileDrop(e.target.files[0]);
-                    }}
-                  />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ position: 'relative', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border-subtle)', maxHeight: 220 }}>
+                      <img
+                        src={imagePreview}
+                        alt="Evidence Preview"
+                        style={{ width: '100%', height: 220, objectFit: 'cover' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemovePhoto}
+                        style={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          background: 'rgba(0, 0, 0, 0.65)',
+                          color: '#ffffff',
+                          padding: 4,
+                          borderRadius: '50%',
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    {/* Metadata & SHA Fingerprint */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                      <span>{imageFilename} ({(imageFileSize / 1024).toFixed(0)} KB)</span>
+                      {imageFingerprint && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-mono)' }}>
+                          <ShieldCheck size={12} style={{ color: 'var(--brand-primary)' }} />
+                          SHA-256: {imageFingerprint.slice(0, 14)}...
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Step 2 Action: Run OCR */}
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleRunOCR}
+                      disabled={isScanningOCR}
+                      style={{ width: '100%', padding: '0.55rem', gap: 6 }}
+                    >
+                      {isScanningOCR ? <RefreshCw size={14} className="spin" /> : <Scan size={14} />}
+                      <span>{isScanningOCR ? 'Analyzing Photo with OCR...' : 'Step 2: Run Local OCR Tag Analysis'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Steps 3, 4, 5 (Candidate Tags, Human Confirmation, Schedule Link) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Step 3 & 4: Candidate Tag & Human Gate */}
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title" style={{ fontSize: '0.85rem' }}>
+                    <Tag size={14} style={{ color: 'var(--brand-primary)' }} />
+                    <span>Step 3 & 4: Extracted Tags & Human Gate</span>
+                  </h3>
+                </div>
+
+                <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  {ocrResult ? (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          Candidate Tags:
+                        </span>
+                        <span className="mono-pill" style={{ fontSize: '0.675rem' }}>
+                          Confidence: <strong>{ocrResult.ocrConfidence}%</strong>
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        {ocrResult.detectedTags.map(t => (
+                          <button
+                            key={t}
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{
+                              borderColor: confirmedTag === t ? 'var(--brand-primary)' : 'var(--border-subtle)',
+                              background: confirmedTag === t ? 'var(--brand-surface)' : 'var(--bg-surface-secondary)',
+                              color: confirmedTag === t ? 'var(--brand-primary)' : 'var(--text-primary)',
+                              fontWeight: 700,
+                            }}
+                            onClick={() => handleConfirmTag(t)}
+                          >
+                            <span>{t}</span>
+                            {confirmedTag === t && <Check size={12} />}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Step 4 Human Confirmation Gate */}
+                      <div
+                        style={{
+                          padding: '0.75rem',
+                          background: 'var(--bg-surface-secondary)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 'var(--radius-sm)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.45rem',
+                        }}
+                      >
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          Step 4: Confirm Tag for Schedule Matching
+                        </label>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={manualTagInput}
+                            onChange={e => setManualTagInput(e.target.value)}
+                            placeholder="e.g. 24-CW-017"
+                            style={{ fontSize: '0.8rem' }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => handleConfirmTag(manualTagInput)}
+                          >
+                            <span>Confirm</span>
+                          </button>
+                        </div>
+                        {confirmedTag && (
+                          <div style={{ fontSize: '0.7rem', color: 'var(--status-ready-fg)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <CheckCircle2 size={12} />
+                            <span>Human Gate Cleared: Confirmed "{confirmedTag}"</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Step 5: Final Link to Schedule Button */}
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => {
+                          setDescription(`Erection and weld inspection of line ${confirmedTag} at Pump Bay cleared.`);
+                          setRawText(`[OCR VERIFIED EVIDENCE (${confirmedTag})]: ${ocrResult.rawText}`);
+                          setActiveSubTab('direct-report');
+                          addToast({
+                            type: 'success',
+                            title: 'Evidence Ready for Reconciliation',
+                            message: `Attached tag "${confirmedTag}" and photo proof to report form.`,
+                          });
+                        }}
+                        disabled={!confirmedTag}
+                        style={{ width: '100%', padding: '0.55rem', gap: 6 }}
+                      >
+                        <ArrowRight size={14} />
+                        <span>Step 5: Attach Evidence & Proceed to Form</span>
+                      </button>
+                    </>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '1.5rem 0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                      Run OCR tag analysis on the left to extract candidate tags.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 4: BATCH SPREADSHEET & TXT UPLOAD
+          ========================================================================= */}
+      {activeSubTab === 'batch-upload' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(320px, 1fr)', gap: '1.25rem' }}>
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <h2 className="card-title">
+                  <FileSpreadsheet size={16} style={{ color: 'var(--brand-primary)' }} />
+                  <span>Batch Data Ingestion</span>
+                </h2>
+                <div className="card-desc">
+                  Upload daily logs in TXT or Excel (.xlsx) formats to ingest multiple field reports at once.
+                </div>
+              </div>
+            </div>
+
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+              <div
+                style={{
+                  border: '2px dashed var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '2.5rem 1rem',
+                  textAlign: 'center',
+                  background: 'var(--bg-surface-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '0.65rem',
+                }}
+                onClick={() => batchFileRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files?.[0]) handleBatchFileDrop(e.dataTransfer.files[0]);
+                }}
+              >
+                <UploadCloud size={28} style={{ color: 'var(--brand-primary)' }} />
+                <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                  Drag & Drop Daily Log Files Here
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Accepts <code>daily_report.txt</code>, <code>piping_progress.xlsx</code>, or custom CSV files
+                </div>
+                <input
+                  type="file"
+                  ref={batchFileRef}
+                  accept=".txt,.xlsx,.csv"
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    if (e.target.files?.[0]) handleBatchFileDrop(e.target.files[0]);
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                <span>Parsed updates automatically route to the AI Match Matrix for reconciliation.</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setActiveTab('site-updates')}
+                >
+                  <span>View Feed ({siteUpdates.length})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Benchmark Preset Data */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title" style={{ fontSize: '0.85rem' }}>
+                <Layers size={14} style={{ color: 'var(--brand-primary)' }} />
+                <span>Benchmark Datasets</span>
+              </h3>
+            </div>
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              <div
+                style={{
+                  padding: '0.75rem',
+                  background: 'var(--bg-surface-secondary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                  Refinery Piping Progress (Excel)
+                </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                  Contains 10 spool erection and welding log entries.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    addToast({ type: 'info', title: 'Benchmark Ingested', message: 'Loaded piping_progress.xlsx dataset.' });
+                  }}
+                >
+                  Load Piping Dataset
+                </button>
+              </div>
+
+              <div
+                style={{
+                  padding: '0.75rem',
+                  background: 'var(--bg-surface-secondary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                  Unstructured Site Log (TXT)
+                </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                  Contains verbatim shift superintendent notes.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    addToast({ type: 'info', title: 'Benchmark Ingested', message: 'Loaded daily_report.txt dataset.' });
+                  }}
+                >
+                  Load TXT Log
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
+
+      {/* SECTION 4: RECENT FIELD SUBMISSIONS & EVIDENCE CHAIN */}
+      <div className="card">
+        <div className="card-header" style={{ padding: '0.85rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h3 className="card-title" style={{ fontSize: '0.9rem', fontWeight: 800 }}>
+              <ShieldCheck size={16} style={{ color: 'var(--brand-primary)' }} />
+              <span>YOUR RECENT FIELD SUBMISSIONS & EVIDENCE TRAIL</span>
+            </h3>
+            <div className="card-desc" style={{ fontSize: '0.725rem' }}>
+              Traceable log of field reports, photo evidence, and OCR-verified equipment tags sent to Lead Planner.
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setActiveTab('site-updates')}
+            style={{ fontSize: '0.725rem' }}
+          >
+            <span>Full Daily Feed ({siteUpdates.length})</span>
+            <ArrowRight size={12} />
+          </button>
         </div>
 
-        {/* Right Column: Live Stream & Matching Intelligence */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
-          {/* Live Matching Intelligence Card */}
-          <div className="card">
-            <div className="card-header">
-              <div>
-                <h4 className="card-title">
-                  <Sparkles size={16} style={{ color: 'var(--brand-primary)' }} />
-                  Deterministic Evidence Standards
-                </h4>
-                <div className="card-desc">Explainable matching and photo provenance.</div>
-              </div>
-            </div>
-
-            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', fontSize: '0.8125rem' }}>
-                <CheckCircle2 size={16} style={{ color: '#047857', marginTop: 2, flexShrink: 0 }} />
-                <div>
-                  <strong>OCR Tag Evidence:</strong> Extracted tags (e.g. <code>24-CW-017</code>) provide verified keyword match points upon human confirmation.
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', fontSize: '0.8125rem' }}>
-                <CheckCircle2 size={16} style={{ color: '#047857', marginTop: 2, flexShrink: 0 }} />
-                <div>
-                  <strong>Mandatory Human Gate:</strong> OCR output is strictly candidate evidence. Planners must explicitly approve or relink.
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', fontSize: '0.8125rem' }}>
-                <CheckCircle2 size={16} style={{ color: '#047857', marginTop: 2, flexShrink: 0 }} />
-                <div>
-                  <strong>Integrity Fingerprint:</strong> Attached photos are hashed via Web Crypto SHA-256 for tamper-evident provenance.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Submissions Feed */}
-          <div className="card">
-            <div className="card-header">
-              <div>
-                <h4 className="card-title">
-                  <Radio size={16} style={{ color: 'var(--brand-primary)' }} />
-                  Recent Field Stream
-                </h4>
-                <div className="card-desc">Latest {recentSubmissions.length} field events ingested.</div>
-              </div>
-            </div>
-
-            <div className="card-body" style={{ padding: 0 }}>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {recentSubmissions.map(item => {
-                  const match = matchResults[item.id];
-                  const matchCategory = match?.category || 'review';
+        <div className="card-body" style={{ padding: 0 }}>
+          <div className="table-container" style={{ maxHeight: 280, overflowY: 'auto' }}>
+            <table className="enterprise-table" style={{ width: '100%', fontSize: '0.75rem' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Entry ID</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Date & Discipline</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Description</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Confirmed Tag</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Photo Evidence / Hash</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {siteUpdates.slice(0, 6).map(u => {
+                  const img = u.images?.[0];
                   return (
-                    <div
-                      key={item.id}
-                      onClick={() => {
-                        setSelectedInspectorUpdateId(item.id);
-                      }}
-                      style={{
-                        padding: '0.85rem 1.15rem',
-                        borderBottom: '1px solid var(--border-subtle)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.45rem',
-                        transition: 'background var(--transition-fast)',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-hover)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                          <span className="mono-pill" style={{ fontSize: '0.7rem' }}>{item.id}</span>
-                          <span style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>{item.discipline}</span>
-                          {item.confirmedTag && (
-                            <span className="mono-pill" style={{ fontSize: '0.65rem', color: 'var(--brand-primary)', fontWeight: 700 }}>
-                              Tag: {item.confirmedTag}
-                            </span>
-                          )}
+                    <tr key={u.id}>
+                      <td style={{ padding: '0.5rem 0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>
+                        {u.id}
+                      </td>
+                      <td style={{ padding: '0.5rem 0.75rem' }}>
+                        <div style={{ fontWeight: 600 }}>{u.discipline}</div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{u.reportDate} &bull; {u.area}</div>
+                      </td>
+                      <td style={{ padding: '0.5rem 0.75rem', maxWidth: 260 }}>
+                        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {u.extractedDescription}
                         </div>
-                        <span
-                          className="mono-pill"
-                          style={{
-                            fontSize: '0.675rem',
-                            fontWeight: 700,
-                            background: matchCategory === 'ready' ? '#ecfdf5' : matchCategory === 'unplanned' ? '#fff1f2' : '#fffbeb',
-                            color: matchCategory === 'ready' ? '#047857' : matchCategory === 'unplanned' ? '#991b1b' : '#b45309',
-                            borderColor: matchCategory === 'ready' ? '#6ee7b7' : matchCategory === 'unplanned' ? '#fca5a5' : '#fde68a',
-                          }}
-                        >
-                          {matchCategory.toUpperCase()}
+                      </td>
+                      <td style={{ padding: '0.5rem 0.75rem' }}>
+                        {u.confirmedTag ? (
+                          <span className="mono-pill" style={{ fontSize: '0.675rem', background: 'var(--brand-surface)', color: 'var(--brand-primary)', border: '1px solid var(--border-subtle)' }}>
+                            {u.confirmedTag}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.675rem' }}>None</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.5rem 0.75rem' }}>
+                        {img ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Camera size={12} style={{ color: 'var(--brand-primary)' }} />
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.625rem', color: 'var(--text-muted)' }}>
+                              #{img.sha256Hash?.slice(0, 8) || 'VERIFIED'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.675rem' }}>No image</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.5rem 0.75rem' }}>
+                        <span className={`status-badge ${u.eventStatus === 'Completed' ? 'ready' : 'review'}`} style={{ fontSize: '0.625rem' }}>
+                          {u.eventStatus}
                         </span>
-                      </div>
-
-                      <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                        {item.extractedDescription || item.rawText}
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        <span>Area: <strong>{item.area || 'General'}</strong></span>
-                        <span style={{ color: 'var(--brand-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
-                          Inspect <Eye size={12} />
-                        </span>
-                      </div>
-                    </div>
+                      </td>
+                    </tr>
                   );
                 })}
-              </div>
-            </div>
+              </tbody>
+            </table>
           </div>
-
         </div>
       </div>
     </div>

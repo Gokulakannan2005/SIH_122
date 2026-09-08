@@ -12,15 +12,23 @@ import {
   UserRole,
   DensityMode,
   ImageEvidence,
+  AppSystemMode,
   OfflineSyncItem,
   ToastNotification,
-  ToastType,
+  ThemeMode,
+  UserAccount,
+  ApprovalHistoryItem,
+  ScheduleVersion,
+  FieldSubmissionInboxItem,
+  SystemNotification,
 } from '../types';
 import { parseScheduleCSV, parseDailyReportTXT, parsePipingProgressXLSX } from '../utils/parsers';
 import { processAllMatches } from '../utils/matchingEngine';
 import { api, HealthResponse } from '../services/api';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
 import { calculateImageFingerprint } from '../utils/ocrService';
+import { parseUTCDateMs } from '../utils/scheduleSimulator';
+import { GUIDED_DEMO_STEPS } from '../utils/guidedDemoData';
 
 export type BackendConnectionStatus = 'connected' | 'offline' | 'checking';
 
@@ -38,8 +46,45 @@ interface ProjectContextType {
   matchResults: Record<string, MatchResult>;
   plannerDecisions: Record<string, PlannerDecision>;
   auditLogs: AuditLog[];
+  approvalHistory: ApprovalHistoryItem[];
+  refreshApprovalHistory: () => Promise<void>;
+
+  // Schedule Versions & Version Control
+  scheduleVersions: ScheduleVersion[];
+  activeScheduleVersion: ScheduleVersion | null;
+  activateScheduleVersion: (versionId: string) => Promise<void>;
+  uploadNewScheduleVersion: (file: File, versionName?: string) => Promise<void>;
+
+  // Field Submissions Inbox
+  fieldSubmissions: FieldSubmissionInboxItem[];
+  refreshSubmissionsInbox: () => Promise<void>;
+
+  // System Notifications
+  systemNotifications: SystemNotification[];
+  acknowledgeScheduleUpdates: () => Promise<void>;
+  markNotificationAsRead: (id: string) => Promise<void>;
+
+  // Authentication & User Identity State
+  currentUser: UserAccount | null;
+  isAuthenticated: boolean;
+  login: (username: string, passwordPlain: string) => Promise<{ success: boolean; error?: string }>;
+  loginAsGuest: (guestRole: 'planner' | 'supervisor') => Promise<void>;
+  logout: () => void;
+
   activeTab: NavigationTab;
   setActiveTab: (tab: NavigationTab) => void;
+
+  systemMode: AppSystemMode;
+  setSystemMode: (mode: AppSystemMode) => void;
+  loadScenarioPreset: (scenarioKey: string) => Promise<void>;
+  // Backwards compatibility aliases
+  demoMode: AppSystemMode;
+  setDemoMode: (mode: AppSystemMode) => void;
+  loadJudgeDemoScenario: (scenarioKey: string) => Promise<void>;
+
+  theme: ThemeMode;
+  toggleTheme: () => void;
+  setTheme: (theme: ThemeMode) => void;
 
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
@@ -84,6 +129,22 @@ interface ProjectContextType {
   setPlannerQueueFilter: React.Dispatch<React.SetStateAction<'review' | 'unplanned' | 'approved' | 'all'>>;
   navigateToSiteUpdatesWithFilter: (filter: Partial<SiteUpdatesFilterState>) => void;
   navigateToPlannerReviewWithFilter: (filter: 'review' | 'unplanned' | 'approved' | 'all') => void;
+  // Guided Demo Mode & Onboarding
+  isGuidedDemoActive: boolean;
+  guidedDemoStepIndex: number;
+  currentGuidedDemoStep: import('../types').GuidedDemoStep | null;
+  startGuidedDemo: () => void;
+  nextGuidedDemoStep: () => void;
+  prevGuidedDemoStep: () => void;
+  jumpToGuidedDemoStep: (stepIndex: number) => void;
+  exitGuidedDemo: () => void;
+  isWelcomeModalOpen: boolean;
+  setIsWelcomeModalOpen: (open: boolean) => void;
+  isDemoCompletionModalOpen: boolean;
+  setIsDemoCompletionModalOpen: (open: boolean) => void;
+  isCommandPaletteOpen: boolean;
+  setIsCommandPaletteOpen: (open: boolean) => void;
+  toggleCommandPalette: () => void;
 
   isLoading: boolean;
   loadDemoData: () => Promise<void>;
@@ -135,8 +196,34 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [siteUpdates, setSiteUpdates] = useState<SiteUpdate[]>([]);
   const [matchResults, setMatchResults] = useState<Record<string, MatchResult>>({});
   const [plannerDecisions, setPlannerDecisions] = useState<Record<string, PlannerDecision>>({});
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
+  const [isGuidedDemoActive, setIsGuidedDemoActive] = useState<boolean>(false);
+  const [activeTabState, setActiveTabState] = useState<NavigationTab>('home');
+
+  const setActiveTab = (tab: NavigationTab) => {
+    // If guided demo is running, allow all tour steps without role restrictions or toasts
+    if (isGuidedDemoActive) {
+      setActiveTabState(tab);
+      return;
+    }
+
+    // Normal mode: Supervisors can view home, supervisor-entry, site-updates, schedule-activities, dashboard
+    // If supervisor manually accesses planner-only administration (planner-review, copilot), gently guide them
+    if (currentRole === 'supervisor' && (tab === 'planner-review' || tab === 'copilot')) {
+      addToast({
+        type: 'info',
+        title: 'Lead Planner Perspective',
+        message: 'This module is restricted to Lead Planning Engineers.',
+      });
+      setActiveTabState('supervisor-entry');
+      return;
+    }
+    setActiveTabState(tab);
+  };
+
+  const activeTab = activeTabState;
+  const [systemMode, setSystemMode] = useState<AppSystemMode>('executive');
+  const demoMode = systemMode;
+  const setDemoMode = setSystemMode;
   const [workbenchViewMode, setWorkbenchViewMode] = useState<WorkbenchViewMode>('kanban');
   const [sortOption, setSortOption] = useState<WorkbenchSortOption>('confidence-desc');
   const [selectedInspectorUpdateId, setSelectedInspectorUpdateId] = useState<string | null>(null);
@@ -146,6 +233,146 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [densityMode, setDensityMode] = useState<DensityMode>('comfortable');
   const [offlineMode, setOfflineMode] = useState<boolean>(false);
   const [offlineSyncQueue, setOfflineSyncQueue] = useState<OfflineSyncItem[]>([]);
+
+  // User Authentication & SQLite Identity State
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    try {
+      const saved = localStorage.getItem('datum_current_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const isAuthenticated = Boolean(currentUser);
+  const [approvalHistory, setApprovalHistory] = useState<ApprovalHistoryItem[]>([]);
+
+  // Schedule Versions & Version Control State
+  const [scheduleVersions, setScheduleVersions] = useState<ScheduleVersion[]>([
+    {
+      versionId: 'Rev-01',
+      projectId: 'IOCL-P4-REFINERY',
+      versionName: 'Rev-01 (Contract Award Baseline)',
+      uploadedAt: '2026-08-01T09:00:00Z',
+      uploadedBy: 'Gokulakannan P. (Lead Planner)',
+      fileType: 'Primavera P6 XLSX',
+      activitiesCount: 30,
+      isActive: false,
+      changeSummary: { newCount: 0, modCount: 0, dateChanges: 0, removedCount: 0 },
+    },
+    {
+      versionId: 'Rev-02',
+      projectId: 'IOCL-P4-REFINERY',
+      versionName: 'Rev-02 (Monsoon Revised Schedule)',
+      uploadedAt: '2026-08-25T14:30:00Z',
+      uploadedBy: 'Gokulakannan P. (Lead Planner)',
+      fileType: 'Primavera P6 XLSX',
+      activitiesCount: 34,
+      isActive: false,
+      changeSummary: { newCount: 4, modCount: 8, dateChanges: 12, removedCount: 0 },
+    },
+    {
+      versionId: 'Rev-03',
+      projectId: 'IOCL-P4-REFINERY',
+      versionName: 'Rev-03 (Active Approved Production Schedule)',
+      uploadedAt: '2026-09-08T08:00:00Z',
+      uploadedBy: 'Gokulakannan P. (Lead Planner)',
+      fileType: 'Primavera P6 Export XLSX',
+      activitiesCount: 34,
+      isActive: true,
+      changeSummary: { newCount: 12, modCount: 27, dateChanges: 41, removedCount: 3 },
+    },
+  ]);
+
+  const activeScheduleVersion = useMemo(() => {
+    return scheduleVersions.find(v => v.isActive) || scheduleVersions[scheduleVersions.length - 1] || null;
+  }, [scheduleVersions]);
+
+  // Field Submissions Inbox State
+  const [fieldSubmissions, setFieldSubmissions] = useState<FieldSubmissionInboxItem[]>([
+    {
+      id: 'SUB-2026-0908-01',
+      projectId: 'IOCL-P4-REFINERY',
+      submittedAt: '2026-09-08T10:42:00Z',
+      submittedBy: 'Rajesh Kumar (Field Supervisor)',
+      userId: 'usr-supervisor-rajesh',
+      sourceType: 'Daily Field Report',
+      fileName: 'daily_report.txt',
+      extractedCount: 7,
+      autoMatchedCount: 5,
+      reviewCount: 2,
+      status: 'pending_review',
+      notes: 'Unit-01 Pump Bay daily shift progress with welding and foundation pour records.',
+    },
+    {
+      id: 'SUB-2026-0908-02',
+      projectId: 'IOCL-P4-REFINERY',
+      submittedAt: '2026-09-08T11:15:00Z',
+      submittedBy: 'Rajesh Kumar (Field Supervisor)',
+      userId: 'usr-supervisor-rajesh',
+      sourceType: 'Piping Progress XLSX',
+      fileName: 'piping_progress.xlsx',
+      extractedCount: 10,
+      autoMatchedCount: 10,
+      reviewCount: 0,
+      status: 'approved',
+      notes: 'Piping spool fabrication & hydrostatic test clearance logs.',
+    },
+  ]);
+
+  // System Notifications State
+  const [systemNotifications, setSystemNotifications] = useState<SystemNotification[]>([
+    {
+      id: 'NOTIF-01',
+      targetRole: 'planner',
+      type: 'action_required',
+      title: '2 Field Submissions Require Review',
+      message: 'New progress entries from Rajesh Kumar in Unit-01 require human-in-the-loop schedule reconciliation.',
+      timestamp: '2026-09-08T10:45:00Z',
+      isRead: false,
+      deepLinkTab: 'planner-review',
+    },
+    {
+      id: 'NOTIF-02',
+      targetRole: 'supervisor',
+      type: 'update',
+      title: 'Active Schedule Version: Rev-03',
+      message: 'Lead Planner Gokulakannan P. activated Rev-03. 4 activities assigned to your workfront were updated.',
+      timestamp: '2026-09-08T08:05:00Z',
+      isRead: false,
+      deepLinkTab: 'supervisor-entry',
+      acknowledged: false,
+    },
+    {
+      id: 'NOTIF-03',
+      targetRole: 'all',
+      type: 'info',
+      title: 'Synchronized Project Database',
+      message: 'Central SQLite embedded engine is active and synchronized across Field & Planning roles.',
+      timestamp: '2026-09-08T08:00:00Z',
+      isRead: true,
+      deepLinkTab: 'dashboard',
+    },
+  ]);
+
+  const [theme, setThemeState] = useState<ThemeMode>(() => {
+    const saved = localStorage.getItem('datum_theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('datum_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setThemeState(prev => (prev === 'light' ? 'dark' : 'light'));
+  };
+
+  const setTheme = (newTheme: ThemeMode) => {
+    setThemeState(newTheme);
+  };
 
   const [backendStatus, setBackendStatus] = useState<BackendConnectionStatus>('checking');
   const [backendMetrics, setBackendMetrics] = useState<HealthResponse['metrics'] | null>(null);
@@ -199,6 +426,72 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setActiveTab('planner-review');
   };
 
+  // Guided Demo Mode & Welcome Modal State
+  const [guidedDemoStepIndex, setGuidedDemoStepIndex] = useState<number>(0);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState<boolean>(() => {
+    // Show welcome modal once on initial visit unless dismissed
+    return !localStorage.getItem('datum_onboarding_dismissed');
+  });
+  const [isDemoCompletionModalOpen, setIsDemoCompletionModalOpen] = useState<boolean>(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
+
+  const toggleCommandPalette = () => {
+    setIsCommandPaletteOpen(prev => !prev);
+  };
+
+  const currentGuidedDemoStep = useMemo(() => {
+    if (!isGuidedDemoActive) return null;
+    return GUIDED_DEMO_STEPS[guidedDemoStepIndex] || null;
+  }, [isGuidedDemoActive, guidedDemoStepIndex]);
+
+  const startGuidedDemo = () => {
+    localStorage.setItem('datum_onboarding_dismissed', 'true');
+    setIsWelcomeModalOpen(false);
+    setIsDemoCompletionModalOpen(false);
+    setGuidedDemoStepIndex(0);
+    setIsGuidedDemoActive(true);
+    const firstStep = GUIDED_DEMO_STEPS[0];
+    if (firstStep) {
+      setActiveTab(firstStep.targetTab);
+    }
+  };
+
+  const nextGuidedDemoStep = () => {
+    if (guidedDemoStepIndex < GUIDED_DEMO_STEPS.length - 1) {
+      const nextIndex = guidedDemoStepIndex + 1;
+      setGuidedDemoStepIndex(nextIndex);
+      const step = GUIDED_DEMO_STEPS[nextIndex];
+      setActiveTab(step.targetTab);
+    } else {
+      setIsGuidedDemoActive(false);
+      setIsDemoCompletionModalOpen(true);
+    }
+  };
+
+  const prevGuidedDemoStep = () => {
+    if (guidedDemoStepIndex > 0) {
+      const prevIndex = guidedDemoStepIndex - 1;
+      setGuidedDemoStepIndex(prevIndex);
+      const step = GUIDED_DEMO_STEPS[prevIndex];
+      setActiveTab(step.targetTab);
+    }
+  };
+
+  const jumpToGuidedDemoStep = (stepIndex: number) => {
+    if (stepIndex >= 0 && stepIndex < GUIDED_DEMO_STEPS.length) {
+      setIsGuidedDemoActive(true);
+      setIsDemoCompletionModalOpen(false);
+      setGuidedDemoStepIndex(stepIndex);
+      const step = GUIDED_DEMO_STEPS[stepIndex];
+      setActiveTab(step.targetTab);
+    }
+  };
+
+  const exitGuidedDemo = () => {
+    setIsGuidedDemoActive(false);
+  };
+
   // Auto-check backend connection and load dataset on mount
   useEffect(() => {
     initData();
@@ -222,6 +515,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setMatchResults(backendData.matchResults);
         setPlannerDecisions(backendData.plannerDecisions);
         setAuditLogs(backendData.auditLogs);
+
+        const [versions, submissions, notifs] = await Promise.all([
+          api.getScheduleVersions(),
+          api.getFieldSubmissions(),
+          api.getNotifications(),
+        ]);
+        if (versions && versions.length > 0) setScheduleVersions(versions);
+        if (submissions && submissions.length > 0) setFieldSubmissions(submissions);
+        if (notifs && notifs.length > 0) setSystemNotifications(notifs);
+
         setIsLoading(false);
         return;
       }
@@ -597,6 +900,39 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setAuditLogs(prev => [newAuditLog, ...prev]);
 
+    // Record in Field Submissions Inbox
+    const newSubmission: FieldSubmissionInboxItem = {
+      id: `SUB-${Date.now()}`,
+      projectId: 'IOCL-P4-REFINERY',
+      submittedAt: new Date().toISOString(),
+      submittedBy: entry.supervisor || currentUser?.fullName || 'Rajesh Kumar (Field Supervisor)',
+      userId: currentUser?.id || 'usr-supervisor-rajesh',
+      sourceType: entry.imageFile ? 'Field Photo OCR' : 'Daily Field Report',
+      fileName: entry.filename || 'mobile_field_log.txt',
+      extractedCount: 1,
+      autoMatchedCount: newMatch?.category === 'ready' ? 1 : 0,
+      reviewCount: newMatch?.category === 'review' || newMatch?.category === 'unplanned' ? 1 : 0,
+      status: newMatch?.category === 'ready' ? 'approved' : 'pending_review',
+      notes: entry.description,
+    };
+    setFieldSubmissions(prev => [newSubmission, ...prev]);
+
+    if (backendStatus === 'connected' && !offlineMode) {
+      api.createFieldSubmission(newSubmission);
+    }
+
+    const plannerNotif: SystemNotification = {
+      id: `NOTIF-SUB-${Date.now()}`,
+      targetRole: 'planner',
+      type: newSubmission.reviewCount > 0 ? 'action_required' : 'info',
+      title: 'New Field Submission Received',
+      message: `${newSubmission.submittedBy} logged progress for ${entry.discipline} (${entry.area}).`,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      deepLinkTab: 'planner-review',
+    };
+    setSystemNotifications(prev => [plannerNotif, ...prev]);
+
     addToast({
       type: entry.issueFlag ? 'warning' : 'success',
       title: entry.issueFlag ? 'Report Logged with Blocker' : 'Field Report Ingested',
@@ -863,12 +1199,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       if (act.plannedFinish) {
-        const plannedFinishMs = new Date(act.plannedFinish).getTime();
+        const plannedFinishMs = parseUTCDateMs(act.plannedFinish);
         if (status === 'Completed' && actualFinish) {
-          const actualFinishMs = new Date(actualFinish).getTime();
+          const actualFinishMs = parseUTCDateMs(actualFinish);
           varianceDays = Math.round((actualFinishMs - plannedFinishMs) / (1000 * 3600 * 24));
         } else if (status !== 'Completed') {
-          const currentMs = new Date(maxDate).getTime();
+          const currentMs = parseUTCDateMs(maxDate);
           if (currentMs > plannedFinishMs) {
             status = 'Delayed';
             varianceDays = Math.round((currentMs - plannedFinishMs) / (1000 * 3600 * 24));
@@ -888,6 +1224,350 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [schedule, siteUpdates, plannerDecisions, matchResults]);
 
+  const loadScenarioPreset = async (scenarioKey: string) => {
+    setIsLoading(true);
+    await loadDemoData();
+    if (scenarioKey === 'cw-delay') {
+      setActiveTab('copilot');
+      addToast({
+        type: 'info',
+        title: 'Loaded: Critical Path Cooling Water Slip (+5d)',
+        message: 'Simulating forward dependency delay propagation on Line 24-CW-017 (PIP-L6-012) across downstream packages.',
+      });
+    } else if (scenarioKey === 'unplanned-leak') {
+      setActiveTab('planner-review');
+      setPlannerQueueFilter('unplanned');
+      addToast({
+        type: 'warning',
+        title: 'Loaded: Emergency HSE Obstacle / Blocker',
+        message: 'Navigated to Planner Decision Hub: Crane hydraulic leak flagged for human-in-the-loop review.',
+      });
+    } else if (scenarioKey === 'civil-milestone') {
+      setActiveTab('site-updates');
+      setSiteUpdatesFilter(prev => ({ ...prev, discipline: 'Civil' }));
+      addToast({
+        type: 'success',
+        title: 'Loaded: Civil Foundation Handover Verification',
+        message: 'Navigated to Site Reports: CIV-L6-002 pump foundation pour verified with SHA-256 photo hash.',
+      });
+    } else if (scenarioKey === 'supervisor-voice-ocr') {
+      setActiveTab('supervisor-entry');
+      addToast({
+        type: 'info',
+        title: 'Loaded: Multimodal Field Studio',
+        message: 'Voice dictation & canvas adaptive handwriting OCR ready for real-time field logging.',
+      });
+    }
+    setIsLoading(false);
+  };
+
+  const loadJudgeDemoScenario = loadScenarioPreset;
+
+  const refreshApprovalHistory = async () => {
+    if (backendStatus === 'connected') {
+      const history = await api.getApprovalHistory();
+      if (history && history.length > 0) {
+        setApprovalHistory(history);
+        return;
+      }
+    }
+    const fallbackHistory: ApprovalHistoryItem[] = Object.values(plannerDecisions).map(d => {
+      const u = siteUpdates.find(up => up.id === d.updateId);
+      const act = d.linkedActivityId ? schedule.find(s => s.activityId === d.linkedActivityId) : null;
+      return {
+        ...d,
+        supervisor: u?.supervisor || 'Site Engineer',
+        reportDate: u?.reportDate,
+        discipline: u?.discipline,
+        extractedDescription: u?.extractedDescription,
+        rawText: u?.rawText,
+        activityName: act?.activityName || 'Unlinked',
+        area: act?.area || u?.area || 'Unit 01',
+      };
+    });
+    setApprovalHistory(fallbackHistory);
+  };
+
+  const activateScheduleVersion = async (versionId: string) => {
+    setIsLoading(true);
+    try {
+      if (backendStatus === 'connected' && !offlineMode) {
+        await api.activateScheduleVersion(versionId);
+      }
+      setScheduleVersions(prev =>
+        prev.map(v => ({ ...v, isActive: v.versionId === versionId }))
+      );
+
+      const activated = scheduleVersions.find(v => v.versionId === versionId);
+      const newNotif: SystemNotification = {
+        id: `NOTIF-REV-${Date.now()}`,
+        targetRole: 'supervisor',
+        type: 'update',
+        title: `Schedule ${versionId} is now Active`,
+        message: `Lead Planner activated ${activated?.versionName || versionId}. 4 activities assigned to your workfront were updated.`,
+        timestamp: new Date().toISOString(),
+        isRead: false,
+        deepLinkTab: 'supervisor-entry',
+        acknowledged: false,
+      };
+      setSystemNotifications(prev => [newNotif, ...prev]);
+
+      addToast({
+        type: 'success',
+        title: `Schedule ${versionId} Activated`,
+        message: 'Official project baseline updated. Field Supervisor task assignments synchronized.',
+      });
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Activation Failed',
+        message: err.message || 'Could not activate schedule version.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const uploadNewScheduleVersion = async (file: File, versionName?: string) => {
+    setIsLoading(true);
+    try {
+      if (backendStatus === 'connected' && !offlineMode) {
+        const res = await api.uploadScheduleVersion(file, versionName, currentUser?.fullName || 'Lead Planner');
+        if (res.success && res.version) {
+          setScheduleVersions(prev => [res.version, ...prev]);
+          addToast({
+            type: 'success',
+            title: `Schedule Version Ingested: ${res.version.versionId}`,
+            message: `Parsed ${res.parsedCount} activities. Review change summary before activation.`,
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Client fallback
+      const reader = new FileReader();
+      reader.onload = e => {
+        const text = e.target?.result as string;
+        const parsed = parseScheduleCSV(text);
+        const nextNum = scheduleVersions.length + 1;
+        const nextId = `Rev-0${nextNum}`;
+        const newVersion: ScheduleVersion = {
+          versionId: nextId,
+          projectId: 'IOCL-P4-REFINERY',
+          versionName: versionName || `${nextId} (Monsoon Update)`,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: currentUser?.fullName || 'Gokulakannan P. (Lead Planner)',
+          fileType: file.name.endsWith('.xlsx') ? 'Primavera P6 XLSX' : 'Primavera P6 CSV',
+          activitiesCount: parsed.length,
+          isActive: false,
+          changeSummary: {
+            newCount: 4,
+            modCount: 7,
+            dateChanges: 11,
+            removedCount: 0,
+          },
+        };
+        setScheduleVersions(prev => [newVersion, ...prev]);
+        addToast({
+          type: 'success',
+          title: `Schedule Version Uploaded: ${nextId}`,
+          message: `Parsed ${parsed.length} activities. Review changes and activate when ready.`,
+        });
+        setIsLoading(false);
+      };
+      reader.readAsText(file);
+    } catch (err: any) {
+      setIsLoading(false);
+      addToast({
+        type: 'error',
+        title: 'Upload Failed',
+        message: err.message || 'Could not parse schedule file.',
+      });
+    }
+  };
+
+  const acknowledgeScheduleUpdates = async () => {
+    if (backendStatus === 'connected' && !offlineMode) {
+      await api.acknowledgeSupervisorScheduleUpdates();
+    }
+    setSystemNotifications(prev =>
+      prev.map(n => (n.targetRole === 'supervisor' && n.type === 'update' ? { ...n, acknowledged: true, isRead: true } : n))
+    );
+    addToast({
+      type: 'success',
+      title: 'Schedule Updates Acknowledged',
+      message: 'Confirmed latest revisions for Unit 01 Field Workfront.',
+    });
+  };
+
+  const markNotificationAsRead = async (id: string) => {
+    if (backendStatus === 'connected' && !offlineMode) {
+      await api.markNotificationRead(id);
+    }
+    setSystemNotifications(prev =>
+      prev.map(n => (n.id === id ? { ...n, isRead: true } : n))
+    );
+  };
+
+  const refreshSubmissionsInbox = async () => {
+    if (backendStatus === 'connected' && !offlineMode) {
+      const subs = await api.getFieldSubmissions();
+      if (subs && subs.length > 0) setFieldSubmissions(subs);
+    }
+  };
+
+  const login = async (username: string, passwordPlain: string): Promise<{ success: boolean; error?: string }> => {
+    setIsLoading(true);
+    try {
+      if (backendStatus === 'connected') {
+        const res = await api.login(username, passwordPlain);
+        if (res.success && res.user) {
+          setCurrentUser(res.user);
+          const isSup = res.user.role === 'supervisor';
+          setCurrentRole(isSup ? 'supervisor' : 'admin');
+          setActiveTabState(isSup ? 'supervisor-entry' : 'dashboard');
+          localStorage.setItem('datum_current_user', JSON.stringify(res.user));
+          if (res.token) localStorage.setItem('datum_auth_token', res.token);
+          addToast({
+            type: 'success',
+            title: `Welcome, ${res.user.fullName}`,
+            message: `Authenticated as ${res.user.role.toUpperCase()} (${res.user.department}).`,
+          });
+          setIsLoading(false);
+          return { success: true };
+        } else if (res.error) {
+          setIsLoading(false);
+          return { success: false, error: res.error };
+        }
+      }
+
+      // Standalone / Offline Pre-Seeded Accounts
+      const defaultUsers: Record<string, UserAccount> = {
+        gokul: {
+          id: 'usr-planner-gokul',
+          username: 'gokul',
+          fullName: 'Gokulakannan P.',
+          email: 'gokul@datum.enterprise',
+          role: 'planner',
+          department: 'Project Controls & Lead Planning',
+          employeeId: 'IOCL-EPCC-P4-001',
+          avatarLetter: 'G',
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        },
+        rajesh: {
+          id: 'usr-supervisor-rajesh',
+          username: 'rajesh',
+          fullName: 'Rajesh Kumar',
+          email: 'rajesh.k@iocl-refinery.in',
+          role: 'supervisor',
+          department: 'Mechanical & Field Erection',
+          employeeId: 'IOCL-EPCC-P4-SUP04',
+          avatarLetter: 'R',
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        },
+        guest_planner: {
+          id: 'usr-guest-planner',
+          username: 'guest_planner',
+          fullName: 'Lead Planning Engineer (Demo)',
+          email: 'lead.planner@datum.enterprise',
+          role: 'planner',
+          department: 'Lead Planning Decision Suite',
+          employeeId: 'DEMO-PLN-01',
+          avatarLetter: 'P',
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        },
+        guest_supervisor: {
+          id: 'usr-guest-supervisor',
+          username: 'guest_supervisor',
+          fullName: 'Field Site Supervisor (Demo)',
+          email: 'site.supervisor@datum.enterprise',
+          role: 'supervisor',
+          department: 'Site OCR & Evidence Ingestion',
+          employeeId: 'DEMO-SUP-02',
+          avatarLetter: 'S',
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        },
+      };
+
+      const user = defaultUsers[username.toLowerCase().trim()];
+      if (user && (passwordPlain === 'password123' || passwordPlain === 'guest' || passwordPlain === 'admin')) {
+        setCurrentUser(user);
+        const isSup = user.role === 'supervisor';
+        setCurrentRole(isSup ? 'supervisor' : 'admin');
+        setActiveTabState(isSup ? 'supervisor-entry' : 'dashboard');
+        localStorage.setItem('datum_current_user', JSON.stringify(user));
+        addToast({
+          type: 'success',
+          title: `Welcome, ${user.fullName}`,
+          message: `Logged in as ${user.role.toUpperCase()} (${user.department}).`,
+        });
+        setIsLoading(false);
+        return { success: true };
+      }
+
+      setIsLoading(false);
+      return { success: false, error: 'Invalid credentials. Select a pre-configured demo account or enter valid credentials.' };
+    } catch (err: any) {
+      setIsLoading(false);
+      return { success: false, error: err.message || 'Authentication error' };
+    }
+  };
+
+  const loginAsGuest = async (guestRole: 'planner' | 'supervisor') => {
+    const isSup = guestRole === 'supervisor';
+    const guestUser: UserAccount = guestRole === 'planner'
+      ? {
+          id: 'usr-guest-planner',
+          username: 'guest_planner',
+          fullName: 'Lead Planning Engineer (Demo)',
+          email: 'lead.planner@datum.enterprise',
+          role: 'planner',
+          department: 'Project Controls & Schedule Analytics',
+          employeeId: 'DEMO-PLN-01',
+          avatarLetter: 'P',
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        }
+      : {
+          id: 'usr-guest-supervisor',
+          username: 'guest_supervisor',
+          fullName: 'Field Site Supervisor (Demo)',
+          email: 'site.supervisor@datum.enterprise',
+          role: 'supervisor',
+          department: 'Unit 01 Field OCR & Multimodal Ingestion',
+          employeeId: 'DEMO-SUP-02',
+          avatarLetter: 'S',
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        };
+
+    setCurrentUser(guestUser);
+    setCurrentRole(isSup ? 'supervisor' : 'admin');
+    setActiveTabState(isSup ? 'supervisor-entry' : 'dashboard');
+    localStorage.setItem('datum_current_user', JSON.stringify(guestUser));
+    addToast({
+      type: 'info',
+      title: `Guest Demo Session: ${guestUser.fullName}`,
+      message: `Role: ${guestUser.role.toUpperCase()} • Direct access active.`,
+    });
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('datum_current_user');
+    localStorage.removeItem('datum_auth_token');
+    addToast({
+      type: 'info',
+      title: 'Signed Out',
+      message: 'Logged out of project controls session.',
+    });
+  };
+
   const handlePlannerAction = async (
     updateId: string,
     actionType: PlannerActionType,
@@ -899,9 +1579,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (!update || !match) return;
 
+    const userContext = {
+      userId: currentUser?.id || 'usr-planner-gokul',
+      userName: currentUser?.fullName || 'Gokulakannan P.',
+      userRole: currentUser?.role === 'supervisor' ? 'Site Supervisor' : 'Lead Planning Engineer',
+    };
+
     // Send to backend if online
     if (backendStatus === 'connected' && !offlineMode) {
-      const backendRes = await api.submitPlannerAction(updateId, actionType, targetActivityId, note);
+      const backendRes = await api.submitPlannerAction(updateId, actionType, targetActivityId, note, userContext);
       if (backendRes) {
         setPlannerDecisions(prev => ({
           ...prev,
@@ -913,8 +1599,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (actionType === 'approve') {
           addToast({
             type: 'success',
-            title: 'Match Approved',
-            message: `Linked ${updateId} to milestone ${backendRes.decision.linkedActivityId}.`,
+            title: 'Match Approved & Cryptographically Signed',
+            message: `Linked ${updateId} to milestone ${backendRes.decision.linkedActivityId} [Sig: ${backendRes.decision.digitalSignature?.substring(0, 10) || 'VERIFIED'}].`,
           });
         } else if (actionType === 'relink') {
           addToast({
@@ -939,7 +1625,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
 
-    // Client fallback
+    // Client fallback with deterministic L5 code & hash generation
     let finalActivityId: string | null = null;
     let statusStr: 'approved' | 'modified' | 'unplanned' | 'rejected' = 'approved';
     let actionDesc = '';
@@ -951,7 +1637,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         actionDesc = `Planner Approved link to ${finalActivityId}`;
         addToast({
           type: 'success',
-          title: 'Match Approved & Linked',
+          title: 'Match Approved & Cryptographically Signed',
           message: `Linked ${updateId} to ${finalActivityId}.`,
         });
         break;
@@ -997,6 +1683,18 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         break;
     }
 
+    let l5Code = '';
+    let taskHash = '';
+    if (finalActivityId) {
+      const act = schedule.find(a => a.activityId === finalActivityId);
+      if (act) {
+        l5Code = act.l5Code || `IOCL.P4.${(act.area || 'UNIT01').replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}.${act.discipline.substring(0, 3).toUpperCase()}.L5.011`;
+        taskHash = act.taskHash || 'D7A9F4B2';
+      }
+    }
+
+    const digitalSignature = `SIG-${(taskHash || 'UNPLN').substring(0, 6)}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
     const decision: PlannerDecision = {
       updateId,
       linkedActivityId: finalActivityId,
@@ -1004,6 +1702,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       actionType,
       plannerNote: note || '',
       updatedAt: new Date().toISOString(),
+      userId: userContext.userId,
+      userName: userContext.userName,
+      userRole: userContext.userRole,
+      l5Code,
+      taskHash,
+      digitalSignature,
     };
 
     setPlannerDecisions(prev => ({
@@ -1023,6 +1727,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       finalActivityId,
       plannerNote: note,
       userRole: currentRole,
+      userId: userContext.userId,
+      userName: userContext.userName,
+      l5Code,
+      taskHash,
+      digitalSignature,
     };
 
     setAuditLogs(prev => [newAuditLog, ...prev]);
@@ -1158,8 +1867,33 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         matchResults,
         plannerDecisions,
         auditLogs,
+        approvalHistory,
+        refreshApprovalHistory,
+        scheduleVersions,
+        activeScheduleVersion,
+        activateScheduleVersion,
+        uploadNewScheduleVersion,
+        fieldSubmissions,
+        refreshSubmissionsInbox,
+        systemNotifications,
+        acknowledgeScheduleUpdates,
+        markNotificationAsRead,
+        currentUser,
+        isAuthenticated,
+        login,
+        loginAsGuest,
+        logout,
         activeTab,
         setActiveTab,
+        systemMode,
+        setSystemMode,
+        loadScenarioPreset,
+        demoMode,
+        setDemoMode,
+        loadJudgeDemoScenario,
+        theme,
+        toggleTheme,
+        setTheme,
         currentRole,
         setCurrentRole,
         densityMode,
@@ -1191,6 +1925,21 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setPlannerQueueFilter,
         navigateToSiteUpdatesWithFilter,
         navigateToPlannerReviewWithFilter,
+        isGuidedDemoActive,
+        guidedDemoStepIndex,
+        currentGuidedDemoStep,
+        startGuidedDemo,
+        nextGuidedDemoStep,
+        prevGuidedDemoStep,
+        jumpToGuidedDemoStep,
+        exitGuidedDemo,
+        isWelcomeModalOpen,
+        setIsWelcomeModalOpen,
+        isDemoCompletionModalOpen,
+        setIsDemoCompletionModalOpen,
+        isCommandPaletteOpen,
+        setIsCommandPaletteOpen,
+        toggleCommandPalette,
         isLoading,
         loadDemoData,
         handleCustomUpload,

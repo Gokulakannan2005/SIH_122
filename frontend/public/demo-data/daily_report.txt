@@ -1,22 +1,30 @@
-DAILY PROGRESS REPORT — Cooling Water Pump Package
-Date: 2026-09-05
+DAILY PROGRESS REPORT — Cooling Water Pump Package & Balance of Plant
+Date: 2026-09-08
 
 Civil
-1. Pump foundation excavation completed at Pump Bay.
-2. PCC started for the pump foundation after inspection.
+1. Pump foundation excavation completed at Pump Bay with Level-6 survey inspection signed off.
+2. PCC started for the pump foundation after rebar cage placement and QA audit.
+3. Pipe rack pedestal concrete casting started at Pipe Rack A.
+4. Trench excavation for 415V power cable feeder started near Substation.
 
 Piping
-3. CW 24-inch spool was erected near Pump Bay today; alignment is in progress.
-4. Fabrication of one more cooling-water spool completed in the yard.
-5. Fire-water spool erection at Filter Bay has started.
-6. A small-bore drain line was installed near the pump. [Not in baseline]
+5. CW 24-inch spool was erected near Pump Bay today; laser alignment is in progress.
+6. Fabrication of Line 24-CW-017 cooling-water spool completed in the yard with 100% NDT clearance.
+7. Fire-water spool erection at Filter Bay has started for Line 18-FW-008.
+8. A small-bore drain line was installed near the pump. [Not in baseline]
+9. Suction piping fit-up for cooling water pump completed at Pump Bay.
 
 Electrical
-7. Cable tray work completed in Pump Bay.
-8. Earthing strip installation started around motor foundation.
-9. Crew reported cable pulling, but feeder number was not mentioned.
+10. Cable tray work completed in Pump Bay tier-2 support structure.
+11. Pulling of 415V MCC feeder cable commenced between Substation and Pump Bay MCC-415V.
+12. Earthing strip installation started around motor foundation and pump skid.
+13. Crew reported cable pulling, but feeder number was not mentioned.
+
+Instrumentation
+14. Pressure transmitter PT-2401 mounting bracket installed on pump suction header.
 
 HSE
-10. Crane lifting safety inspection completed before spool erection.
+15. Crane lifting safety inspection completed before 50T heavy spool erection.
+16. Work permit safety audit conducted for confined space cable trench excavation.
 
-Supervisor note: Rain delayed morning work by two hours.
+Supervisor note: 50T Mobile Crane hydraulic seal leak reported in morning; replacement completed and certified safe.

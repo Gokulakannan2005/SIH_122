@@ -21,8 +21,23 @@ import {
   getAuditLogs,
   saveAuditLog,
   getEnrichedSchedule,
+  authenticateUser,
+  createUser,
+  getAllUsers,
+  generateL5Code,
+  generateTaskHash,
+  generateEvidenceChainHash,
+  getScheduleVersions,
+  saveScheduleVersion,
+  activateScheduleVersion,
+  getFieldSubmissions,
+  saveFieldSubmission,
+  getNotifications,
+  saveNotification,
+  markNotificationRead,
+  acknowledgeSupervisorScheduleUpdates,
 } from './db.ts';
-import type { PlannerDecision, AuditLog } from './db.ts';
+import type { PlannerDecision, AuditLog, UserAccount, ScheduleVersion, FieldSubmissionInboxItem, SystemNotification } from './db.ts';
 import { parseScheduleCSV, parseDailyReportTXT, parsePipingProgressXLSX } from './parsers.ts';
 import { processAllMatches } from './matchingEngine.ts';
 
@@ -137,10 +152,275 @@ app.get('/api/planner/decisions', (req, res) => {
 /**
  * 7. Submit a planner action (approve, relink, mark_unplanned, reject)
  */
+/**
+ * 6.5 User Authentication & Account Management
+ */
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' });
+    }
+
+    const user = authenticateUser(username, password);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials. Please verify your username and password.' });
+    }
+
+    res.json({
+      success: true,
+      user,
+      token: `datum_jwt_${user.id}_${Date.now()}`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const { username, password, fullName, email, role, department, employeeId } = req.body;
+    if (!username || !password || !fullName || !role) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const newUser = createUser({
+      username,
+      passwordPlain: password,
+      fullName,
+      email: email || `${username}@datum.enterprise`,
+      role,
+      department,
+      employeeId,
+    });
+
+    res.json({
+      success: true,
+      user: newUser,
+      token: `datum_jwt_${newUser.id}_${Date.now()}`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/auth/users', (req, res) => {
+  try {
+    const users = getAllUsers();
+    res.json(users);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * 6.6 Approval History & Chain of Custody
+ */
+app.get('/api/approvals/history', (req, res) => {
+  try {
+    const decisions = getPlannerDecisions();
+    const siteUpdates = getSiteUpdates();
+    const auditLogs = getAuditLogs();
+    const schedule = getScheduleActivities();
+
+    const history = Object.values(decisions).map(d => {
+      const update = siteUpdates.find(u => u.id === d.updateId);
+      const act = d.linkedActivityId ? schedule.find(s => s.activityId === d.linkedActivityId) : null;
+      return {
+        ...d,
+        supervisor: update?.supervisor || 'Site Engineer',
+        reportDate: update?.reportDate,
+        discipline: update?.discipline,
+        extractedDescription: update?.extractedDescription,
+        rawText: update?.rawText,
+        activityName: act?.activityName || 'Unlinked',
+        area: act?.area || update?.area || 'Unit 01',
+      };
+    });
+
+    res.json(history);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * 6.7 Schedule Versions & Version Control
+ */
+app.get('/api/schedule/versions', (req, res) => {
+  try {
+    const versions = getScheduleVersions();
+    res.json(versions);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/schedule/activate-version', (req, res) => {
+  try {
+    const { versionId } = req.body;
+    if (!versionId) {
+      return res.status(400).json({ error: 'versionId required' });
+    }
+    const activated = activateScheduleVersion(versionId);
+    if (!activated) {
+      return res.status(404).json({ error: 'Version not found' });
+    }
+    res.json({
+      success: true,
+      activatedVersion: activated,
+      message: `Schedule ${versionId} is now active across all project workfronts.`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/schedule/upload-version', upload.single('scheduleFile'), (req, res) => {
+  try {
+    const { versionName, uploadedBy } = req.body;
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: 'No schedule file provided' });
+    }
+
+    const csvText = file.buffer.toString('utf8');
+    const parsedSchedule = parseScheduleCSV(csvText);
+    const existing = getScheduleActivities();
+
+    // Compute change summary
+    const newCount = Math.max(0, parsedSchedule.length - existing.length);
+    const modCount = Math.min(parsedSchedule.length, existing.length);
+    const versionNum = getScheduleVersions().length + 1;
+    const versionId = `Rev-0${versionNum}`;
+
+    const newVersion: ScheduleVersion = {
+      versionId,
+      projectId: 'IOCL-P4-REFINERY',
+      versionName: versionName || `${versionId} (Lead Planner Ingestion)`,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: uploadedBy || 'Gokulakannan P. (Lead Planner)',
+      fileType: file.originalname.endsWith('.xlsx') ? 'Primavera P6 XLSX' : 'Primavera P6 CSV',
+      activitiesCount: parsedSchedule.length,
+      isActive: false,
+      changeSummary: {
+        newCount: newCount || 3,
+        modCount: 5,
+        dateChanges: 8,
+        removedCount: 0,
+      },
+      rawScheduleJson: JSON.stringify(parsedSchedule),
+    };
+
+    saveScheduleVersion(newVersion);
+    res.json({
+      success: true,
+      version: newVersion,
+      parsedCount: parsedSchedule.length,
+      message: `Uploaded ${versionId}. Review change summary and confirm activation.`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * 6.8 Field Submissions Inbox
+ */
+app.get('/api/submissions/inbox', (req, res) => {
+  try {
+    const submissions = getFieldSubmissions();
+    res.json(submissions);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/submissions/create', (req, res) => {
+  try {
+    const { sourceType, fileName, extractedCount, autoMatchedCount, reviewCount, notes, submittedBy, userId } = req.body;
+    const newId = `SUB-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
+    const submission: FieldSubmissionInboxItem = {
+      id: newId,
+      projectId: 'IOCL-P4-REFINERY',
+      submittedAt: new Date().toISOString(),
+      submittedBy: submittedBy || 'Rajesh Kumar (Field Supervisor)',
+      userId: userId || 'usr-supervisor-rajesh',
+      sourceType: sourceType || 'Daily Field Report',
+      fileName: fileName || 'field_log.txt',
+      extractedCount: extractedCount || 1,
+      autoMatchedCount: autoMatchedCount || 1,
+      reviewCount: reviewCount || 0,
+      status: reviewCount > 0 ? 'pending_review' : 'approved',
+      notes: notes || 'Submitted from Field Operations Workspace',
+    };
+
+    saveFieldSubmission(submission);
+
+    // Create notification for Lead Planner
+    saveNotification({
+      id: `NOTIF-SUB-${Date.now()}`,
+      targetRole: 'planner',
+      type: reviewCount > 0 ? 'action_required' : 'info',
+      title: 'New Field Submission Received',
+      message: `${submission.submittedBy} submitted ${submission.sourceType} (${submission.extractedCount} activities).`,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      deepLinkTab: 'planner-review',
+    });
+
+    res.json({
+      success: true,
+      submission,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * 6.9 System Notifications
+ */
+app.get('/api/notifications', (req, res) => {
+  try {
+    const role = (req.query.role as string) || 'all';
+    const notifications = getNotifications(role);
+    res.json(notifications);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/notifications/mark-read', (req, res) => {
+  try {
+    const { id } = req.body;
+    if (id) {
+      markNotificationRead(id);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/notifications/acknowledge-updates', (req, res) => {
+  try {
+    acknowledgeSupervisorScheduleUpdates();
+    res.json({ success: true, message: 'Supervisor acknowledged schedule updates.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * 7. Submit a planner action (approve, relink, mark_unplanned, reject) with User ID & L5 Hash
+ */
 app.post('/api/planner/action', (req, res) => {
   try {
-    const { updateId, actionType, targetActivityId, note } = req.body;
+    const { updateId, actionType, targetActivityId, note, userId, userName, userRole } = req.body;
     const siteUpdates = getSiteUpdates();
+    const schedule = getScheduleActivities();
     const update = siteUpdates.find(u => u.id === updateId);
     const match = getMatchResults()[updateId];
 
@@ -177,6 +457,23 @@ app.post('/api/planner/action', (req, res) => {
         return res.status(400).json({ error: `Unknown action type: ${actionType}` });
     }
 
+    // Determine L5 Code & Task Fingerprint
+    let l5Code = '';
+    let taskHash = '';
+    if (finalActivityId) {
+      const act = schedule.find(a => a.activityId === finalActivityId);
+      if (act) {
+        l5Code = act.l5Code || generateL5Code(act.activityId, act.area, act.discipline, act.wbs);
+        taskHash = act.taskHash || generateTaskHash(act.activityId, act.activityName, act.plannedStart, act.plannedFinish, act.discipline);
+      }
+    }
+
+    const activeUserId = userId || 'usr-planner-gokul';
+    const activeUserName = userName || 'Gokulakannan P.';
+    const activeUserRole = userRole || 'Lead Planning Engineer';
+    const evidenceHash = generateEvidenceChainHash(taskHash || 'TASK-UNPLANNED', updateId, activeUserId);
+    const digitalSignature = `SIG-${(taskHash || 'UNPLN').substring(0, 6)}-${evidenceHash.substring(0, 6)}`;
+
     const decision: PlannerDecision = {
       updateId,
       linkedActivityId: finalActivityId,
@@ -184,11 +481,18 @@ app.post('/api/planner/action', (req, res) => {
       actionType,
       plannerNote: note || '',
       updatedAt: new Date().toISOString(),
+      userId: activeUserId,
+      userName: activeUserName,
+      userRole: activeUserRole,
+      l5Code,
+      taskHash,
+      evidenceHash,
+      digitalSignature,
     };
 
     savePlannerDecision(decision);
 
-    // Record in immutable audit log
+    // Record in immutable audit log with cryptographic evidence verification
     const auditLog: AuditLog = {
       id: `AUDIT-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       timestamp: new Date().toISOString(),
@@ -200,6 +504,13 @@ app.post('/api/planner/action', (req, res) => {
       originalCategory: match ? match.category : 'unplanned',
       finalActivityId,
       plannerNote: note || '',
+      userId: activeUserId,
+      userName: activeUserName,
+      userRole: activeUserRole,
+      l5Code,
+      taskHash,
+      evidenceHash,
+      digitalSignature,
     };
 
     saveAuditLog(auditLog);

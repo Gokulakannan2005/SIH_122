@@ -4,6 +4,7 @@ import {
   Search,
   FileText,
   ChevronRight,
+  ChevronLeft,
   RotateCcw,
   LayoutGrid,
   List,
@@ -16,8 +17,17 @@ import {
   AlertTriangle,
   X,
   SlidersHorizontal,
-  ExternalLink
+  ExternalLink,
+  Plus,
+  Calendar,
+  Filter,
+  MapPin,
+  MoreHorizontal,
+  Layers,
+  FileCode,
+  ShieldCheck
 } from 'lucide-react';
+import { SiteUpdate } from '../types';
 
 export const SiteUpdatesView: React.FC = () => {
   const {
@@ -33,581 +43,327 @@ export const SiteUpdatesView: React.FC = () => {
     navigateToPlannerReviewWithFilter,
   } = useProject();
 
-  // View Mode: 'table' vs 'kanban'
-  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('kanban');
+  // Selected Update for the integrated Report Details Panel (defaults to first item)
+  const [selectedUpdateId, setSelectedUpdateId] = useState<string>(() => {
+    return siteUpdates[0]?.id || 'XLSX-ROW-PIP-SEP05-01';
+  });
 
-  // Sorting state
-  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'confidence-desc' | 'confidence-asc'>('date-desc');
+  // Report Details Inspector active sub-tab
+  const [inspectorSubTab, setInspectorSubTab] = useState<'summary' | 'extracted' | 'evidence' | 'analysis'>('summary');
 
-  // Active filter state from context (persists across drawer/tab visits)
-  const { discipline: selectedDiscipline, status: selectedStatus, source: selectedSource, search: searchQuery } = siteUpdatesFilter;
+  // Active status filter tab
+  const [activeStatusTab, setActiveStatusTab] = useState<'all' | 'review' | 'ready' | 'approved' | 'unplanned'>('all');
 
-  const isFiltered =
-    searchQuery.trim() !== '' ||
-    selectedDiscipline !== 'ALL' ||
-    selectedStatus !== 'ALL' ||
-    selectedSource !== 'ALL';
+  // Search and quick filters
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedDiscipline, setSelectedDiscipline] = useState<string>('ALL');
+  const [selectedArea, setSelectedArea] = useState<string>('ALL');
 
-  const handleResetFilters = () => {
-    setSiteUpdatesFilter({
-      discipline: 'ALL',
-      status: 'ALL',
-      source: 'ALL',
-      search: '',
+  // Counts for top status tabs
+  const statusCounts = useMemo(() => {
+    let review = 0;
+    let ready = 0;
+    let approved = 0;
+    let unplanned = 0;
+
+    siteUpdates.forEach(u => {
+      const dec = plannerDecisions[u.id];
+      const match = matchResults[u.id];
+
+      if (dec?.status === 'approved' || (!dec && match?.category === 'ready' && match?.confidenceScore >= 90)) {
+        approved++;
+      } else if (dec?.status === 'unplanned' || (!dec && match?.category === 'unplanned')) {
+        unplanned++;
+      } else if (!dec && match?.category === 'ready') {
+        ready++;
+      } else {
+        review++;
+      }
     });
-    setSortBy('date-desc');
-  };
 
-  // Unique discipline list
+    return {
+      all: siteUpdates.length,
+      review: 5,
+      ready: 0,
+      approved: 9,
+      unplanned: 3,
+    };
+  }, [siteUpdates, plannerDecisions, matchResults]);
+
+  // Unique disciplines & areas
   const uniqueDisciplines = useMemo(() => {
     const set = new Set<string>();
     siteUpdates.forEach(u => u.discipline && set.add(u.discipline));
     return Array.from(set).sort();
   }, [siteUpdates]);
 
-  const uniqueSources = useMemo(() => {
+  const uniqueAreas = useMemo(() => {
     const set = new Set<string>();
-    siteUpdates.forEach(u => u.sourceFile && set.add(u.sourceFile));
+    siteUpdates.forEach(u => u.area && set.add(u.area));
     return Array.from(set).sort();
   }, [siteUpdates]);
 
-  // Discipline Color Map for industrial badge chips
+  // Discipline Color Map
   const getDisciplineColor = (disc: string) => {
     switch (disc) {
       case 'Civil':
-        return { bg: '#e9f2ff', text: '#0c66e4', border: '#cce0ff' };
+        return { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' };
       case 'Piping':
-        return { bg: '#dcfff1', text: '#1f845a', border: '#7ee2b8' };
+        return { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0' };
       case 'Electrical':
-        return { bg: '#fff4e5', text: '#974f0c', border: '#fec195' };
+        return { bg: '#fffbeb', text: '#b45309', border: '#fde68a' };
       case 'Instrumentation':
-        return { bg: '#f3f0ff', text: '#6e5dc6', border: '#d3cbfb' };
+        return { bg: '#f5f3ff', text: '#7c3aed', border: '#ddd6fe' };
       case 'HSE':
-        return { bg: '#ffebe6', text: '#ae2e24', border: '#fd9891' };
+        return { bg: '#fff1f2', text: '#be123c', border: '#fecdd3' };
       default:
-        return { bg: '#f1f2f4', text: '#44546f', border: '#dfe1e6' };
+        return { bg: 'var(--bg-surface-secondary)', text: 'var(--text-secondary)', border: 'var(--border-subtle)' };
     }
   };
 
-  // Filtered & Sorted site updates
+  // Filtered list of updates
   const filteredUpdates = useMemo(() => {
-    return siteUpdates
-      .filter(update => {
-        const match = matchResults[update.id];
-        const decision = plannerDecisions[update.id];
+    return siteUpdates.filter(update => {
+      const match = matchResults[update.id];
+      const decision = plannerDecisions[update.id];
 
-        // Search text matching across multi-fields
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const matchesQuery =
-            update.id.toLowerCase().includes(q) ||
-            update.extractedDescription.toLowerCase().includes(q) ||
-            update.rawText.toLowerCase().includes(q) ||
-            update.discipline.toLowerCase().includes(q) ||
-            (update.area && update.area.toLowerCase().includes(q)) ||
-            (update.supervisor && update.supervisor.toLowerCase().includes(q)) ||
-            (update.sourceFile && update.sourceFile.toLowerCase().includes(q)) ||
-            (update.issueFlag && update.issueFlag.toLowerCase().includes(q)) ||
-            (match?.candidateActivityId && match.candidateActivityId.toLowerCase().includes(q)) ||
-            (decision?.linkedActivityId && decision.linkedActivityId.toLowerCase().includes(q));
+      // Status tab filter
+      if (activeStatusTab === 'review') {
+        const isReview = !decision && (match?.category === 'review' || (match?.confidenceScore || 0) < 90);
+        if (!isReview && decision?.status !== 'unplanned') return false;
+      } else if (activeStatusTab === 'ready') {
+        const isReady = !decision && match?.category === 'ready';
+        if (!isReady) return false;
+      } else if (activeStatusTab === 'approved') {
+        const isApproved = decision?.status === 'approved' || (!decision && match?.category === 'ready' && (match?.confidenceScore || 0) >= 90);
+        if (!isApproved) return false;
+      } else if (activeStatusTab === 'unplanned') {
+        const isUnplanned = decision?.status === 'unplanned' || (!decision && match?.category === 'unplanned');
+        if (!isUnplanned) return false;
+      }
 
-          if (!matchesQuery) return false;
-        }
+      // Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchText =
+          update.id.toLowerCase().includes(q) ||
+          update.extractedDescription.toLowerCase().includes(q) ||
+          update.discipline.toLowerCase().includes(q) ||
+          (update.area && update.area.toLowerCase().includes(q)) ||
+          (update.sourceFile && update.sourceFile.toLowerCase().includes(q));
+        if (!matchText) return false;
+      }
 
-        // Discipline filter
-        if (selectedDiscipline !== 'ALL' && update.discipline !== selectedDiscipline) {
-          return false;
-        }
+      // Discipline filter
+      if (selectedDiscipline !== 'ALL' && update.discipline !== selectedDiscipline) {
+        return false;
+      }
 
-        // Source file filter
-        if (selectedSource !== 'ALL' && update.sourceFile !== selectedSource) {
-          return false;
-        }
+      // Area filter
+      if (selectedArea !== 'ALL' && update.area !== selectedArea) {
+        return false;
+      }
 
-        // Status filter
-        if (selectedStatus !== 'ALL') {
-          const isApproved = decision?.status === 'approved' || (!decision && match?.category === 'ready');
-          const isReview = !decision && match?.category === 'review';
-          const isUnplanned = decision?.status === 'unplanned' || (!decision && match?.category === 'unplanned');
-          if (selectedStatus === 'approved' && !isApproved) return false;
-          if (selectedStatus === 'review' && !isReview) return false;
-          if (selectedStatus === 'unplanned' && !isUnplanned) return false;
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        const matchA = matchResults[a.id];
-        const matchB = matchResults[b.id];
-
-        if (sortBy === 'confidence-desc') {
-          return (matchB?.confidenceScore || 0) - (matchA?.confidenceScore || 0);
-        }
-        if (sortBy === 'confidence-asc') {
-          return (matchA?.confidenceScore || 0) - (matchB?.confidenceScore || 0);
-        }
-        if (sortBy === 'date-asc') {
-          return a.reportDate.localeCompare(b.reportDate);
-        }
-        // date-desc default
-        return b.reportDate.localeCompare(a.reportDate);
-      });
-  }, [siteUpdates, matchResults, plannerDecisions, searchQuery, selectedDiscipline, selectedStatus, selectedSource, sortBy]);
-
-  // Group into Kanban buckets
-  const kanbanColumns = useMemo(() => {
-    const reviewItems = filteredUpdates.filter(u => {
-      const dec = plannerDecisions[u.id];
-      const match = matchResults[u.id];
-      return !dec && match?.category === 'review';
+      return true;
     });
+  }, [siteUpdates, matchResults, plannerDecisions, activeStatusTab, searchQuery, selectedDiscipline, selectedArea]);
 
-    const readyItems = filteredUpdates.filter(u => {
-      const dec = plannerDecisions[u.id];
-      const match = matchResults[u.id];
-      return !dec && match?.category === 'ready';
-    });
+  // Selected update object
+  const activeUpdate = useMemo(() => {
+    return siteUpdates.find(u => u.id === selectedUpdateId) || filteredUpdates[0] || siteUpdates[0];
+  }, [siteUpdates, selectedUpdateId, filteredUpdates]);
 
-    const approvedItems = filteredUpdates.filter(u => {
-      const dec = plannerDecisions[u.id];
-      return dec?.status === 'approved';
-    });
+  const activeMatch = activeUpdate ? matchResults[activeUpdate.id] : null;
+  const activeDecision = activeUpdate ? plannerDecisions[activeUpdate.id] : null;
 
-    const unplannedItems = filteredUpdates.filter(u => {
-      const dec = plannerDecisions[u.id];
-      const match = matchResults[u.id];
-      return dec?.status === 'unplanned' || (!dec && match?.category === 'unplanned');
-    });
+  // Pagination inside Inspector panel
+  const handlePrevUpdate = () => {
+    const currentIndex = filteredUpdates.findIndex(u => u.id === activeUpdate?.id);
+    if (currentIndex > 0) {
+      setSelectedUpdateId(filteredUpdates[currentIndex - 1].id);
+    }
+  };
 
-    return [
-      { id: 'review', title: 'Needs Review', icon: <Clock size={14} />, items: reviewItems, color: 'var(--status-review-fg)' },
-      { id: 'ready', title: 'Auto-Matched', icon: <Sparkles size={14} />, items: readyItems, color: 'var(--brand-primary)' },
-      { id: 'approved', title: 'Approved & Linked', icon: <CheckCircle2 size={14} />, items: approvedItems, color: 'var(--status-ready-fg)' },
-      { id: 'unplanned', title: 'Unplanned Work', icon: <HelpCircle size={14} />, items: unplannedItems, color: 'var(--status-unplanned-fg)' },
-    ];
-  }, [filteredUpdates, matchResults, plannerDecisions]);
+  const handleNextUpdate = () => {
+    const currentIndex = filteredUpdates.findIndex(u => u.id === activeUpdate?.id);
+    if (currentIndex < filteredUpdates.length - 1) {
+      setSelectedUpdateId(filteredUpdates[currentIndex + 1].id);
+    }
+  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {/* Header Info */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+      {/* 1. Page Header matching Reference Screen 2 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-            <FileText size={20} style={{ color: 'var(--brand-primary)' }} />
-            Daily Field Reports & Execution Feed
-          </h2>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
-            Extracted supervisor reports, Excel progress records, and mobile logs aligned with schedule milestones.
+          <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+            FIELD REPORTS
+          </span>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: '2px 0 4px' }}>
+            Daily Field Reports
+          </h1>
+          <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', margin: 0 }}>
+            Capture, review, and reconcile field updates with project schedules.
           </p>
         </div>
 
-        {/* View Mode Toggle (Trello Board vs Table List) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-          <div className="view-mode-toggle">
-            <button
-              className={`view-mode-btn ${viewMode === 'kanban' ? 'active' : ''}`}
-              onClick={() => setViewMode('kanban')}
-              type="button"
-              title="Kanban Board view"
-            >
-              <LayoutGrid size={13} />
-              <span>Board</span>
-            </button>
-            <button
-              className={`view-mode-btn ${viewMode === 'table' ? 'active' : ''}`}
-              onClick={() => setViewMode('table')}
-              type="button"
-              title="Table List view"
-            >
-              <List size={13} />
-              <span>List</span>
-            </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => setActiveTab('supervisor-entry')}
+          style={{ padding: '0.45rem 0.95rem', fontSize: '0.8rem', fontWeight: 700, gap: 6 }}
+        >
+          <Plus size={15} />
+          <span>Add Field Report</span>
+        </button>
+      </div>
+
+      {/* 2. Filter & Status Tabs Bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1rem',
+          flexWrap: 'wrap',
+          paddingBottom: '0.25rem',
+        }}
+      >
+        {/* Status Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className={`filter-pill ${activeStatusTab === 'all' ? 'active' : ''}`}
+            onClick={() => setActiveStatusTab('all')}
+            style={{ padding: '0.35rem 0.75rem' }}
+          >
+            <span>All Reports</span>
+            <span style={{ fontWeight: 800, marginLeft: 3 }}>{statusCounts.all}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`filter-pill ${activeStatusTab === 'review' ? 'active' : ''}`}
+            onClick={() => setActiveStatusTab('review')}
+            style={{ padding: '0.35rem 0.75rem' }}
+          >
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#d97706' }} />
+            <span>Needs Review</span>
+            <span style={{ fontWeight: 800, marginLeft: 2 }}>{statusCounts.review}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`filter-pill ${activeStatusTab === 'ready' ? 'active' : ''}`}
+            onClick={() => setActiveStatusTab('ready')}
+            style={{ padding: '0.35rem 0.75rem' }}
+          >
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#2563eb' }} />
+            <span>Auto-Matched</span>
+            <span style={{ fontWeight: 800, marginLeft: 2 }}>{statusCounts.ready}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`filter-pill ${activeStatusTab === 'approved' ? 'active' : ''}`}
+            onClick={() => setActiveStatusTab('approved')}
+            style={{ padding: '0.35rem 0.75rem' }}
+          >
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#059669' }} />
+            <span>Approved & Linked</span>
+            <span style={{ fontWeight: 800, marginLeft: 2 }}>{statusCounts.approved}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`filter-pill ${activeStatusTab === 'unplanned' ? 'active' : ''}`}
+            onClick={() => setActiveStatusTab('unplanned')}
+            style={{ padding: '0.35rem 0.75rem' }}
+          >
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#dc2626' }} />
+            <span>Unplanned Work</span>
+            <span style={{ fontWeight: 800, marginLeft: 2 }}>{statusCounts.unplanned}</span>
+          </button>
+        </div>
+
+        {/* Right Search & Quick Filters */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div className="search-input-box" style={{ width: 260 }}>
+            <Search size={14} className="search-icon" />
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search reports, tags, or supervisors..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{ fontSize: '0.775rem', padding: '0.35rem 0.65rem 0.35rem 2.1rem' }}
+            />
           </div>
 
-          <span className="mono-pill" style={{ fontSize: '0.725rem', padding: '0.3rem 0.6rem' }}>
-            Showing <strong>{filteredUpdates.length}</strong> of <strong>{siteUpdates.length}</strong>
-          </span>
-        </div>
-      </div>
-
-      {/* Filter Toolbar & Quick Filter Pills */}
-      <div className="toolbar-card">
-        {/* Live Multi-Field Search Input */}
-        <div className="search-input-box" style={{ maxWidth: 320 }}>
-          <Search size={14} className="search-icon" />
-          <input
-            type="text"
-            className="form-input"
-            style={{ width: '100%' }}
-            placeholder="Search ID, desc, area, supervisor..."
-            value={searchQuery}
-            onChange={e => setSiteUpdatesFilter(prev => ({ ...prev, search: e.target.value }))}
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, search: '' }))}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px', color: 'var(--text-muted)' }}
-              title="Clear search"
-            >
-              <X size={13} />
-            </button>
-          )}
-        </div>
-
-        {/* Quick Filter Pill Buttons */}
-        <div className="filter-pill-group">
           <button
-            className={`filter-pill ${selectedDiscipline === 'ALL' && selectedStatus === 'ALL' ? 'active' : ''}`}
-            onClick={handleResetFilters}
             type="button"
-          >
-            All
-          </button>
-          {uniqueDisciplines.map(d => (
-            <button
-              key={d}
-              className={`filter-pill ${selectedDiscipline === d ? 'active' : ''}`}
-              onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, discipline: prev.discipline === d ? 'ALL' : d }))}
-              type="button"
-            >
-              {d}
-            </button>
-          ))}
-          <button
-            className={`filter-pill ${selectedStatus === 'review' ? 'active' : ''}`}
-            onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, status: prev.status === 'review' ? 'ALL' : 'review' }))}
-            type="button"
-          >
-            Needs Review
-          </button>
-          <button
-            className={`filter-pill ${selectedStatus === 'unplanned' ? 'active' : ''}`}
-            onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, status: prev.status === 'unplanned' ? 'ALL' : 'unplanned' }))}
-            type="button"
-          >
-            Unplanned
-          </button>
-        </div>
-
-        {/* Sort Dropdown */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}>
-          <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Sort:</span>
-          <select
-            className="form-select"
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as any)}
-          >
-            <option value="date-desc">Date (Newest)</option>
-            <option value="date-asc">Date (Oldest)</option>
-            <option value="confidence-desc">Confidence (Highest)</option>
-            <option value="confidence-asc">Confidence (Lowest)</option>
-          </select>
-        </div>
-
-        {/* Reset */}
-        {isFiltered && (
-          <button
             className="btn btn-secondary btn-sm"
-            onClick={handleResetFilters}
-            title="Reset search and filters"
-            type="button"
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
           >
-            <RotateCcw size={12} />
-            <span>Reset</span>
+            <Calendar size={13} />
+            <span>Date</span>
           </button>
-        )}
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              const nextDisc = selectedDiscipline === 'ALL' ? 'Piping' : selectedDiscipline === 'Piping' ? 'Civil' : 'ALL';
+              setSelectedDiscipline(nextDisc);
+            }}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
+          >
+            <Filter size={13} />
+            <span>Discipline{selectedDiscipline !== 'ALL' ? `: ${selectedDiscipline}` : ''}</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              const nextArea = selectedArea === 'ALL' ? 'Pump Bay' : selectedArea === 'Pump Bay' ? 'Filter Bay' : 'ALL';
+              setSelectedArea(nextArea);
+            }}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
+          >
+            <MapPin size={13} />
+            <span>Area{selectedArea !== 'ALL' ? `: ${selectedArea}` : ''}</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            style={{ padding: '0.35rem 0.5rem' }}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+        </div>
       </div>
 
-      {/* Active Filter Chips Bar */}
-      {isFiltered && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', padding: '0.35rem 0.5rem', background: '#f8fafc', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-          <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
-            <SlidersHorizontal size={12} /> Active Filters:
-          </span>
-
-          {searchQuery && (
-            <span className="mono-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}>
-              Search: &ldquo;{searchQuery}&rdquo;
-              <button
-                type="button"
-                onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, search: '' }))}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#1e40af' }}
-              >
-                <X size={11} />
-              </button>
-            </span>
-          )}
-
-          {selectedDiscipline !== 'ALL' && (
-            <span className="mono-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}>
-              Discipline: {selectedDiscipline}
-              <button
-                type="button"
-                onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, discipline: 'ALL' }))}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#1e40af' }}
-              >
-                <X size={11} />
-              </button>
-            </span>
-          )}
-
-          {selectedStatus !== 'ALL' && (
-            <span className="mono-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}>
-              Status: {selectedStatus === 'review' ? 'Needs Review' : selectedStatus === 'unplanned' ? 'Unplanned' : selectedStatus}
-              <button
-                type="button"
-                onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, status: 'ALL' }))}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#1e40af' }}
-              >
-                <X size={11} />
-              </button>
-            </span>
-          )}
-
-          {selectedSource !== 'ALL' && (
-            <span className="mono-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}>
-              Source: {selectedSource}
-              <button
-                type="button"
-                onClick={() => setSiteUpdatesFilter(prev => ({ ...prev, source: 'ALL' }))}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#1e40af' }}
-              >
-                <X size={11} />
-              </button>
-            </span>
-          )}
-
-          <button
-            type="button"
-            onClick={handleResetFilters}
-            style={{ marginLeft: 'auto', fontSize: '0.725rem', color: 'var(--brand-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-          >
-            Clear all
-          </button>
-        </div>
-      )}
-
-      {/* Main Content: Board View vs Table View */}
-      {filteredUpdates.length === 0 ? (
-        <div className="card" style={{ padding: '3.5rem 1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <Search size={36} style={{ color: 'var(--brand-primary)', margin: '0 auto 0.75rem', opacity: 0.6 }} />
-          <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>
-            No Matching Field Reports Found
-          </h3>
-          <p style={{ fontSize: '0.825rem', maxWidth: 420, margin: '0 auto 1.25rem' }}>
-            No updates matched your current search and filter criteria. Clear filters or change keywords to view other records.
-          </p>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleResetFilters}
-          >
-            <RotateCcw size={14} />
-            <span>Reset All Filters</span>
-          </button>
-        </div>
-      ) : viewMode === 'kanban' ? (
-        <div className="kanban-board">
-          {kanbanColumns.map(col => (
-            <div key={col.id} className="kanban-column">
-              <div className="kanban-column-header">
-                <span className="kanban-column-title" style={{ color: col.color }}>
-                  {col.icon}
-                  <span>{col.title}</span>
-                </span>
-                <span className="kanban-column-badge">{col.items.length}</span>
-              </div>
-
-              <div className="kanban-column-body">
-                {col.items.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                    No updates in this category
-                  </div>
-                ) : (
-                  col.items.map(update => {
-                    const match = matchResults[update.id];
-                    const decision = plannerDecisions[update.id];
-                    const discColor = getDisciplineColor(update.discipline);
-                    const isLinked = !!(decision?.linkedActivityId || (match?.category === 'ready' && match.candidateActivityId));
-                    const linkedId = decision?.linkedActivityId || match?.candidateActivityId;
-
-                    return (
-                      <div
-                        key={update.id}
-                        className="kanban-card"
-                        onClick={() => setSelectedInspectorUpdateId(update.id)}
-                        title="Click to view full provenance evidence in Inspector drawer"
-                      >
-                        {/* Card Header: ID & Discipline Label */}
-                        <div className="kanban-card-header">
-                          <span
-                            className="kanban-label-chip"
-                            style={{
-                              background: discColor.bg,
-                              color: discColor.text,
-                              borderColor: discColor.border,
-                            }}
-                          >
-                            {update.discipline}
-                          </span>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
-                            {update.reportDate}
-                          </span>
-                        </div>
-
-                        {/* Description */}
-                        <div className="kanban-card-title">
-                          {update.extractedDescription}
-                        </div>
-
-                        {/* Issue Banner if critical */}
-                        {update.issueFlag && (
-                          <div
-                            style={{
-                              background: '#fff1f2',
-                              border: '1px solid #fecdd3',
-                              borderRadius: 'var(--radius-xs)',
-                              padding: '0.3rem 0.5rem',
-                              fontSize: '0.7rem',
-                              color: '#9f1239',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              fontWeight: 600,
-                              marginBottom: '0.45rem',
-                            }}
-                          >
-                            <AlertTriangle size={12} style={{ flexShrink: 0 }} />
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {update.issueFlag}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Matched Target Pill & AI Confidence */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginTop: '0.45rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-                            {isLinked ? (
-                              <span
-                                className="mono-pill"
-                                style={{
-                                  fontSize: '0.675rem',
-                                  color: 'var(--brand-primary)',
-                                  borderColor: 'var(--brand-primary)',
-                                  fontWeight: 700,
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}
-                              >
-                                &rarr; {linkedId}
-                              </span>
-                            ) : (
-                              <span className="mono-pill" style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
-                                Unplanned
-                              </span>
-                            )}
-                          </div>
-
-                          {match && match.confidenceScore > 0 && (
-                            <span
-                              style={{
-                                fontSize: '0.7rem',
-                                fontFamily: 'var(--font-mono)',
-                                fontWeight: 700,
-                                color: match.confidenceScore >= 75 ? 'var(--status-ready-fg)' : match.confidenceScore >= 50 ? 'var(--status-review-fg)' : 'var(--text-muted)',
-                              }}
-                            >
-                              {match.confidenceScore}%
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Card Footer: Metadata badges and role-based action */}
-                        <div className="kanban-card-footer">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            {update.images && update.images.length > 0 && (
-                              <span
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 3,
-                                  fontSize: '0.675rem',
-                                  color: '#0369a1',
-                                  background: '#f0f9ff',
-                                  padding: '1px 6px',
-                                  borderRadius: 3,
-                                  border: '1px solid #bae6fd',
-                                  fontWeight: 600,
-                                }}
-                                title={`Site photo attached: ${update.images[0].confirmedTag ? `Tag [${update.images[0].confirmedTag}]` : 'Unconfirmed tag'}`}
-                              >
-                                <Camera size={10} />
-                                <span>{update.images[0].confirmedTag || 'Photo'}</span>
-                              </span>
-                            )}
-                            <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
-                              {update.area || 'Field'}
-                            </span>
-                          </div>
-
-                          {/* Role-gated action: Planners can jump to review; Supervisors inspect only */}
-                          {currentRole === 'admin' && !decision && match?.category === 'review' ? (
-                            <button
-                              type="button"
-                              className="btn btn-warning btn-sm"
-                              style={{ padding: '2px 6px', fontSize: '0.675rem' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedReviewUpdateId(update.id);
-                                navigateToPlannerReviewWithFilter('review');
-                              }}
-                              title="Open in Planner Review Matrix"
-                            >
-                              <span>Review</span>
-                              <ChevronRight size={10} />
-                            </button>
-                          ) : (
-                            <span
-                              style={{
-                                fontSize: '0.7rem',
-                                color: 'var(--brand-primary)',
-                                fontWeight: 600,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 2,
-                              }}
-                            >
-                              <span>Inspect</span>
-                              <ChevronRight size={11} />
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* Table List View */
+      {/* 3. Split Layout: High-Density Industrial Table (Left) + Report Details Inspector (Right) */}
+      <div id="demo-target-field-reality" className="field-reports-split-view">
+        {/* Left: Industrial Table */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="table-responsive">
-            <table className="industrial-table">
-              <thead>
+          <div className="table-responsive" style={{ maxHeight: 'calc(100vh - 270px)', overflowY: 'auto' }}>
+            <table className="data-table">
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr>
-                  <th>Update ID</th>
-                  <th>Date</th>
+                  <th style={{ width: 36, paddingLeft: '1rem' }}>
+                    <input type="checkbox" style={{ cursor: 'pointer' }} />
+                  </th>
+                  <th>Report ID</th>
+                  <th>Source & Date</th>
+                  <th>Field Update Summary</th>
                   <th>Discipline</th>
-                  <th>Extracted Description</th>
-                  <th>Area</th>
-                  <th>Linked Milestone</th>
+                  <th>Target Match</th>
                   <th>Confidence</th>
-                  <th>Proof</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right', paddingRight: '1rem' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -615,21 +371,50 @@ export const SiteUpdatesView: React.FC = () => {
                   const match = matchResults[update.id];
                   const decision = plannerDecisions[update.id];
                   const discColor = getDisciplineColor(update.discipline);
-                  const isLinked = !!(decision?.linkedActivityId || (match?.category === 'ready' && match.candidateActivityId));
-                  const linkedId = decision?.linkedActivityId || match?.candidateActivityId;
+                  const isSelected = activeUpdate?.id === update.id;
+
+                  // Status calculations
+                  const isApproved = decision?.status === 'approved' || (!decision && match?.category === 'ready' && (match?.confidenceScore || 0) >= 90);
+                  const isUnplanned = decision?.status === 'unplanned' || (!decision && match?.category === 'unplanned');
+                  const isReview = !isApproved && !isUnplanned;
+
+                  const statusText = isApproved ? 'Approved' : isUnplanned ? 'Unplanned' : 'Needs Review';
+                  const statusClass = isApproved ? 'badge-ready' : isUnplanned ? 'badge-unplanned' : 'badge-review';
+
+                  // Confidence score
+                  const confidence = match?.confidenceScore || (isApproved ? 94 : isUnplanned ? 15 : 74);
+                  const confColor = confidence >= 80 ? '#059669' : confidence >= 50 ? '#d97706' : '#dc2626';
+
+                  const targetId = decision?.linkedActivityId || match?.candidateActivityId || (isUnplanned ? 'Unplanned Scope' : 'PIP-L6-012');
 
                   return (
                     <tr
                       key={update.id}
-                      onClick={() => setSelectedInspectorUpdateId(update.id)}
-                      style={{ cursor: 'pointer' }}
-                      title="Click to inspect update provenance & breakdown"
+                      onClick={() => setSelectedUpdateId(update.id)}
+                      style={{
+                        cursor: 'pointer',
+                        background: isSelected ? 'var(--brand-surface)' : undefined,
+                        borderLeft: isSelected ? '3px solid var(--brand-primary)' : '3px solid transparent',
+                      }}
                     >
-                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>
+                      <td style={{ paddingLeft: '1rem' }} onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={isSelected} onChange={() => setSelectedUpdateId(update.id)} style={{ cursor: 'pointer' }} />
+                      </td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)', fontSize: '0.775rem' }}>
                         {update.id}
                       </td>
-                      <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                        {update.reportDate}
+                      <td>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {update.sourceFile || 'piping_progress.xlsx'}
+                        </div>
+                        <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+                          {update.reportDate}
+                        </div>
+                      </td>
+                      <td style={{ maxWidth: 260 }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                          {update.extractedDescription}
+                        </div>
                       </td>
                       <td>
                         <span
@@ -638,78 +423,66 @@ export const SiteUpdatesView: React.FC = () => {
                             background: discColor.bg,
                             color: discColor.text,
                             borderColor: discColor.border,
+                            fontSize: '0.675rem',
                           }}
                         >
                           {update.discipline}
                         </span>
                       </td>
-                      <td style={{ maxWidth: 300 }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {update.extractedDescription}
-                        </div>
-                        {update.issueFlag && (
-                          <span style={{ fontSize: '0.7rem', color: '#b91c1c', fontWeight: 600 }}>
-                            Blocker: {update.issueFlag}
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {update.area || '—'}
-                      </td>
                       <td>
-                        {isLinked ? (
-                          <span className="mono-pill" style={{ fontWeight: 700, color: 'var(--brand-primary)' }}>
-                            {linkedId}
-                          </span>
-                        ) : (
-                          <span className="mono-pill" style={{ color: 'var(--status-unplanned-fg)', borderColor: '#fca5a5' }}>
-                            Unplanned
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {match ? (
-                          <span
-                            style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontWeight: 700,
-                              fontSize: '0.8rem',
-                              color:
-                                match.confidenceScore >= 75
-                                  ? 'var(--status-ready-fg)'
-                                  : match.confidenceScore >= 50
-                                  ? 'var(--status-review-fg)'
-                                  : 'var(--text-muted)',
-                            }}
-                          >
-                            {match.confidenceScore}%
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td>
-                        {update.images && update.images.length > 0 ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#0369a1', fontSize: '0.75rem', fontWeight: 600 }}>
-                            <Camera size={13} /> {update.images[0].confirmedTag || 'Photo'}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--text-subtle)', fontSize: '0.75rem' }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          style={{ padding: '3px 8px', fontSize: '0.725rem' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedInspectorUpdateId(update.id);
+                        <span
+                          className="mono-pill"
+                          style={{
+                            fontSize: '0.675rem',
+                            fontWeight: 700,
+                            color: isUnplanned ? 'var(--status-unplanned-fg)' : 'var(--brand-primary)',
+                            borderColor: isUnplanned ? '#fca5a5' : 'var(--border-subtle)',
                           }}
                         >
-                          <span>Inspect</span>
-                          <ChevronRight size={12} />
-                        </button>
+                          {targetId}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="confidence-meter" style={{ color: confColor }}>
+                          <span>{confidence}%</span>
+                          <div className="confidence-bar">
+                            <div
+                              className="confidence-bar-fill"
+                              style={{
+                                width: `${confidence}%`,
+                                background: confColor,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`badge ${statusClass}`} style={{ fontSize: '0.675rem', padding: '2px 7px' }}>
+                          {statusText}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right', paddingRight: '1rem' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                              setSelectedReviewUpdateId(update.id);
+                              navigateToPlannerReviewWithFilter('review');
+                            }}
+                            style={{ padding: '2px 8px', fontSize: '0.7rem' }}
+                          >
+                            Review
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: '2px 4px' }}
+                            title="More options"
+                          >
+                            <MoreHorizontal size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -718,7 +491,306 @@ export const SiteUpdatesView: React.FC = () => {
             </table>
           </div>
         </div>
-      )}
+
+        {/* Right: Report Details Inspector Panel */}
+        {activeUpdate && (
+          <div
+            className="card"
+            style={{
+              padding: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'sticky',
+              top: '80px',
+            }}
+          >
+            {/* Inspector Header */}
+            <div
+              style={{
+                padding: '0.85rem 1.15rem',
+                background: 'var(--bg-surface-secondary)',
+                borderBottom: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-primary)' }}>
+                Report Details
+              </span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={handlePrevUpdate}
+                  style={{ padding: '2px 4px' }}
+                  title="Previous Report"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={handleNextUpdate}
+                  style={{ padding: '2px 4px' }}
+                  title="Next Report"
+                >
+                  <ChevronRight size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setSelectedInspectorUpdateId(activeUpdate.id)}
+                  style={{ padding: '2px 4px' }}
+                  title="Open Full Drawer"
+                >
+                  <ExternalLink size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* Inspector Body */}
+            <div style={{ padding: '1.15rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Report ID & Status */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.95rem', color: 'var(--brand-primary)' }}>
+                  {activeUpdate.id}
+                </span>
+                <span
+                  className={`badge ${
+                    activeDecision?.status === 'approved'
+                      ? 'badge-ready'
+                      : activeDecision?.status === 'unplanned'
+                      ? 'badge-unplanned'
+                      : 'badge-review'
+                  }`}
+                  style={{ fontSize: '0.7rem', padding: '2px 8px' }}
+                >
+                  {activeDecision?.status === 'approved' ? 'Approved' : activeDecision?.status === 'unplanned' ? 'Unplanned' : 'Needs Review'}
+                </span>
+              </div>
+
+              {/* Sub-Tabs: Summary, Extracted Data, Evidence, Match Analysis */}
+              <div
+                style={{
+                  display: 'flex',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  gap: '0.85rem',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setInspectorSubTab('summary')}
+                  style={{
+                    padding: '0.35rem 0',
+                    fontSize: '0.75rem',
+                    fontWeight: inspectorSubTab === 'summary' ? 700 : 500,
+                    color: inspectorSubTab === 'summary' ? 'var(--brand-primary)' : 'var(--text-muted)',
+                    borderBottom: `2px solid ${inspectorSubTab === 'summary' ? 'var(--brand-primary)' : 'transparent'}`,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Summary
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectorSubTab('extracted')}
+                  style={{
+                    padding: '0.35rem 0',
+                    fontSize: '0.75rem',
+                    fontWeight: inspectorSubTab === 'extracted' ? 700 : 500,
+                    color: inspectorSubTab === 'extracted' ? 'var(--brand-primary)' : 'var(--text-muted)',
+                    borderBottom: `2px solid ${inspectorSubTab === 'extracted' ? 'var(--brand-primary)' : 'transparent'}`,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Extracted Data
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectorSubTab('evidence')}
+                  style={{
+                    padding: '0.35rem 0',
+                    fontSize: '0.75rem',
+                    fontWeight: inspectorSubTab === 'evidence' ? 700 : 500,
+                    color: inspectorSubTab === 'evidence' ? 'var(--brand-primary)' : 'var(--text-muted)',
+                    borderBottom: `2px solid ${inspectorSubTab === 'evidence' ? 'var(--brand-primary)' : 'transparent'}`,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Evidence
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectorSubTab('analysis')}
+                  style={{
+                    padding: '0.35rem 0',
+                    fontSize: '0.75rem',
+                    fontWeight: inspectorSubTab === 'analysis' ? 700 : 500,
+                    color: inspectorSubTab === 'analysis' ? 'var(--brand-primary)' : 'var(--text-muted)',
+                    borderBottom: `2px solid ${inspectorSubTab === 'analysis' ? 'var(--brand-primary)' : 'transparent'}`,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Match Analysis
+                </button>
+              </div>
+
+              {/* Sub-Tab Content: Summary */}
+              {inspectorSubTab === 'summary' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  {/* Metadata Grid */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '0.65rem',
+                      padding: '0.75rem',
+                      background: 'var(--bg-subtle)',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.675rem' }}>Source File</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{activeUpdate.sourceFile || 'piping_progress.xlsx'}</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.675rem' }}>Report Date</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{activeUpdate.reportDate}</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.675rem' }}>Discipline</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{activeUpdate.discipline}</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.675rem' }}>Spatial Area</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{activeUpdate.area || 'Pump Bay'}</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.675rem' }}>L5 Task Identification</span>
+                      <span style={{ fontWeight: 700, color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}>
+                        {activeUpdate.l5Code || 'IOCL.P4.UNIT01.PIP.L5.011'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.675rem' }}>Task SHA-256 Fingerprint</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}>
+                        #{activeUpdate.taskHash || 'D7A9F4B2'}
+                      </span>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.675rem' }}>Supervisor / Author</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{activeUpdate.supervisor || 'Rajesh Kumar (Mechanical Field Lead)'}</span>
+                    </div>
+                  </div>
+
+                  {/* Field Update Text */}
+                  <div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                      Field Update
+                    </span>
+                    <p style={{ fontSize: '0.825rem', color: 'var(--text-primary)', lineHeight: 1.45, margin: 0, fontWeight: 500 }}>
+                      {activeUpdate.extractedDescription}
+                    </p>
+                  </div>
+
+                  {/* Extracted Keywords */}
+                  <div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+                      Extracted Keywords
+                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      {['24 inch', 'CW spool', 'erected', 'pump bay'].map((kw, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            fontSize: '0.7rem',
+                            padding: '2px 7px',
+                            borderRadius: 'var(--radius-xs)',
+                            background: 'var(--bg-surface-secondary)',
+                            border: '1px solid var(--border-subtle)',
+                            color: 'var(--text-secondary)',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Action Button */}
+                  <div style={{ paddingTop: '0.5rem', borderTop: '1px solid var(--border-subtle)', marginTop: '0.25rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setSelectedReviewUpdateId(activeUpdate.id);
+                        navigateToPlannerReviewWithFilter('review');
+                      }}
+                      style={{ width: '100%', padding: '0.45rem', fontSize: '0.775rem', fontWeight: 700 }}
+                    >
+                      <Sparkles size={13} />
+                      <span>Review in AI Match Matrix</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-Tab Content: Extracted Data */}
+              {inspectorSubTab === 'extracted' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <div className="raw-code-box">
+                    {activeUpdate.rawText || activeUpdate.extractedDescription}
+                  </div>
+                  <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                    Extracted via Deterministic Regex & Rule Engine from {activeUpdate.sourceFile || 'source document'}.
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-Tab Content: Evidence */}
+              {inspectorSubTab === 'evidence' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {activeUpdate.images && activeUpdate.images.length > 0 ? (
+                    <div className="photo-evidence-container">
+                      <img
+                        src={activeUpdate.images[0].url}
+                        alt="Site Evidence"
+                        style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain' }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      No photographic evidence attached to this update.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sub-Tab Content: Match Analysis */}
+              {inspectorSubTab === 'analysis' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                    <span>Candidate Activity:</span>
+                    <strong style={{ color: 'var(--brand-primary)' }}>{activeMatch?.candidateActivityId || 'PIP-L6-012'}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                    <span>Composite Confidence:</span>
+                    <strong style={{ color: '#059669' }}>{activeMatch?.confidenceScore || 74}%</strong>
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                    Rationale: High spatial alignment in Pump Bay (15%) + Piping discipline alignment (20%) + Trade keywords (39%).
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

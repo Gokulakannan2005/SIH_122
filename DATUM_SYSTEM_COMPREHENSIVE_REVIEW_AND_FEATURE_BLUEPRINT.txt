@@ -1,0 +1,246 @@
+================================================================================
+          DATUM — THE RECORD OF EXECUTION (SIH PROBLEM STATEMENT 122)
+    COMPREHENSIVE SYSTEM INVENTORY, BUG FORENSICS & INSANE FEATURE BLUEPRINT
+================================================================================
+Generated for: Product Architecture & Jury Evaluation
+Identity: Datum — The record of execution.
+Version: v2.4 Sky Enterprise Edition
+Target Domain: Mega Infrastructure, EPC Projects, Petrochemical & Power Plants
+Problem Statement: AI/NLP-Driven Linking of Unstructured Site Daily Progress to L5/L6 Schedule Activities
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. EXECUTIVE SUMMARY & PROBLEM CONTEXT
+2. COMPLETE INVENTORY OF WHAT WE ALREADY HAVE BUILT (ALL 7 MODULES)
+3. IN-DEPTH BUG FORENSICS: BUGS DISCOVERED, ROOT CAUSES & RESOLUTIONS
+4. ROLE-BASED ACCESS CONTROL (SUPERVISOR VS LEAD PLANNER)
+5. THE SKY ENTERPRISE DESIGN SYSTEM & INDUSTRIAL ERGONOMICS
+6. BRILLIANT IDEAS & INSANE FEATURE BLUEPRINT (NEXT-GEN CAPABILITIES)
+7. CHATGPT REFINEMENT PROMPTING GUIDE FOR FUTURE EXPANSIONS
+
+================================================================================
+1. EXECUTIVE SUMMARY & PROBLEM CONTEXT
+================================================================================
+In mega-construction and EPC infrastructure projects (such as thermal power plants,
+refineries, and metro rail networks), there is a severe disconnection between two worlds:
+
+A. THE FIELD REALITY:
+   Site supervisors produce hundreds of raw, unstructured, informal daily updates
+   across multiple formats (handwritten daily reports, Excel progress trackers,
+   voice notes, and WhatsApp photos with trade slang like "Hydro done on CW line").
+
+B. THE SCHEDULE BASELINE:
+   Project planners maintain thousands of formal L5/L6 milestone activities in
+   Primavera P6 or Microsoft Project (e.g., "Activity PIP-L6-012: Erect Line 24-CW-017,
+   WBS 2.1.2, Pump Bay").
+
+THE DATUM SOLUTION:
+Datum bridges this multi-crore reconciliation gap with a deterministic, explainable
+Multi-Factor NLP and Spatial Matching Engine backed by human-in-the-loop planner
+verification, cryptographic photo evidence provenance, and predictive schedule
+delay simulation.
+
+================================================================================
+2. COMPLETE INVENTORY OF WHAT WE ALREADY HAVE BUILT
+================================================================================
+
+[MODULE 1: FIELD PROGRESS & PHOTO LOGS (Supervisor Portal)]
+- 3-Tab High-Efficiency Workflow:
+  * Tab 1 (Direct Daily Report): Live form with instant discipline selector (Piping,
+    Civil, Electrical, Instrumentation, HSE), work area picker, output quantity,
+    and verbatim raw voice transcript logging. Includes 1-click field scenario presets
+    (Hydro Testing Complete, Raft Concrete Pour, Site Blocker).
+  * Tab 2 (Batch File Ingestion Dropzone): Drag-and-drop CSV, XLSX, and TXT log parser
+    with instant 1-click sample data loaders.
+  * Tab 3 (Photo Proof & Blocker Studio): High-resolution construction evidence presets
+    (Pipe Weld NDT, Raft Concreting, Cable Tray Pull, Crane Breakdown) + custom device
+    upload with timestamp badge, caption editor, and critical path blocker flagging.
+
+[MODULE 2: DAILY FIELD REPORTS FEED (Site Event Stream)]
+- Dual-View Architecture:
+  * Trello-Style Kanban Board: Columnar status breakdown (Needs Review, Auto-Matched,
+    Approved & Linked, Unplanned Work) with interactive drag-hover.
+  * Comprehensive Table List: Detailed grid with discipline pills, source file references,
+    exact line/row numbers, supervisor tags, and confidence progress meters.
+- Multi-Parameter Filter Toolbar: Search keywords, quick discipline filters (Civil,
+  Piping, Electrical, Instrumentation, HSE), status filters, and source file selectors.
+
+[MODULE 3: PROJECT CONTROL CENTER (Executive Command Room)]
+- Real-Time KPI Cards: Total Site Updates, High-Confidence Auto-Links, Items Pending
+  Planner Review, Classified Unplanned Work, and Delayed Critical Activities.
+- Discipline Execution Matrix: Interactive progress bars and completion percentages
+  across all engineering disciplines.
+- Schedule Variance & Critical Path Alerts: Live highlights of activities exceeding
+  planned finish dates with day-variance meters.
+
+[MODULE 4: AI AUTO-MATCH MATRIX (3-Tier Reconciliation Workbench)]
+- Tier 1 (Field Event Card): Displays original supervisor description, verbatim raw
+  speech transcript, area/discipline tags, attached photo proofs, and blocker flags.
+- Tier 2 (AI Milestone Alignment & 1-Click Suggestions): Displays top algorithmic
+  candidate activity, confidence percentage badge, 4-factor score breakdown (Keyword 50,
+  Discipline 20, Spatial 15, Fuzzy 15), and 1-click candidate alternative chips.
+- Tier 3 (High-Contrast Decision Bar): Tactile action buttons with clear colors:
+  * [✓ Approve Match Link] (Emerald Green)
+  * [🔗 Confirm Re-Link] (Cobalt Blue)
+  * [⚡ Mark Unplanned Work] (Amber)
+  * [✕ Reject Log] (Rose Outline)
+- Zero-Stale-Data Queue Engine: Real-time reactive item advancement and celebration
+  state when all items in a filter are reconciled.
+
+[MODULE 5: MILESTONE BASELINE L5/L6 (Schedule Master)]
+- Full Primavera P6 / MS Project hierarchy viewer with WBS coding (e.g. 1.1.1, 2.1.2).
+- Dual View (Interactive Cards vs Dense Table) with discipline filtering, area filtering,
+  and alias lookup.
+- Planned Start/Finish vs Actual Start/Finish variance tracking with critical path flags.
+
+[MODULE 6: AI PREDICTIVE RISK & COPILOT (Novelty Feature)]
+- Delay Propagation Risk Simulator: Interactive slider simulating milestone delay days
+  and visualizing ripple-effect impacts across dependent downstream activities.
+- Executive Briefing Generator: Automated plain-English summary of daily progress,
+  critical blockers, and contractor productivity.
+- Forensic Provenance Audit: Replay of exact supervisor timestamps, SHA-256 evidence
+  hashes, and planner justification notes for legal/EPC dispute resolution.
+
+[MODULE 7: DATA INGESTION & SCHEMAS]
+- Batch ingestion parser supporting Primavera P6 schedule CSVs, daily field logs (TXT),
+  and piping fabrication tracking spreadsheets (XLSX).
+- Standalone client-side fallback mode ensuring 100% functionality without backend.
+
+================================================================================
+3. IN-DEPTH BUG FORENSICS: DISCOVERIES, ROOT CAUSES & RESOLUTIONS
+================================================================================
+
+BUG 1: RIGHT-SIDE NAVBAR OVERFLOW AND BROKEN HORIZONTAL TABS
+- Observation: As new tabs (Supervisor Portal, AI Copilot) and status pills were added,
+  the horizontal top navigation bar overflowed and clipped on standard laptop displays.
+- Root Cause: Horizontal flex layouts without wrapping constraints fail when tab count
+  exceeds 5 items on viewports <= 1440px width.
+- Resolution: Refactored the architecture into an enterprise-grade Fixed Left Sidebar
+  (260px) + Minimal Top App Header, categorizing tabs into logical groups (Field Operations,
+  Schedule & Reconciliation, AI Pipeline).
+
+BUG 2: SQUISHED, UNSTYLED TYPEWRITER TEXTAREAS AND TRUNCATED INPUTS
+- Observation: Textareas in supervisor view appeared as tiny fixed boxes with unstyled
+  typewriter fonts (Courier), and supervisor names were truncated on the right.
+- Root Cause: Missing CSS classes (`.form-input`, `.form-textarea`, `.form-select`,
+  `.form-label`) in stylesheet caused browsers to render default 20-col x 2-row HTML inputs.
+- Resolution: Defined high-precision form styling with `width: 100%`, `min-height: 84px`,
+  smooth focus rings (`0 0 0 3px rgba(2, 132, 199, 0.16)`), and responsive grid wrapping.
+
+BUG 3: STALE TASK SELECTION PERSISTING AFTER QUEUE COMPLETION
+- Observation: When all tasks in a filtered review queue were approved, the details
+  pane continued to show the data of the last approved task instead of disappearing.
+- Root Cause: `activeUpdateId` state held a stale ID string that was no longer in `queueItems`,
+  causing the view to render the stale item from the master array.
+- Resolution: Rewrote active item resolution to be strictly derived from `queueItems`.
+  When `queueItems.length === 0`, it renders a dedicated "All Tasks in This Queue Reconciled! 🎉"
+  celebration card with zero stale memory.
+
+BUG 4: SCORE FACTOR BREAKDOWN OVERLAPPING IN INSPECTOR DRAWER
+- Observation: In the Inspector side drawer, the 4 score factors (Keyword, Discipline,
+  Area, Fuzzy) collided and overlapped into an unreadable string.
+- Root Cause: Plain text formatting with fixed width overflow inside narrow 380px drawer.
+- Resolution: Replaced with a 2x2 structured chip grid featuring animated progress bars,
+  high-contrast fractional scores, and expanded drawer width to 480px.
+
+BUG 5: RESTART / RESET DEMO BUTTON NON-RESPONSIVE
+- Observation: Clicking "Reset Demo" did not clear user selections or provide visual feedback.
+- Root Cause: State variables (`selectedInspectorUpdateId`, `selectedReviewUpdateId`,
+  `offlineSyncQueue`) were not wiped on reload, and no async feedback toast was triggered.
+- Resolution: Explicitly cleared all selection pointers, purged offline queues, re-parsed
+  fresh baseline files, and added a floating green confirmation toast.
+
+BUG 6: SUPERVISOR COULD ACCESS PLANNER REVIEW CONTROLS
+- Observation: Supervisors clicking "Review" in the field stream could enter the Planner
+  Match Matrix and modify schedule links.
+- Root Cause: Universal "Review" buttons in `SiteUpdatesView.tsx` were not role-gated.
+- Resolution: Implemented strict role check (`currentRole !== 'supervisor'`). For supervisors,
+  all buttons are locked to read-only "Inspect", and administrative tabs are hidden.
+
+================================================================================
+4. ROLE-BASED ACCESS CONTROL (SUPERVISOR VS LEAD PLANNER)
+================================================================================
+
+A. SITE SUPERVISOR PERSONA (Field Worker / Subcontractor):
+   - Access: Field Progress & Photo Logs, Daily Field Reports Feed (Read-Only),
+     Milestone Baseline L5/L6 (Read-Only Reference).
+   - Permissions: Submit daily progress, upload photos/documents, report site blockers.
+   - Prohibitions: Cannot approve matches, cannot alter schedule baselines, cannot edit
+     confidence weights.
+
+B. LEAD PLANNER / ADMIN PERSONA (Project Management & Control Room):
+   - Access: Complete 7-module enterprise suite.
+   - Permissions: Full authority to approve algorithmic links, manual re-linking,
+     classifying unplanned work, modifying extracted parameters, adjusting schedule
+     variances, and exporting certified audit CSVs.
+
+================================================================================
+5. THE SKY ENTERPRISE DESIGN SYSTEM & INDUSTRIAL ERGONOMICS
+================================================================================
+- Color Tokens:
+  * Canvas: Soft Sky Blue (`#f0f7fc`) — reduces eye fatigue during long shifts.
+  * Surfaces: Pure Crisp White (`#ffffff`) with azure borders (`#e0f2fe` / `#bae6fd`).
+  * Text: Deep Marine Navy (`#0c2340`) — high-contrast readability under bright field lighting.
+  * Primary Accent: Vivid Sky Cobalt (`#0284c7` / `#0369a1`).
+  * Status Tokens: High-contrast Emerald (`#047857`), Amber (`#b45309`), and Rose (`#be123c`).
+- Typography:
+  * Primary UI: `Plus Jakarta Sans` (Modern geometric clarity).
+  * Data & Codes: `JetBrains Mono` (Zero ambiguity between 0/O and 1/I in WBS tags).
+
+================================================================================
+6. BRILLIANT IDEAS & INSANE FEATURE BLUEPRINT (FOR HACKATHON JURY WOW FACTOR)
+================================================================================
+
+[INSANE FEATURE 1: COMPUTER VISION VISUAL QA & DEFECT OCR DETECTOR]
+- Concept: When a supervisor uploads a photo (e.g. pipe weld seam or concrete pour),
+  an integrated lightweight CV engine automatically reads OCR tags on pipe spools,
+  detects weld inspection chalk markings, or identifies equipment tags (e.g. "CW-017").
+- Jury Impact: Shows full end-to-end multi-modal AI (combining Text + Audio + Computer Vision).
+
+[INSANE FEATURE 2: NATIVE MULTILINGUAL SPEECH-TO-TEXT FIELD DICTATION]
+- Concept: Supervisors on active construction sites wear heavy gloves and hardhats.
+  Add a floating "🎙️ Tap to Speak" button utilizing the Web Speech API that allows
+  dictating in Indian English, Hindi, or Tamil, automatically structuring speech into
+  discipline, area, and task description.
+- Jury Impact: Tremendous real-world usability for on-ground Indian infrastructure laborers.
+
+[INSANE FEATURE 3: 4D BIM / GIS ISOMETRIC SPATIAL VIEWER]
+- Concept: An interactive 2.5D site grid map showing the Pump Bay, Switchyard, Substation,
+  and Turbine Building. Completed activities illuminate in glowing Green, in-progress in Blue,
+  and blocked areas (e.g., crane leak) pulse in Amber/Red.
+- Jury Impact: Gives executive stakeholders and jury judges an instant visual "Digital Twin".
+
+[INSANE FEATURE 4: MONTE CARLO SCHEDULE DELAY PROPAGATION ENGINE]
+- Concept: Beyond simple static delay calculation, run 500 Monte Carlo statistical
+  simulations based on historical contractor variance to generate a probabilistic
+  Project Completion S-Curve (P50 vs P80 vs P90 delivery dates).
+- Jury Impact: Transforms Datum from a reactive log matcher to a predictive AI intelligence tool.
+
+[INSANE FEATURE 5: CRYPTOGRAPHIC SHA-256 MERKLE AUDIT CERTIFICATE]
+- Concept: Generate a 1-click cryptographically signed PDF "Daily Execution Certificate"
+  hashing all approved links, photo SHA-256 checksums, and supervisor GPS coordinates.
+- Jury Impact: Solves multi-million dollar EPC contractor litigation and delay penalty claims.
+
+[INSANE FEATURE 6: WHATSAPP / TELEGRAM SITE INGESTION SIMULATOR]
+- Concept: A simulated WhatsApp chat widget inside the app where supervisors send
+  messages like "Pump bay hydro passed 15 bar" with an attached image, and Datum
+  automatically parses it into the stream in real-time.
+- Jury Impact: Demonstrates zero friction adoption—workers don't even need to open an app.
+
+================================================================================
+7. CHATGPT REFINEMENT PROMPTING GUIDE FOR FUTURE EXPANSIONS
+================================================================================
+When feeding this blueprint to ChatGPT to generate targeted feature prompts:
+
+Recommended Prompt Template:
+"Act as a Principal Full-Stack Engineer and UX Architect. Review the Datum System Blueprint
+(d:\SIH_122_AG\DATUM_SYSTEM_COMPREHENSIVE_REVIEW_AND_FEATURE_BLUEPRINT.txt).
+Datum is built using React, TypeScript, Vite, and custom CSS with a Sky Enterprise Theme.
+Please design the exact technical implementation specification for [CHOSEN FEATURE, e.g.
+Feature 2: Native Voice Dictation OR Feature 3: 4D BIM Spatial Map], including component
+architecture, state hooks in ProjectContext.tsx, and UI interactions that will stun hackathon judges."
+
+================================================================================
+END OF BLUEPRINT — DATUM: THE RECORD OF EXECUTION
+================================================================================

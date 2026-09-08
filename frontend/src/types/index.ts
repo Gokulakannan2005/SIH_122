@@ -1,4 +1,27 @@
-export type NavigationTab = 'dashboard' | 'site-updates' | 'schedule-activities' | 'planner-review' | 'upload';
+export type NavigationTab = 'dashboard' | 'site-updates' | 'schedule-activities' | 'planner-review' | 'upload' | 'supervisor-entry' | 'copilot';
+
+export type UserRole = 'admin' | 'supervisor';
+
+export type DensityMode = 'comfortable' | 'compact';
+
+export interface ImageEvidence {
+  id: string;
+  url: string;
+  type: 'completion' | 'issue' | 'progress';
+  caption: string;
+  timestamp: string;
+  supervisor: string;
+  filename?: string;
+  fileSize?: number; // bytes
+  sha256Hash?: string; // Integrity fingerprint (Web Crypto SHA-256)
+  ocrStatus?: 'idle' | 'scanning' | 'success' | 'failed' | 'no_text';
+  ocrConfidence?: number; // 0 to 100
+  ocrRawText?: string;
+  ocrDetectedTags?: string[];
+  confirmedTag?: string; // e.g. "24-CW-017"
+  confirmedBy?: 'supervisor' | 'planner' | 'unconfirmed';
+  confirmedAt?: string;
+}
 
 export interface ScheduleActivity {
   activityId: string; // e.g. "PIP-L6-012"
@@ -16,14 +39,15 @@ export interface ScheduleActivity {
   progressPercent?: number;
   varianceDays?: number;
   status?: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed';
+  criticalPath?: boolean;
 }
 
 export type EventStatus = 'Started' | 'Completed' | 'In Progress';
 
 export interface SiteUpdate {
   id: string;
-  sourceFile: 'daily_report.txt' | 'piping_progress.xlsx' | string;
-  sourceType: 'text_report' | 'excel_sheet';
+  sourceFile: 'daily_report.txt' | 'piping_progress.xlsx' | 'field_mobile_entry' | string;
+  sourceType: 'text_report' | 'excel_sheet' | 'supervisor_upload';
   entryId?: string;
   discipline: string;
   reportDate: string;
@@ -36,6 +60,10 @@ export interface SiteUpdate {
   supervisor?: string;
   lineEvidence?: string | number; // line number or row number
   isExplicitUnplanned?: boolean;
+  images?: ImageEvidence[];
+  confirmedTag?: string; // Confirmed equipment/line tag (e.g. "24-CW-017")
+  issueFlag?: string; // Optional site blocker / obstacle note
+  issueSeverity?: 'low' | 'medium' | 'critical';
 }
 
 export type MatchCategory = 'ready' | 'review' | 'unplanned' | 'rejected';
@@ -79,9 +107,93 @@ export interface AuditLog {
   originalCategory: MatchCategory;
   finalActivityId: string | null;
   plannerNote?: string;
+  userRole?: UserRole;
 }
 
 export type WorkbenchViewMode = 'table' | 'kanban' | 'gantt' | 'ingestion';
 
 export type WorkbenchSortOption = 'confidence-desc' | 'confidence-asc' | 'date-desc' | 'date-asc' | 'discipline' | 'wbs';
+
+export interface OfflineSyncItem {
+  id: string;
+  timestamp: string;
+  type: 'new_update' | 'planner_action' | 'image_upload';
+  summary: string;
+  synced: boolean;
+}
+
+export type ToastType = 'success' | 'warning' | 'error' | 'info';
+
+export interface ToastNotification {
+  id: string;
+  type: ToastType;
+  title: string;
+  message: string;
+  timestamp: string;
+  durationMs?: number;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+
+export interface ScheduleDependency {
+  predecessorId: string;
+  successorId: string;
+  relationshipType: 'FS'; // Finish-to-Start
+  lagDays?: number;
+  description?: string;
+}
+
+export interface ImpactedActivityScenario {
+  activityId: string;
+  activityName: string;
+  discipline: string;
+  area: string;
+  wbs: string;
+  baselineStart: string;
+  baselineFinish: string;
+  durationDays: number;
+  scenarioStart: string;
+  scenarioFinish: string;
+  shiftDays: number;
+  incrementalShiftDays: number;
+  isDirectTarget: boolean;
+  predecessorIds: string[];
+  severity: 'low' | 'medium' | 'critical';
+  impactExplanation: string;
+}
+
+export interface ScenarioSimulationResult {
+  targetActivityId: string;
+  targetActivityName: string;
+  targetDiscipline: string;
+  targetArea: string;
+  simulatedDelayDays: number;
+  baselineStart: string;
+  baselineFinish: string;
+  scenarioStart: string;
+  scenarioFinish: string;
+  maxShiftDays: number;
+  impactedCount: number;
+  criticalMilestoneImpacted: boolean;
+  overallRiskLevel: 'Low' | 'Medium' | 'High';
+  impactedActivities: ImpactedActivityScenario[];
+  upstreamActivities: ScheduleActivity[];
+  executiveBriefing: string;
+}
+
+export interface SpokenParseResult {
+  rawTranscript: string;
+  cleanDescription: string;
+  discipline: string;
+  area: string;
+  eventStatus: EventStatus;
+  detectedTag?: string;
+  quantity?: string;
+  issueFlag?: string;
+  issueSeverity?: 'low' | 'medium' | 'critical';
+  confidenceScore: number;
+  language: 'en-IN' | 'hi-IN' | 'ta-IN';
+}
+
+
 

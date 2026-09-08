@@ -1,0 +1,148 @@
+================================================================================
+DATUM SYSTEM — PROJECT CHANGELOG & BUG RESOLUTION AUDIT LOG
+================================================================================
+PLATFORM: Datum (SIH-122 Industrial Schedule-Evidence Linker)
+DOMAIN: Construction Project Controls, EPC Megaprojects & Industrial Scheduling
+VERSION: 2.3.0
+DATE OF RECORD: September 6, 2026
+--------------------------------------------------------------------------------
+
+================================================================================
+1. RESOLVED DEFECTS & UX AUDIT TRAIL
+================================================================================
+
+--------------------------------------------------------------------------------
+BUG-001: Misleading Global Header Confidence Badge ("Auto-Match: 53% High Conf")
+--------------------------------------------------------------------------------
+SEVERITY: Medium (UX / Information Integrity Issue)
+DATE RESOLVED: September 6, 2026
+AFFECTED COMPONENT: frontend/src/components/AppHeader.tsx
+
+PROBLEM STATEMENT / USER REPORT:
+A persistent pill badge reading "Auto-Match: 53% High Conf" was rendered in the
+top-right application header across every tab and view (Supervisor Hub, Dashboard,
+Daily Field Reports Feed, AI Auto-Match Matrix, Baseline Schedule, and Copilot).
+This presented several critical issues:
+  1. Misleading Aggregate Metric: A single global percentage cannot accurately
+     represent individual field report alignments, active review queues, or overall
+     project health.
+  2. Rule Conflict / Inaccurate Wording: A 53% score was labeled "High Conf",
+     violating the core project confidence rules (where >= 75% is High Confidence/Ready,
+     40–74% is Review Required, and < 40% is Low Confidence/Unplanned).
+  3. Lack of Context: Confidence scores must always remain contextual to specific
+     field updates, matching candidates, and inspector breakdown cards.
+
+ROOT CAUSE ANALYSIS:
+In `frontend/src/components/AppHeader.tsx`, a calculation was performing:
+  `const readyCount = siteUpdates.filter(u => matchResults[u.id]?.category === 'ready').length;`
+  `const highConfPct = totalCount > 0 ? Math.round((readyCount / totalCount) * 100) : 0;`
+This fraction of ready items was hardcoded to display with the label `{highConfPct}% High Conf`
+in the persistent header bar, incorrectly mixing portfolio-level match counts with
+individual item confidence levels.
+
+RESOLUTION / CODE MODIFICATIONS:
+  - Removed `highConfPct`, `totalCount`, and `readyCount` calculations from `AppHeader.tsx`.
+  - Removed the `<div className="mono-pill">Auto-Match: {highConfPct}% High Conf</div>`
+    element entirely from `AppHeader.tsx`.
+  - Cleaned up unused Lucide icons (`CheckCircle2`, `Sparkles`, `Database`) from `AppHeader.tsx`.
+  - Preserved the remaining header controls (Lead Planner / Supervisor Role Toggle,
+    Export CSV, and Restart Demo) with balanced flexbox spacing and clean responsive alignment.
+  - Confirmed that contextual confidence scores remain active and correctly displayed
+    on individual records in:
+      * Daily Field Reports Kanban & Table rows (showing exact % score and category).
+      * Planner Review Queue (sorted by confidence score with explicit status badges).
+      * Inspector Drawer (displaying detailed score breakdown: Keyword, Discipline,
+        Spatial Area, and Fuzzy tokens).
+      * Planner Review AI Top Recommendation card (annotating reasons and breakdowns).
+
+VERIFICATION PERFORMED:
+  1. Build Verification: Ran `npm run build` (`tsc && vite build`) — passed with 0 errors.
+  2. Global Header Inspection: Verified that the "Auto-Match: 53% High Conf" badge is absent
+     across all navigation views (Dashboard, Daily Field Reports, Schedule Baseline,
+     Planner Review Workbench, Supervisor Entry, AI Copilot, and Data Ingestion).
+  3. Responsive Header Layout: Verified header flex spacing remains balanced at laptop width.
+  4. Contextual Confidence Integrity: Confirmed threshold wording strictly follows standard:
+       * >= 75%: Ready / High Confidence candidate
+       * 40–74%: Review required
+       * < 40%: Low confidence / Unplanned scope candidate
+
+--------------------------------------------------------------------------------
+FEATURE-001: Photo Evidence & Browser-Local OCR Tag Verification MVP
+--------------------------------------------------------------------------------
+DATE IMPLEMENTED: September 6, 2026
+AFFECTED COMPONENTS:
+  - frontend/src/utils/ocrService.ts (NEW)
+  - frontend/src/types/index.ts
+  - frontend/src/utils/matchingEngine.ts
+  - frontend/src/context/ProjectContext.tsx
+  - frontend/src/components/SupervisorEntryView.tsx
+  - frontend/src/components/InspectorDrawer.tsx
+  - frontend/src/components/PlannerReviewView.tsx
+  - frontend/src/components/SiteUpdatesView.tsx
+
+DESCRIPTION:
+Implemented construction photo attachment, browser-local SHA-256 integrity fingerprinting
+(Web Crypto API), on-demand OCR equipment tag extraction (Tesseract.js), human tag
+confirmation chips, and deterministic matching engine integration (e.g. tag "24-CW-017"
+strengthens matching for activity "PIP-L6-012" with full explainable rationale).
+
+--------------------------------------------------------------------------------
+FEATURE-002: Scenario-Based Schedule Risk Simulator
+--------------------------------------------------------------------------------
+DATE IMPLEMENTED: September 6, 2026
+AFFECTED COMPONENTS:
+  - frontend/src/utils/scheduleSimulator.ts
+  - frontend/src/components/CopilotView.tsx
+
+DESCRIPTION:
+Implemented deterministic Finish-to-Start forward delay propagation modeling
+allowing planners to simulate delay durations on baseline activities, inspect
+exact downstream milestone cascade dates, and review executive risk briefings.
+
+--------------------------------------------------------------------------------
+DOC-001: Comprehensive Documentation Suite Creation
+--------------------------------------------------------------------------------
+DATE RECORDED: September 6, 2026
+ARTIFACTS CREATED / REFRESHED:
+  - DATUM_COMPLETE_USER_MANUAL.md
+  - DATUM_COMPONENT_AND_FEATURE_REFERENCE.md
+
+DESCRIPTION:
+Authored complete, accurate, user-friendly documentation reflecting the actual
+production implementation of Datum:
+  1. DATUM_COMPLETE_USER_MANUAL.md:
+     - Plain-language explanation of Datum's purpose, terminology (L5/L6, WBS, variance),
+       and evidence-to-schedule pipeline.
+     - Role-based permissions guide (Lead Planner vs. Site Supervisor).
+     - Screen-by-screen user guide covering all views, drawers, modals, and toasts.
+     - Step-by-step practical workflows (photo ingestion, OCR tag verification,
+       planner review, relinking, unplanned scope classification, and delay simulation).
+     - Honest troubleshooting, limitations, and quick-reference checklists.
+  2. DATUM_COMPONENT_AND_FEATURE_REFERENCE.md:
+     - Exhaustive technical feature catalogue across 10 core system capabilities.
+     - Dedicated Button and Control Reference Table documenting every interactive
+       control in the application (50+ controls).
+     - Full frontend and backend architecture maps, REST API endpoint dictionary,
+       and TypeScript data model glossary.
+     - Verification against running codebase and UI to eliminate phantom claims.
+
+--------------------------------------------------------------------------------
+FEATURE-003: Native Multilingual Speech-to-Text Field Dictation & Intent Parsing
+--------------------------------------------------------------------------------
+DATE IMPLEMENTED: September 6, 2026
+AFFECTED COMPONENTS:
+  - frontend/src/utils/speechService.ts (NEW)
+  - frontend/src/utils/speechParser.ts (NEW)
+  - frontend/src/types/index.ts
+  - frontend/src/components/SupervisorEntryView.tsx
+
+DESCRIPTION:
+Implemented browser-native Web Speech API client supporting English (India), Hindi,
+and Tamil field dictation. Deterministically parses spoken sentences into structured
+Datum field updates (Trade, Spatial Area, Equipment Tag, Event Status, Quantity, and
+Blocker Flag) with real-time audio waveform visualizer and 1-click Opera/browser fallback
+presets.
+
+================================================================================
+END OF CHANGELOG & BUG AUDIT LOG
+================================================================================

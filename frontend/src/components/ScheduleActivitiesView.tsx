@@ -3,15 +3,14 @@ import { useProject } from '../context/ProjectContext';
 import {
   Search,
   CalendarCheck,
-  Filter,
-  Layers,
-  Clock,
-  ArrowUpDown,
   ChevronRight,
-  ExternalLink,
-  SlidersHorizontal
+  RotateCcw,
+  LayoutGrid,
+  List,
+  Layers,
+  Calendar,
+  Clock
 } from 'lucide-react';
-import { ScheduleActivity } from '../types';
 
 export const ScheduleActivitiesView: React.FC = () => {
   const {
@@ -19,16 +18,18 @@ export const ScheduleActivitiesView: React.FC = () => {
     siteUpdates,
     plannerDecisions,
     matchResults,
-    selectedScheduleActivityId,
     setSelectedScheduleActivityId,
   } = useProject();
+
+  // View Mode: 'table' vs 'cards'
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('cards');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDiscipline, setSelectedDiscipline] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [selectedArea, setSelectedArea] = useState('ALL');
-  const [sortBy, setSortBy] = useState<'id' | 'wbs' | 'planned-finish' | 'variance'>('wbs');
+  const [sortBy, setSortBy] = useState<'wbs' | 'id' | 'planned-finish' | 'variance'>('wbs');
 
   // Unique lists for filter dropdowns
   const uniqueDisciplines = useMemo(() => {
@@ -43,11 +44,25 @@ export const ScheduleActivitiesView: React.FC = () => {
     return Array.from(set).sort();
   }, [enrichedSchedule]);
 
+  const isFiltered =
+    searchQuery.trim() !== '' ||
+    selectedDiscipline !== 'ALL' ||
+    selectedStatus !== 'ALL' ||
+    selectedArea !== 'ALL';
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setSelectedDiscipline('ALL');
+    setSelectedStatus('ALL');
+    setSelectedArea('ALL');
+    setSortBy('wbs');
+  };
+
   // Filtered and sorted activities
   const filteredActivities = useMemo(() => {
     return enrichedSchedule
       .filter(act => {
-        // Search query
+        // Search query across all relevant fields
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
           const matchesQuery =
@@ -106,32 +121,70 @@ export const ScheduleActivitiesView: React.FC = () => {
     }).length;
   };
 
+  // Discipline Color Map for Trello-style Label Chips
+  const getDisciplineColor = (disc: string) => {
+    switch (disc) {
+      case 'Civil':
+        return { bg: '#e9f2ff', text: '#0c66e4', border: '#cce0ff' };
+      case 'Piping':
+        return { bg: '#dcfff1', text: '#1f845a', border: '#7ee2b8' };
+      case 'Electrical':
+        return { bg: '#fff4e5', text: '#974f0c', border: '#fec195' };
+      case 'Instrumentation':
+        return { bg: '#f3f0ff', text: '#6e5dc6', border: '#d3cbfb' };
+      case 'HSE':
+        return { bg: '#ffebe6', text: '#ae2e24', border: '#fd9891' };
+      default:
+        return { bg: '#f1f2f4', text: '#44546f', border: '#dfe1e6' };
+    }
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <CalendarCheck size={22} style={{ color: '#2563eb' }} />
-            L5 / L6 Baseline Master Schedule & Activity Alignment
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <CalendarCheck size={20} style={{ color: 'var(--brand-primary)' }} />
+            Master Schedule Activities
           </h2>
-          <p style={{ fontSize: '0.875rem', color: '#475569', marginTop: 3 }}>
-            Inspect schedule baseline deliverables, aliases, planned vs. actual completion dates, and delay variance.
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
+            Baseline L5/L6 deliverables, progress tracking, planned vs. actual windows, and delay variance.
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span className="mono-pill" style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}>
-            Showing <strong>{filteredActivities.length}</strong> of <strong>{enrichedSchedule.length}</strong> Activities
+        {/* View Mode Toggle (Cards vs Table) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div className="view-mode-toggle">
+            <button
+              className={`view-mode-btn ${viewMode === 'cards' ? 'active' : ''}`}
+              onClick={() => setViewMode('cards')}
+              type="button"
+            >
+              <LayoutGrid size={13} />
+              <span>Cards</span>
+            </button>
+            <button
+              className={`view-mode-btn ${viewMode === 'table' ? 'active' : ''}`}
+              onClick={() => setViewMode('table')}
+              type="button"
+            >
+              <List size={13} />
+              <span>Table</span>
+            </button>
+          </div>
+
+          <span className="mono-pill" style={{ fontSize: '0.725rem', padding: '0.3rem 0.6rem' }}>
+            <strong>{filteredActivities.length}</strong> of <strong>{enrichedSchedule.length}</strong>
           </span>
         </div>
       </div>
 
       {/* Filter and Working Search Toolbar */}
-      <div className="toolbar-card" style={{ gap: '0.75rem' }}>
+      <div className="toolbar-card">
         {/* Working Search Bar */}
-        <div className="search-input-box" style={{ maxWidth: 360 }}>
-          <Search size={16} className="search-icon" />
+        <div className="search-input-box" style={{ maxWidth: 300 }}>
+          <Search size={14} className="search-icon" />
           <input
             type="text"
             className="form-input"
@@ -142,55 +195,51 @@ export const ScheduleActivitiesView: React.FC = () => {
           />
         </div>
 
-        {/* Discipline Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Discipline:</span>
-          <select
-            className="form-select"
-            value={selectedDiscipline}
-            onChange={e => setSelectedDiscipline(e.target.value)}
+        {/* Quick Filter Pill Buttons (Trello/Jira style) */}
+        <div className="filter-pill-group">
+          <button
+            className={`filter-pill ${selectedDiscipline === 'ALL' && selectedStatus === 'ALL' ? 'active' : ''}`}
+            onClick={handleResetFilters}
+            type="button"
           >
-            <option value="ALL">All Disciplines</option>
-            {uniqueDisciplines.map(d => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Status Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Status:</span>
-          <select
-            className="form-select"
-            value={selectedStatus}
-            onChange={e => setSelectedStatus(e.target.value)}
+            All
+          </button>
+          {uniqueDisciplines.map(d => (
+            <button
+              key={d}
+              className={`filter-pill ${selectedDiscipline === d ? 'active' : ''}`}
+              onClick={() => setSelectedDiscipline(selectedDiscipline === d ? 'ALL' : d)}
+              type="button"
+            >
+              {d}
+            </button>
+          ))}
+          <button
+            className={`filter-pill ${selectedStatus === 'Delayed' ? 'active' : ''}`}
+            onClick={() => setSelectedStatus(selectedStatus === 'Delayed' ? 'ALL' : 'Delayed')}
+            type="button"
           >
-            <option value="ALL">All Statuses</option>
-            <option value="Completed">Completed</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Delayed">Delayed</option>
-            <option value="Not Started">Not Started</option>
-          </select>
-        </div>
-
-        {/* Area Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Area:</span>
-          <select
-            className="form-select"
-            value={selectedArea}
-            onChange={e => setSelectedArea(e.target.value)}
+            Delayed
+          </button>
+          <button
+            className={`filter-pill ${selectedStatus === 'In Progress' ? 'active' : ''}`}
+            onClick={() => setSelectedStatus(selectedStatus === 'In Progress' ? 'ALL' : 'In Progress')}
+            type="button"
           >
-            <option value="ALL">All Areas</option>
-            {uniqueAreas.map(a => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
+            In Progress
+          </button>
+          <button
+            className={`filter-pill ${selectedStatus === 'Completed' ? 'active' : ''}`}
+            onClick={() => setSelectedStatus(selectedStatus === 'Completed' ? 'ALL' : 'Completed')}
+            type="button"
+          >
+            Completed
+          </button>
         </div>
 
         {/* Sort Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Sort:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}>
+          <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Sort:</span>
           <select
             className="form-select"
             value={sortBy}
@@ -202,178 +251,269 @@ export const ScheduleActivitiesView: React.FC = () => {
             <option value="variance">Delay Variance (Highest)</option>
           </select>
         </div>
+
+        {/* Clear Filters Button */}
+        {isFiltered && (
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleResetFilters}
+            title="Reset search and filters"
+            type="button"
+          >
+            <RotateCcw size={12} />
+            <span>Reset</span>
+          </button>
+        )}
       </div>
 
-      {/* Full Schedule Table */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="table-responsive">
-          <table className="industrial-table">
-            <thead>
-              <tr>
-                <th>Activity ID</th>
-                <th>WBS</th>
-                <th>Activity Name & Aliases</th>
-                <th>Discipline</th>
-                <th>Area</th>
-                <th>Planned Window</th>
-                <th>Actual Evidence</th>
-                <th>Variance</th>
-                <th>Status</th>
-                <th>Linked Evidence</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredActivities.length === 0 ? (
-                <tr>
-                  <td colSpan={11}>
-                    <div className="empty-state">
-                      <CalendarCheck size={36} />
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>No schedule activities match your search</div>
-                      <div style={{ fontSize: '0.85rem' }}>Try clearing the search query or adjusting your discipline/area filters.</div>
+      {/* Main Content: Card Grid Mode vs Table View Mode */}
+      {viewMode === 'cards' ? (
+        /* Card Grid View (Trello/Linear Project Cards) */
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '0.85rem' }}>
+          {filteredActivities.length === 0 ? (
+            <div className="card" style={{ gridColumn: '1 / -1', padding: '2.5rem 1.5rem', textAlign: 'center' }}>
+              <CalendarCheck size={32} style={{ margin: '0 auto 0.5rem', color: 'var(--text-muted)' }} />
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>No schedule activities match your filter</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>Try clearing the search query or adjusting filters.</div>
+            </div>
+          ) : (
+            filteredActivities.map(act => {
+              const linkedCount = getLinkedUpdatesCount(act.activityId);
+              const variance = act.varianceDays || 0;
+              const isDelayed = variance > 0 || act.status === 'Delayed';
+              const discColor = getDisciplineColor(act.discipline);
+
+              return (
+                <div
+                  key={act.activityId}
+                  className="card card-interactive"
+                  style={{ padding: '0.85rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+                  onClick={() => setSelectedScheduleActivityId(act.activityId)}
+                >
+                  {/* Top Badges */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span
+                        className="trello-tag"
+                        style={{
+                          background: discColor.bg,
+                          color: discColor.text,
+                          border: `1px solid ${discColor.border}`,
+                        }}
+                      >
+                        {act.discipline}
+                      </span>
+                      <span className="mono-pill" style={{ fontSize: '0.65rem' }}>
+                        WBS {act.wbs}
+                      </span>
                     </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredActivities.map(act => {
-                  const linkedCount = getLinkedUpdatesCount(act.activityId);
-                  const variance = act.varianceDays || 0;
-                  const isDelayed = variance > 0 || act.status === 'Delayed';
 
-                  return (
-                    <tr
-                      key={act.activityId}
-                      onClick={() => setSelectedScheduleActivityId(act.activityId)}
-                      title="Click to view detailed activity timeline, aliases & linked site reports"
+                    <span
+                      className={`status-badge ${
+                        act.status === 'Completed'
+                          ? 'ready'
+                          : act.status === 'In Progress'
+                          ? 'review'
+                          : act.status === 'Delayed'
+                          ? 'unplanned'
+                          : 'rejected'
+                      }`}
+                      style={{ fontSize: '0.65rem' }}
                     >
-                      {/* Activity ID */}
-                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#2563eb', whiteSpace: 'nowrap' }}>
-                        {act.activityId}
-                      </td>
+                      {act.status}
+                    </span>
+                  </div>
 
-                      {/* WBS */}
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
-                        {act.wbs}
-                      </td>
+                  {/* Title & ID */}
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.8rem', color: 'var(--brand-primary)' }}>
+                      {act.activityId}
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: 2, lineHeight: 1.3 }}>
+                      {act.activityName}
+                    </div>
+                  </div>
 
-                      {/* Activity Name & Aliases */}
-                      <td style={{ maxWidth: 280 }}>
-                        <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.85rem' }}>
-                          {act.activityName}
-                        </div>
-                        {act.aliases && act.aliases.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                            {act.aliases.slice(0, 3).map((alias, i) => (
-                              <span key={i} className="mono-pill" style={{ fontSize: '0.7rem' }}>
-                                {alias}
-                              </span>
-                            ))}
-                            {act.aliases.length > 3 && (
-                              <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                                +{act.aliases.length - 3} more
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </td>
+                  {/* Progress Bar */}
+                  <div className="progress-bar-container" style={{ height: 4 }}>
+                    <div
+                      className={`progress-bar-fill ${
+                        act.status === 'Completed' ? 'green' : act.status === 'In Progress' ? 'blue' : 'red'
+                      }`}
+                      style={{ width: `${act.progressPercent || 0}%` }}
+                    />
+                  </div>
 
-                      {/* Discipline */}
-                      <td>
-                        <span className="mono-pill">{act.discipline}</span>
-                      </td>
+                  {/* Metadata: Dates & Variance */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
+                    <span>Area: {act.area}</span>
+                    <span className={`variance-badge ${isDelayed ? 'delayed' : 'on-track'}`}>
+                      {variance > 0 ? `+${variance}d delay` : '0d on-track'}
+                    </span>
+                  </div>
 
-                      {/* Area */}
-                      <td style={{ fontSize: '0.8rem', color: '#334155' }}>
-                        {act.area}
-                      </td>
-
-                      {/* Planned Window */}
-                      <td style={{ fontSize: '0.8rem', color: '#475569', whiteSpace: 'nowrap' }}>
-                        {act.plannedStart} &rarr; {act.plannedFinish}
-                      </td>
-
-                      {/* Actual Evidence */}
-                      <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
-                        {act.actualStart ? (
-                          <span style={{ color: act.actualFinish ? '#15803d' : '#2563eb', fontWeight: 600 }}>
-                            {act.actualStart} &rarr; {act.actualFinish || 'Active'}
-                          </span>
-                        ) : (
-                          <span style={{ color: '#94a3b8' }}>No site activity</span>
-                        )}
-                      </td>
-
-                      {/* Variance Days */}
-                      <td>
-                        {act.actualFinish || act.status === 'Delayed' ? (
-                          <span className={`variance-badge ${isDelayed ? 'delayed' : 'on-track'}`}>
-                            {variance > 0 ? `+${variance}d` : `${variance}d`}
-                          </span>
-                        ) : (
-                          <span className="variance-badge neutral">0d</span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td>
-                        <span
-                          className={`status-badge ${
-                            act.status === 'Completed'
-                              ? 'ready'
-                              : act.status === 'In Progress'
-                              ? 'review'
-                              : act.status === 'Delayed'
-                              ? 'unplanned'
-                              : 'rejected'
-                          }`}
-                          style={{ fontSize: '0.7rem' }}
-                        >
-                          {act.status}
-                        </span>
-                      </td>
-
-                      {/* Linked Evidence Count */}
-                      <td>
-                        {linkedCount > 0 ? (
-                          <span
-                            className="mono-pill"
-                            style={{
-                              background: '#eff6ff',
-                              color: '#1d4ed8',
-                              borderColor: '#bfdbfe',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {linkedCount} {linkedCount === 1 ? 'update' : 'updates'}
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>0 updates</span>
-                        )}
-                      </td>
-
-                      {/* Action */}
-                      <td>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          style={{ padding: '2px 8px', fontSize: '0.725rem' }}
-                          onClick={e => {
-                            e.stopPropagation();
-                            setSelectedScheduleActivityId(act.activityId);
-                          }}
-                          title="Open Activity Details Drawer"
-                        >
-                          <span>Details</span>
-                          <ChevronRight size={12} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  {/* Planned Window Footer */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 6, borderTop: '1px solid var(--border-subtle)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                    <span>{act.plannedStart} &rarr; {act.plannedFinish}</span>
+                    <span style={{ fontWeight: 600, color: linkedCount > 0 ? 'var(--brand-primary)' : 'var(--text-subtle)' }}>
+                      {linkedCount} {linkedCount === 1 ? 'update' : 'updates'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
-      </div>
+      ) : (
+        /* Full Schedule Table View */
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="table-responsive">
+            <table className="industrial-table">
+              <thead>
+                <tr>
+                  <th>Activity ID</th>
+                  <th>WBS</th>
+                  <th>Activity Name & Aliases</th>
+                  <th>Discipline</th>
+                  <th>Area</th>
+                  <th>Planned Window</th>
+                  <th>Actual Evidence</th>
+                  <th>Variance</th>
+                  <th>Status</th>
+                  <th>Linked Evidence</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredActivities.length === 0 ? (
+                  <tr>
+                    <td colSpan={11}>
+                      <div className="empty-state">
+                        <CalendarCheck size={32} />
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>No schedule activities match your filter</div>
+                        <div style={{ fontSize: '0.8rem' }}>Try clearing the search query or adjusting discipline/area filters.</div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredActivities.map(act => {
+                    const linkedCount = getLinkedUpdatesCount(act.activityId);
+                    const variance = act.varianceDays || 0;
+                    const isDelayed = variance > 0 || act.status === 'Delayed';
+
+                    return (
+                      <tr
+                        key={act.activityId}
+                        onClick={() => setSelectedScheduleActivityId(act.activityId)}
+                        title="Click to view activity details & linked site updates"
+                      >
+                        <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)', whiteSpace: 'nowrap' }}>
+                          {act.activityId}
+                        </td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                          {act.wbs}
+                        </td>
+                        <td style={{ maxWidth: 280 }}>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.825rem' }}>
+                            {act.activityName}
+                          </div>
+                          {act.aliases && act.aliases.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                              {act.aliases.slice(0, 3).map((alias, i) => (
+                                <span key={i} className="mono-pill" style={{ fontSize: '0.675rem' }}>
+                                  {alias}
+                                </span>
+                              ))}
+                              {act.aliases.length > 3 && (
+                                <span style={{ fontSize: '0.675rem', color: 'var(--text-subtle)' }}>
+                                  +{act.aliases.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span className="mono-pill">{act.discipline}</span>
+                        </td>
+                        <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
+                          {act.area}
+                        </td>
+                        <td style={{ fontSize: '0.775rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          {act.plannedStart} &rarr; {act.plannedFinish}
+                        </td>
+                        <td style={{ fontSize: '0.775rem', whiteSpace: 'nowrap' }}>
+                          {act.actualStart ? (
+                            <span style={{ color: act.actualFinish ? 'var(--status-ready-fg)' : 'var(--brand-primary)', fontWeight: 600 }}>
+                              {act.actualStart} &rarr; {act.actualFinish || 'Active'}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-subtle)' }}>No site activity</span>
+                          )}
+                        </td>
+                        <td>
+                          {act.actualFinish || act.status === 'Delayed' ? (
+                            <span className={`variance-badge ${isDelayed ? 'delayed' : 'on-track'}`}>
+                              {variance > 0 ? `+${variance}d` : `${variance}d`}
+                            </span>
+                          ) : (
+                            <span className="variance-badge neutral">0d</span>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-badge ${
+                              act.status === 'Completed'
+                                ? 'ready'
+                                : act.status === 'In Progress'
+                                ? 'review'
+                                : act.status === 'Delayed'
+                                ? 'unplanned'
+                                : 'rejected'
+                            }`}
+                          >
+                            {act.status}
+                          </span>
+                        </td>
+                        <td>
+                          {linkedCount > 0 ? (
+                            <span
+                              className="mono-pill"
+                              style={{
+                                background: 'var(--brand-surface)',
+                                color: 'var(--brand-primary)',
+                                borderColor: '#cce0ff',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {linkedCount} {linkedCount === 1 ? 'update' : 'updates'}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.725rem', color: 'var(--text-subtle)' }}>0 updates</span>
+                          )}
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={e => {
+                              e.stopPropagation();
+                              setSelectedScheduleActivityId(act.activityId);
+                            }}
+                            title="Open Activity Details Drawer"
+                            type="button"
+                          >
+                            <span>Details</span>
+                            <ChevronRight size={11} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -8,12 +8,16 @@ import {
   UploadCloud,
   Download,
   RefreshCw,
-  Building2,
   Database,
+  Radio,
+  Camera,
+  Sparkles,
+  User,
+  Shield,
   Wifi,
   WifiOff
 } from 'lucide-react';
-import { NavigationTab } from '../types';
+import { NavigationTab, UserRole } from '../types';
 
 export const Navbar: React.FC = () => {
   const {
@@ -27,6 +31,12 @@ export const Navbar: React.FC = () => {
     loadDemoData,
     exportAlignmentCSV,
     isLoading,
+    currentRole,
+    setCurrentRole,
+    offlineMode,
+    toggleOfflineMode,
+    offlineSyncQueue,
+    syncOfflineQueue,
   } = useProject();
 
   // Pending review items count
@@ -37,123 +47,187 @@ export const Navbar: React.FC = () => {
     return match && (match.category === 'review' || match.category === 'unplanned');
   }).length;
 
-  const tabs: { id: NavigationTab; label: string; icon: React.ReactNode; badge?: number | string; badgeType?: 'warning' | 'neutral' }[] = [
+  // Tabs configured by User Role
+  const adminTabs: { id: NavigationTab; label: string; icon: React.ReactNode; badge?: number | string; badgeType?: 'warning' | 'neutral' }[] = [
     {
       id: 'dashboard',
       label: 'Dashboard',
-      icon: <LayoutDashboard size={16} />,
+      icon: <LayoutDashboard size={14} />,
     },
     {
       id: 'site-updates',
       label: 'Site Updates',
-      icon: <FileSpreadsheet size={16} />,
+      icon: <FileSpreadsheet size={14} />,
       badge: siteUpdates.length,
       badgeType: 'neutral',
     },
     {
       id: 'schedule-activities',
       label: 'Schedule Activities',
-      icon: <CalendarCheck size={16} />,
+      icon: <CalendarCheck size={14} />,
       badge: schedule.length,
       badgeType: 'neutral',
     },
     {
       id: 'planner-review',
       label: 'Planner Review',
-      icon: <CheckSquare size={16} />,
+      icon: <CheckSquare size={14} />,
       badge: pendingReviewCount > 0 ? pendingReviewCount : undefined,
       badgeType: 'warning',
     },
     {
+      id: 'copilot',
+      label: 'AI Copilot & Delay Sim',
+      icon: <Sparkles size={14} />,
+    },
+    {
       id: 'upload',
-      label: 'Upload / Demo Data',
-      icon: <UploadCloud size={16} />,
+      label: 'Data Ingestion',
+      icon: <UploadCloud size={14} />,
     },
   ];
 
+  const supervisorTabs: { id: NavigationTab; label: string; icon: React.ReactNode; badge?: number | string; badgeType?: 'warning' | 'neutral' }[] = [
+    {
+      id: 'supervisor-entry',
+      label: 'Field Entry & Photos',
+      icon: <Camera size={14} />,
+    },
+    {
+      id: 'site-updates',
+      label: 'Site Updates Board',
+      icon: <FileSpreadsheet size={14} />,
+      badge: siteUpdates.length,
+      badgeType: 'neutral',
+    },
+    {
+      id: 'schedule-activities',
+      label: 'Master Schedule',
+      icon: <CalendarCheck size={14} />,
+      badge: schedule.length,
+      badgeType: 'neutral',
+    },
+    {
+      id: 'dashboard',
+      label: 'Progress Overview',
+      icon: <LayoutDashboard size={14} />,
+    },
+  ];
+
+  const visibleTabs = currentRole === 'admin' ? adminTabs : supervisorTabs;
+
   return (
-    <header className="navbar" style={{ borderBottom: '1px solid #1e293b' }}>
+    <header className="navbar">
       <div className="navbar-inner">
         {/* Brand & System Metadata */}
         <div className="brand-section">
-          <div className="brand-logo" style={{ background: '#2563eb', color: '#ffffff' }}>
-            <Building2 size={22} />
+          <div className="brand-logo">
+            <Radio size={16} />
           </div>
           <div>
             <div className="brand-title">
-              ProjectPulse <span style={{ fontSize: '0.72rem', background: '#3b82f6', color: 'white', padding: '2px 7px', borderRadius: '4px', fontWeight: 600 }}>SIH 2026</span>
+              <span>Datum</span>
+              <span className="brand-badge">L5/L6</span>
             </div>
             <div className="brand-subtitle">
-              L5/L6 Progress Tracking & Schedule Linking Platform
+              The record of execution.
             </div>
           </div>
         </div>
 
-        {/* Backend Status Live Badge */}
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          {backendStatus === 'connected' ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                background: '#064e3b',
-                border: '1px solid #059669',
-                color: '#a7f3d0',
-                fontSize: '0.725rem',
-                fontWeight: 700,
-                padding: '3px 10px',
-                borderRadius: '999px',
-                letterSpacing: '0.02em',
-              }}
-              title="Connected to Express REST API & embedded SQLite database (backend/database.sqlite)"
+        {/* Role Switcher Pill (Admin vs Field Supervisor) */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '2px',
+          }}
+        >
+          <button
+            className={`btn btn-sm ${currentRole === 'admin' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ padding: '2px 8px', fontSize: '0.725rem', border: 'none' }}
+            onClick={() => {
+              setCurrentRole('admin');
+              if (activeTab === 'supervisor-entry') setActiveTab('dashboard');
+            }}
+            type="button"
+          >
+            <Shield size={12} />
+            <span>Admin / Planner</span>
+          </button>
+          <button
+            className={`btn btn-sm ${currentRole === 'supervisor' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ padding: '2px 8px', fontSize: '0.725rem', border: 'none' }}
+            onClick={() => {
+              setCurrentRole('supervisor');
+              setActiveTab('supervisor-entry');
+            }}
+            type="button"
+          >
+            <User size={12} />
+            <span>Supervisor Portal</span>
+          </button>
+        </div>
+
+        {/* Offline Simulator Mode & Database Status Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            className="filter-pill"
+            style={{
+              background: offlineMode ? 'var(--status-review-bg)' : 'var(--bg-subtle)',
+              color: offlineMode ? 'var(--status-review-fg)' : 'var(--text-secondary)',
+              borderColor: offlineMode ? 'var(--status-review-border)' : 'var(--border-subtle)',
+              fontSize: '0.72rem',
+              padding: '2px 7px',
+            }}
+            onClick={toggleOfflineMode}
+            title="Toggle between online REST database and offline field sync storage"
+            type="button"
+          >
+            {offlineMode ? <WifiOff size={11} /> : <Wifi size={11} />}
+            <span>{offlineMode ? 'Field Offline Mode' : 'Online'}</span>
+          </button>
+
+          {offlineSyncQueue.length > 0 && (
+            <button
+              className="btn btn-warning btn-sm"
+              style={{ padding: '2px 7px', fontSize: '0.7rem' }}
+              onClick={syncOfflineQueue}
+              type="button"
             >
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 8px #34d399' }} />
-              <Database size={13} />
-              <span>Backend: SQLite Online</span>
-            </div>
-          ) : backendStatus === 'checking' ? (
+              <RefreshCw size={10} className={isLoading ? 'spin' : ''} />
+              <span>Sync ({offlineSyncQueue.length})</span>
+            </button>
+          )}
+
+          {!offlineMode && backendStatus === 'connected' && (
             <div
+              className="mono-pill"
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                background: '#1e293b',
-                border: '1px solid #475569',
-                color: '#94a3b8',
-                fontSize: '0.725rem',
-                padding: '3px 10px',
-                borderRadius: '999px',
-              }}
-            >
-              <RefreshCw size={12} className="spin" />
-              <span>Checking Backend...</span>
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                background: '#334155',
-                border: '1px solid #475569',
-                color: '#e2e8f0',
-                fontSize: '0.725rem',
+                gap: 4,
+                background: 'var(--status-ready-bg)',
+                borderColor: 'var(--status-ready-border)',
+                color: 'var(--status-ready-fg)',
+                fontSize: '0.7rem',
                 fontWeight: 600,
-                padding: '3px 10px',
-                borderRadius: '999px',
+                padding: '2px 6px',
               }}
-              title="Backend offline — running in standalone client in-memory mode"
+              title="Connected to SQLite REST API Engine"
             >
-              <WifiOff size={13} />
-              <span>Client Mode (Standalone)</span>
+              <Database size={11} />
+              <span>SQLite</span>
             </div>
           )}
         </div>
 
-        {/* 5 Primary Navigation Tabs */}
+        {/* Primary Navigation Tabs */}
         <nav className="nav-tabs">
-          {tabs.map(tab => {
+          {visibleTabs.map(tab => {
             const isActive = activeTab === tab.id;
             return (
               <button
@@ -168,12 +242,20 @@ export const Navbar: React.FC = () => {
                   <span
                     className="badge"
                     style={{
-                      background: tab.badgeType === 'warning' ? '#d97706' : (isActive ? '#2563eb' : 'rgba(255,255,255,0.2)'),
-                      color: '#ffffff',
-                      fontWeight: tab.badgeType === 'warning' ? 700 : 500,
-                      padding: '1px 6px',
-                      borderRadius: '999px',
-                      fontSize: '0.72rem',
+                      background:
+                        tab.badgeType === 'warning'
+                          ? 'var(--status-review-bg)'
+                          : isActive
+                          ? 'var(--brand-surface)'
+                          : 'var(--bg-app)',
+                      color:
+                        tab.badgeType === 'warning'
+                          ? 'var(--status-review-fg)'
+                          : 'var(--text-secondary)',
+                      border:
+                        tab.badgeType === 'warning'
+                          ? '1px solid var(--status-review-border)'
+                          : '1px solid var(--border-subtle)',
                     }}
                   >
                     {tab.badge}
@@ -192,7 +274,7 @@ export const Navbar: React.FC = () => {
             title="Download CSV report of aligned schedule & site progress"
             type="button"
           >
-            <Download size={14} />
+            <Download size={12} />
             <span>Export CSV</span>
           </button>
 
@@ -203,8 +285,8 @@ export const Navbar: React.FC = () => {
             title="Reload baseline benchmark datasets"
             type="button"
           >
-            <RefreshCw size={14} className={isLoading ? 'spin' : ''} />
-            <span>{isLoading ? 'Reloading...' : 'Reload Demo'}</span>
+            <RefreshCw size={12} className={isLoading ? 'spin' : ''} />
+            <span>{isLoading ? 'Loading...' : 'Reload Demo'}</span>
           </button>
         </div>
       </div>

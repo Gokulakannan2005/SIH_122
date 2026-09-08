@@ -1,0 +1,89 @@
+================================================================================
+SIH-122 PROJECTPULSE - GIT MAINTENANCE & REPOSITORY AUDIT REPORT
+================================================================================
+PROJECT TITLE: AI-Driven Linking of Daily Site Progress Updates to Project Schedule Activities
+PLATFORM NAME: ProjectPulse (SIH-122 Industrial Schedule Linker)
+REPOSITORY:    https://github.com/Gokulakannan2005/SIH_122.git
+PRIMARY BASELINE BRANCH: main
+ACTIVE WORKING BRANCH:   dev
+DATE OF RECORD: September 6, 2026
+
+--------------------------------------------------------------------------------
+1. REPOSITORY INITIALIZATION & BASELINE SETUP SUMMARY
+--------------------------------------------------------------------------------
+- Git Repository Initialized: Local folder initialized as Git repository.
+- Default Production Branch: 'main' (tracked to origin/main).
+- Active Working Branch: 'dev' (created from 'main' for isolated development).
+- Remote Origin Configured: https://github.com/Gokulakannan2005/SIH_122.git
+- Initial Push Status: Successfully pushed 43 project source files to origin/main.
+
+--------------------------------------------------------------------------------
+2. GIT IGNORE & REPOSITORY HYGIENE AUDIT
+--------------------------------------------------------------------------------
+A comprehensive .gitignore configuration was created to prevent leaking runtime artifacts,
+large dependencies, local databases, and sensitive configuration.
+
+Items explicitly excluded from Git tracking:
+  [x] Dependency trees:
+      - node_modules/
+      - */node_modules/
+      - .pnp, .pnp.js
+  [x] Build outputs & caches:
+      - dist/, */dist/
+      - build/, */build/
+      - .vite/, */.vite/
+      - .temp/, .cache/, .eslintcache
+  [x] Database files:
+      - database.sqlite
+      - backend/database.sqlite
+      - *.sqlite, *.sqlite3, *.db
+  [x] Logs & debug dumps:
+      - *.log, logs/
+      - npm-debug.log*, yarn-debug.log*, pnpm-debug.log*
+  [x] Environment variables:
+      - .env, .env.local, .env.*.local, *.env
+  [x] IDE & OS artifacts:
+      - .DS_Store, Thumbs.db, .idea/, .vscode/* (except extensions.json)
+
+--------------------------------------------------------------------------------
+3. PROJECT DOCUMENTATION CREATED
+--------------------------------------------------------------------------------
+- README.md:
+  * Comprehensive project dossier & architectural overview.
+  * Dependency installation instructions for both npm and pnpm across backend and frontend.
+  * Dual execution guides:
+    - Method A: Windows batch automation scripts (run_all.bat, run_backend.bat, run_frontend.bat).
+    - Method B: Direct terminal commands (npm run dev / npm start).
+  * Complete REST API endpoint reference table.
+  * Hierarchical directory structure map.
+
+--------------------------------------------------------------------------------
+4. BRANCH MANAGEMENT & GOVERNANCE POLICY
+--------------------------------------------------------------------------------
+- Strict Branch Isolation:
+  * All subsequent feature enhancements, UI refinements, API extensions, and bug fixes
+    must occur strictly inside the 'dev' branch (or designated feature branches).
+  * Direct commits to 'main' are strictly prohibited during development cycles.
+- Verification & Merge Protocol:
+  * 1. Development and iteration conducted on 'dev'.
+  * 2. Comprehensive automated & manual verification completed.
+  * 3. Formal walkthrough and status report presented to the USER.
+  * 4. Merge from 'dev' into 'main' executed ONLY upon explicit USER authorization.
+
+--------------------------------------------------------------------------------
+5. CHRONOLOGICAL COMMIT & MAINTENANCE LOG
+--------------------------------------------------------------------------------
+[2026-09-06] - INITIAL COMMIT (Branch: main -> pushed to origin/main)
+- Initialized repository structure.
+- Committed fullstack codebase:
+  * Backend: Express + SQLite matching engine, file parsers (CSV, TXT, XLSX), REST routes.
+  * Frontend: React 18 + Vite + TypeScript application with full planner review workbench,
+              audit trail modal, and schedule variance visualizer.
+  * Demo Datasets: schedule.csv, piping_progress.xlsx, daily_report.txt.
+  * Batch Launch Scripts: run_all.bat, run_backend.bat, run_frontend.bat.
+  * Configurations: .gitignore, README.md.
+
+[2026-09-06] - BRANCH CREATION & AUDIT REPORT (Branch: dev)
+- Created and switched to isolated working branch: 'dev'.
+- Generated GIT_MAINTENANCE_REPORT.txt for internal audit verification and change tracking.
+================================================================================

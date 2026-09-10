@@ -125,22 +125,22 @@ export const CopilotView: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* Top Banner */}
-      <div className="banner-card" style={{ borderLeftColor: '#0284c7' }}>
+      <div className="banner-card" style={{ borderLeftColor: 'var(--brand-primary)' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-            <span className="brand-badge" style={{ background: '#f0f7fc', color: '#0284c7', borderColor: '#bae6fd' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 6 }}>
+            <span className="brand-badge" style={{ padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700 }}>
               Project Controls Intelligence
             </span>
-            <span className="mono-pill" style={{ background: '#f8fafc', color: 'var(--text-muted)' }}>
+            <span className="mono-pill" style={{ padding: '3px 8px', fontSize: '0.75rem' }}>
               Deterministic Forward Propagation
             </span>
           </div>
-          <h2 className="banner-title" style={{ marginTop: 4 }}>
-            <Sparkles size={20} style={{ color: 'var(--brand-primary)' }} />
+          <h2 className="banner-title" style={{ marginTop: 6, fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Sparkles size={22} style={{ color: 'var(--brand-primary)' }} />
             What-If Schedule Risk Simulator & Copilot
           </h2>
-          <p className="banner-desc">
-            Simulate operational delays on L5/L6 milestone activities, analyze downstream impact cascades, and generate data-grounded executive briefings.
+          <p className="banner-desc" style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'var(--text-secondary)', maxWidth: '750px', marginTop: 4 }}>
+            Simulate operational delays on L5/L6 milestone activities, analyze downstream critical path cascades, and generate data-grounded executive briefings with full mathematical traceability.
           </p>
         </div>
 
@@ -209,7 +209,7 @@ export const CopilotView: React.FC = () => {
           <div
             style={{
               padding: '0.65rem 1rem',
-              background: '#f8fafc',
+              background: 'var(--bg-surface-secondary)',
               border: '1px solid var(--border-subtle)',
               borderLeft: '4px solid var(--brand-primary)',
               borderRadius: 'var(--radius-sm)',
@@ -227,14 +227,14 @@ export const CopilotView: React.FC = () => {
               </span>
             </div>
             {isScenarioActive && simulatedDelayDays > 0 && (
-              <span className="mono-pill" style={{ background: '#eff6ff', color: 'var(--brand-primary)', borderColor: '#bfdbfe', fontWeight: 700 }}>
+              <span className="mono-pill" style={{ background: 'var(--brand-badge-bg)', color: 'var(--brand-badge-fg)', borderColor: 'var(--brand-badge-border)', fontWeight: 700 }}>
                 Scenario Active (+{simulatedDelayDays}d)
               </span>
             )}
           </div>
 
           {/* Configuration Grid: Activity Selection & Delay Parameter Slider */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: '1.25rem' }}>
+          <div id="demo-target-delay-simulation" style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: '1.25rem' }}>
             
             {/* Left Card: Target Activity Details */}
             <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
@@ -302,34 +302,51 @@ export const CopilotView: React.FC = () => {
             {/* Right Card: Delay Parameters & Action Controls */}
             <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label className="form-label" style={{ marginBottom: 0, fontSize: '0.8rem' }}>
+                <label className="form-label" style={{ marginBottom: 0, fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                   <span>2. Assumed Operational Delay (Days):</span>
                 </label>
                 <span
                   style={{
                     fontFamily: 'var(--font-mono)',
-                    fontSize: '1rem',
+                    fontSize: '0.9rem',
                     fontWeight: 800,
-                    color: simulatedDelayDays > 0 ? (simulatedDelayDays >= 5 ? '#b91c1c' : '#d97706') : 'var(--text-muted)',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    background: simulatedDelayDays > 0 ? (simulatedDelayDays >= 7 ? 'var(--danger-soft)' : 'var(--warning-soft)') : 'var(--surface-secondary)',
+                    color: simulatedDelayDays > 0 ? (simulatedDelayDays >= 7 ? 'var(--danger)' : 'var(--warning)') : 'var(--text-muted)',
+                    border: `1px solid ${simulatedDelayDays > 0 ? (simulatedDelayDays >= 7 ? '#FECDD3' : '#FDE68A') : 'var(--border-default)'}`,
+                    transition: 'all 0.15s ease',
                   }}
                 >
-                  +{simulatedDelayDays} {simulatedDelayDays === 1 ? 'Day' : 'Days'}
+                  {simulatedDelayDays === 0 ? '0d (Baseline)' : `+${simulatedDelayDays} ${simulatedDelayDays === 1 ? 'Day' : 'Days'}`}
                 </span>
               </div>
 
-              {/* Slider Control */}
-              <input
-                type="range"
-                min="0"
-                max="21"
-                step="1"
-                value={simulatedDelayDays}
-                onChange={e => {
-                  setSimulatedDelayDays(Number(e.target.value));
-                  setIsScenarioActive(true);
-                }}
-                style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--brand-primary)' }}
-              />
+              {/* Enterprise Range Slider Control */}
+              <div style={{ position: 'relative', width: '100%', padding: '0.15rem 0' }}>
+                <input
+                  type="range"
+                  min="0"
+                  max="21"
+                  step="1"
+                  value={simulatedDelayDays}
+                  onChange={e => {
+                    setSimulatedDelayDays(Number(e.target.value));
+                    setIsScenarioActive(true);
+                  }}
+                  className="enterprise-range-slider"
+                  style={{
+                    background: `linear-gradient(to right, var(--primary, #2563EB) 0%, var(--primary, #2563EB) ${((simulatedDelayDays / 21) * 100).toFixed(1)}%, var(--border-default, #E2E8F0) ${((simulatedDelayDays / 21) * 100).toFixed(1)}%, var(--border-default, #E2E8F0) 100%)`,
+                  }}
+                  aria-label="Assumed Operational Delay (Days)"
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.675rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                  <span>0d (Baseline)</span>
+                  <span>+7d</span>
+                  <span>+14d</span>
+                  <span>+21d (Max)</span>
+                </div>
+              </div>
 
               {/* Quick Preset Buttons */}
               <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
@@ -340,20 +357,30 @@ export const CopilotView: React.FC = () => {
                   { label: '+5 Days', val: 5 },
                   { label: '+7 Days', val: 7 },
                   { label: '+14 Days', val: 14 },
-                ].map(preset => (
-                  <button
-                    key={preset.val}
-                    type="button"
-                    className={`btn btn-sm ${simulatedDelayDays === preset.val ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '0.725rem', padding: '3px 8px', flex: 1 }}
-                    onClick={() => {
-                      setSimulatedDelayDays(preset.val);
-                      setIsScenarioActive(true);
-                    }}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
+                ].map(preset => {
+                  const isPresetActive = simulatedDelayDays === preset.val;
+                  return (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      className={`btn btn-sm ${isPresetActive ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{
+                        fontSize: '0.725rem',
+                        padding: '4px 8px',
+                        flex: 1,
+                        fontWeight: isPresetActive ? 700 : 600,
+                        boxShadow: isPresetActive ? '0 1px 3px rgba(37, 99, 235, 0.35)' : 'none',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onClick={() => {
+                        setSimulatedDelayDays(preset.val);
+                        setIsScenarioActive(true);
+                      }}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Action Buttons: Run & Reset */}
@@ -515,7 +542,7 @@ export const CopilotView: React.FC = () => {
                       style={{
                         minWidth: 190,
                         padding: '0.75rem 0.85rem',
-                        background: '#f8fafc',
+                        background: 'var(--bg-surface-secondary)',
                         border: '1px solid var(--border-subtle)',
                         borderRadius: 'var(--radius-sm)',
                         flexShrink: 0,
@@ -541,7 +568,7 @@ export const CopilotView: React.FC = () => {
                   </React.Fragment>
                 ))
               ) : (
-                <div style={{ padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: 'var(--radius-xs)', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                <div style={{ padding: '0.5rem 0.75rem', background: 'var(--bg-surface-secondary)', borderRadius: 'var(--radius-xs)', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                   Package Root (No Predecessors)
                 </div>
               )}
@@ -555,14 +582,13 @@ export const CopilotView: React.FC = () => {
                   border: '2px solid var(--brand-primary)',
                   borderRadius: 'var(--radius-md)',
                   flexShrink: 0,
-                  boxShadow: '0 2px 8px rgba(2, 132, 199, 0.15)',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.825rem', color: 'var(--brand-primary)' }}>
                     {simulationResult.targetActivityId}
                   </span>
-                  <span style={{ background: '#0284c7', color: '#ffffff', fontSize: '0.65rem', fontWeight: 800, padding: '1px 6px', borderRadius: 'var(--radius-xs)' }}>
+                  <span style={{ background: 'var(--brand-primary)', color: '#ffffff', fontSize: '0.65rem', fontWeight: 800, padding: '1px 6px', borderRadius: 'var(--radius-xs)' }}>
                     Selected Target
                   </span>
                 </div>
@@ -571,7 +597,7 @@ export const CopilotView: React.FC = () => {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', marginTop: 4 }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Forecast Finish:</span>
-                  <strong style={{ color: simulationResult.simulatedDelayDays > 0 ? '#b91c1c' : 'var(--text-primary)' }}>
+                  <strong style={{ color: simulationResult.simulatedDelayDays > 0 ? 'var(--status-unplanned-fg)' : 'var(--text-primary)' }}>
                     {simulationResult.scenarioFinish} (+{simulationResult.simulatedDelayDays}d)
                   </strong>
                 </div>
@@ -588,8 +614,8 @@ export const CopilotView: React.FC = () => {
                         style={{
                           minWidth: 210,
                           padding: '0.75rem 0.85rem',
-                          background: succ.shiftDays > 0 ? '#fff1f2' : '#ffffff',
-                          border: succ.shiftDays > 0 ? '1px solid #fca5a5' : '1px solid var(--border-subtle)',
+                          background: succ.shiftDays > 0 ? 'var(--status-unplanned-bg)' : 'var(--bg-surface-secondary)',
+                          border: succ.shiftDays > 0 ? '1px solid var(--border-subtle)' : '1px solid var(--border-subtle)',
                           borderRadius: 'var(--radius-sm)',
                           flexShrink: 0,
                           cursor: 'pointer',
@@ -598,7 +624,7 @@ export const CopilotView: React.FC = () => {
                         title="Click to inspect activity in schedule drawer"
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.75rem', color: succ.shiftDays > 0 ? '#b91c1c' : 'var(--brand-primary)' }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.75rem', color: succ.shiftDays > 0 ? 'var(--status-unplanned-fg)' : 'var(--brand-primary)' }}>
                             {succ.activityId}
                           </span>
                           <span
@@ -613,7 +639,7 @@ export const CopilotView: React.FC = () => {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
                           <span>Forecast:</span>
-                          <strong style={{ color: succ.shiftDays > 0 ? '#b91c1c' : 'var(--text-secondary)' }}>
+                          <strong style={{ color: succ.shiftDays > 0 ? 'var(--status-unplanned-fg)' : 'var(--text-secondary)' }}>
                             {succ.scenarioFinish}
                           </strong>
                         </div>
@@ -621,7 +647,7 @@ export const CopilotView: React.FC = () => {
                     </React.Fragment>
                   ))
               ) : (
-                <div style={{ padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: 'var(--radius-xs)', fontSize: '0.725rem', color: 'var(--text-muted)', marginLeft: 8 }}>
+                <div style={{ padding: '0.5rem 0.75rem', background: 'var(--bg-surface-secondary)', borderRadius: 'var(--radius-xs)', fontSize: '0.725rem', color: 'var(--text-muted)', marginLeft: 8 }}>
                   End of Chain (No Downstream Successors)
                 </div>
               )}
@@ -734,16 +760,17 @@ export const CopilotView: React.FC = () => {
 
             <div
               style={{
-                background: '#f8fafc',
-                padding: '1rem 1.15rem',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border-subtle)',
+                background: 'var(--bg-surface-secondary)',
+                padding: '1.25rem 1.4rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-default)',
                 borderLeft: '4px solid var(--brand-primary)',
-                fontSize: '0.85rem',
+                fontSize: '0.875rem',
                 color: 'var(--text-primary)',
-                lineHeight: 1.6,
+                lineHeight: 1.75,
                 whiteSpace: 'pre-line',
                 fontFamily: 'var(--font-sans)',
+                letterSpacing: '0.01em',
               }}
             >
               {simulationResult.executiveBriefing}

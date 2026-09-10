@@ -102,29 +102,70 @@ export const DEMO_SCHEDULE_DEPENDENCIES: ScheduleDependency[] = [
   },
 ];
 
-// Helper Date Functions (Pure & deterministic)
+/**
+ * Parses date string (YYYY-MM-DD) into pure UTC Timestamp in milliseconds
+ */
+export const parseUTCDateMs = (dateStr: string): number => {
+  if (!dateStr) return 0;
+  const parts = dateStr.trim().split(/[-/]/).map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return 0;
+  return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+};
+
+/**
+ * Pure UTC-safe date addition
+ */
 export const addDaysToDateString = (dateStr: string, days: number): string => {
   if (!dateStr) return dateStr;
-  const parts = dateStr.split('-').map(Number);
-  if (parts.length !== 3) return dateStr;
+  const parts = dateStr.trim().split(/[-/]/).map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
   const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().split('T')[0];
 };
 
+/**
+ * Pure UTC-safe difference in calendar days (dateLater - dateEarlier)
+ */
 export const diffDaysBetweenDates = (dateStrLater: string, dateStrEarlier: string): number => {
   if (!dateStrLater || !dateStrEarlier) return 0;
-  const p1 = dateStrLater.split('-').map(Number);
-  const p2 = dateStrEarlier.split('-').map(Number);
-  const d1 = new Date(Date.UTC(p1[0], p1[1] - 1, p1[2]));
-  const d2 = new Date(Date.UTC(p2[0], p2[1] - 1, p2[2]));
-  const diffMs = d1.getTime() - d2.getTime();
+  const msLater = parseUTCDateMs(dateStrLater);
+  const msEarlier = parseUTCDateMs(dateStrEarlier);
+  if (!msLater || !msEarlier) return 0;
+  const diffMs = msLater - msEarlier;
   return Math.round(diffMs / (1000 * 60 * 60 * 24));
 };
 
 export const calculateDuration = (startStr: string, finishStr: string): number => {
   const diff = diffDaysBetweenDates(finishStr, startStr);
   return Math.max(1, diff + 1);
+};
+
+/**
+ * User-friendly Date Display (e.g. "Sep 05, 2026")
+ */
+export const formatDisplayDate = (dateStr?: string): string => {
+  if (!dateStr) return '—';
+  const parts = dateStr.trim().split(/[-/]/).map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[parts[1] - 1] || '';
+  const day = String(parts[2]).padStart(2, '0');
+  const year = parts[0];
+  return `${month} ${day}, ${year}`;
+};
+
+/**
+ * User-friendly Variance Badge Text (e.g. "+3d Slip", "-1d Ahead", "On Time")
+ */
+export const formatVarianceBadge = (varianceDays: number = 0): { label: string; type: 'delayed' | 'ahead' | 'ontrack' } => {
+  if (varianceDays > 0) {
+    return { label: `+${varianceDays}d Slip`, type: 'delayed' };
+  }
+  if (varianceDays < 0) {
+    return { label: `${varianceDays}d Ahead`, type: 'ahead' };
+  }
+  return { label: 'On Schedule', type: 'ontrack' };
 };
 
 /**
@@ -163,9 +204,6 @@ export const runScenarioSimulation = (
 
   // 2. Identify Upstream Predecessors
   const upstreamDeps = getPredecessors(targetActivityId, dependencies);
-  const upstreamActivities = upstreamDeps
-    .map(dep => schedule.find(a => a.activityId === dep.predecessorId))
-    .filter((a): a is ScheduleActivity => a !== undefined);
 
   // Map to hold simulated scenario dates for all activities
   const scenarioMap = new Map<string, { start: string; finish: string; shiftDays: number; incrementalShift: number }>();
@@ -253,7 +291,7 @@ export const runScenarioSimulation = (
             ? 'medium'
             : 'low';
 
-        const impactedObj: ImpactedActivityScenario = {
+        const item: ImpactedActivityScenario = {
           activityId: succActivity.activityId,
           activityName: succActivity.activityName,
           discipline: succActivity.discipline,
@@ -269,126 +307,116 @@ export const runScenarioSimulation = (
           isDirectTarget: false,
           predecessorIds: succPredecessors,
           severity,
-          impactExplanation: `${dep.description} Forecast start pushed from ${succActivity.plannedStart} to ${newScenarioStart}.`,
+          impactExplanation:
+            shiftDays > 0
+              ? `Shifted by +${shiftDays} days due to Finish-to-Start dependency on predecessor ${currentId}.`
+              : `Buffered by schedule float: No forecast completion shift.`,
         };
 
         if (existingIdx >= 0) {
-          impactedList[existingIdx] = impactedObj;
+          impactedList[existingIdx] = item;
         } else {
-          impactedList.push(impactedObj);
+          impactedList.push(item);
         }
-      }
 
-      if (!visited.has(succActivity.activityId)) {
-        visited.add(succActivity.activityId);
-        queue.push(succActivity.activityId);
+        if (!visited.has(succActivity.activityId)) {
+          visited.add(succActivity.activityId);
+          queue.push(succActivity.activityId);
+        }
       }
     }
   }
 
-  // 4. Calculate Risk Metrics
+  // 4. Calculate Aggregate Metrics
   const downstreamImpacted = impactedList.filter(i => !i.isDirectTarget && i.shiftDays > 0);
   const maxShiftDays = impactedList.reduce((max, i) => Math.max(max, i.shiftDays), validDelay);
   const criticalMilestoneImpacted = impactedList.some(
     i => (i.activityId.includes('014') || i.activityId.includes('023') || i.activityId.includes('031')) && i.shiftDays > 0
   );
 
-  const overallRiskLevel: 'Low' | 'Medium' | 'High' =
+  const overallRiskLevel: 'low' | 'medium' | 'critical' =
     validDelay === 0
-      ? 'Low'
+      ? 'low'
       : maxShiftDays >= 4 || criticalMilestoneImpacted
-      ? 'High'
+      ? 'critical'
       : maxShiftDays >= 2
-      ? 'Medium'
-      : 'Low';
+      ? 'medium'
+      : 'low';
 
-  // 5. Generate Grounded Executive Briefing
-  const briefing = generateExecutiveBriefing({
+  const executiveSummary = generateExecutiveSummary(
     target,
-    delayDays: validDelay,
+    validDelay,
     targetScenarioFinish,
     downstreamImpacted,
     maxShiftDays,
-    overallRiskLevel,
-    criticalMilestoneImpacted,
-  });
+    overallRiskLevel
+  );
+
+  const upstreamActivities = upstreamDeps
+    .map(dep => schedule.find(a => a.activityId === dep.predecessorId))
+    .filter((a): a is ScheduleActivity => a !== undefined);
 
   return {
-    targetActivityId: target.activityId,
+    targetActivityId,
     targetActivityName: target.activityName,
     targetDiscipline: target.discipline,
     targetArea: target.area,
+    delayDays: validDelay,
     simulatedDelayDays: validDelay,
+    targetBaselineFinish: target.plannedFinish,
     baselineStart: target.plannedStart,
     baselineFinish: target.plannedFinish,
     scenarioStart: targetScenarioStart,
     scenarioFinish: targetScenarioFinish,
-    maxShiftDays,
-    impactedCount: downstreamImpacted.length,
-    criticalMilestoneImpacted,
-    overallRiskLevel,
+    targetScenarioFinish,
     impactedActivities: impactedList,
+    totalImpactedCount: downstreamImpacted.length,
+    impactedCount: downstreamImpacted.length,
+    maxShiftDays,
+    criticalMilestoneImpacted,
+    overallRiskLevel: overallRiskLevel === 'critical' ? 'High' : overallRiskLevel === 'medium' ? 'Medium' : 'Low',
+    executiveSummary,
+    executiveBriefing: executiveSummary,
     upstreamActivities,
-    executiveBriefing: briefing,
   };
 };
 
 /**
- * Generate factual, data-grounded Plain-English Executive Briefing
+ * Generates an executive narrative summary
  */
-const generateExecutiveBriefing = (params: {
-  target: ScheduleActivity;
-  delayDays: number;
-  targetScenarioFinish: string;
-  downstreamImpacted: ImpactedActivityScenario[];
-  maxShiftDays: number;
-  overallRiskLevel: 'Low' | 'Medium' | 'High';
-  criticalMilestoneImpacted: boolean;
-}): string => {
-  const {
-    target,
-    delayDays,
-    targetScenarioFinish,
-    downstreamImpacted,
-    maxShiftDays,
-    overallRiskLevel,
-    criticalMilestoneImpacted,
-  } = params;
-
+function generateExecutiveSummary(
+  target: ScheduleActivity,
+  delayDays: number,
+  targetScenarioFinish: string,
+  downstreamImpacted: ImpactedActivityScenario[],
+  maxShiftDays: number,
+  risk: 'low' | 'medium' | 'critical'
+): string {
   if (delayDays === 0) {
-    return `Scenario Summary: Baseline execution scenario for ${target.activityId} (${target.activityName}). All forecast dates align with planned completion on ${target.plannedFinish}. Zero downstream variance detected.`;
+    return `Simulation Status: Target activity ${target.activityId} (${target.activityName}) is evaluated with 0-day delay variance. All successor activities in ${target.area} remain aligned with the master baseline schedule.`;
   }
-
-  const impactedNames = downstreamImpacted.map(i => `${i.activityId} (${i.activityName})`).join(', ');
 
   let impactNarrative = '';
   if (downstreamImpacted.length === 0) {
-    impactNarrative = 'No direct downstream schedule successors are impacted within this package window.';
+    impactNarrative = 'No downstream successors are shifted due to available schedule float.';
   } else if (downstreamImpacted.length === 1) {
+    const impactedNames = downstreamImpacted.map(i => `${i.activityId} (${i.activityName})`).join(', ');
     impactNarrative = `Direct successor ${impactedNames} is shifted by +${downstreamImpacted[0].shiftDays} days.`;
   } else {
+    const impactedNames = downstreamImpacted.map(i => `${i.activityId} (${i.activityName})`).join(', ');
     impactNarrative = `${downstreamImpacted.length} downstream activities are shifted by up to +${maxShiftDays} days: ${impactedNames}.`;
   }
 
-  if (criticalMilestoneImpacted) {
-    impactNarrative += ` Critical commissioning and pressure testing milestones in ${target.area} are now at elevated risk.`;
-  }
-
-  // Recommended planning prompts
   let planningFocus = '';
-  if (target.discipline === 'Piping') {
+  if (target.discipline === 'Civil') {
+    planningFocus = `Expedite curing inspection and formwork stripping on ${target.area} to avoid halting mechanical line erection.`;
+  } else if (target.discipline === 'Piping') {
     planningFocus = `Confirm NDT inspection team schedule and spool availability with the ${target.area} piping supervisor to explore double-shift recovery before the revised completion on ${targetScenarioFinish}.`;
-  } else if (target.discipline === 'Civil') {
-    planningFocus = `Review shuttering and rapid-curing mix options with the civil contractor to minimize downstream mechanical handover delays in ${target.area}.`;
   } else if (target.discipline === 'Electrical') {
-    planningFocus = `Coordinate cable pulling gang allocations with the electrical lead planner to accelerate feeder pulls once tray installation completes.`;
+    planningFocus = `Coordinate with cable pulling subcontractor to increase pull crew size in ${target.area} to compress successor durations.`;
   } else {
-    planningFocus = `Review subcontractor resource leveling and permit approvals for ${target.area} to recover the ${delayDays}-day delta before milestone freeze.`;
+    planningFocus = `Re-evaluate milestone buffers and initiate schedule mitigation review in Planner Review Workbench.`;
   }
 
-  return `Scenario Summary: An assumed +${delayDays}-day operational slip on ${target.activityId}, ${target.activityName}, shifts its forecast completion from ${target.plannedFinish} to ${targetScenarioFinish}.
-
-Cascade Impact: ${impactNarrative} Resulting package risk level is ${overallRiskLevel}.
-
-Recommended Planning Focus: ${planningFocus}`;
-};
+  return `Scenario Summary: An assumed +${delayDays}-day operational slip on ${target.activityId}, ${target.activityName}, shifts its forecast completion from ${target.plannedFinish} to ${targetScenarioFinish}. ${impactNarrative} Recommended Planner Action: ${planningFocus}`;
+}

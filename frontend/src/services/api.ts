@@ -1,4 +1,13 @@
-import { ScheduleActivity, SiteUpdate, MatchResult, PlannerDecision, AuditLog, PlannerActionType } from '../types';
+import {
+  ScheduleActivity,
+  SiteUpdate,
+  MatchResult,
+  PlannerDecision,
+  AuditLog,
+  PlannerActionType,
+  UserAccount,
+  ApprovalHistoryItem,
+} from '../types';
 
 const API_BASE = 'http://localhost:5000/api';
 
@@ -14,6 +23,13 @@ export interface HealthResponse {
   };
 }
 
+export interface AuthResponse {
+  success: boolean;
+  user?: UserAccount;
+  token?: string;
+  error?: string;
+}
+
 export const api = {
   /**
    * Check if backend REST API is responsive
@@ -25,6 +41,88 @@ export const api = {
       return await res.json();
     } catch {
       return null;
+    }
+  },
+
+  /**
+   * User login against SQLite backend
+   */
+  async login(username: string, passwordPlain: string): Promise<AuthResponse> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password: passwordPlain }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Authentication failed' };
+      }
+      return data;
+    } catch (err: any) {
+      return { success: false, error: 'Database connection failed. Please ensure the backend is running.' };
+    }
+  },
+
+  /**
+   * User registration into SQLite database
+   */
+  async register(userData: {
+    username: string;
+    passwordPlain: string;
+    fullName: string;
+    email?: string;
+    role: 'planner' | 'supervisor' | 'admin';
+    department?: string;
+    employeeId?: string;
+  }): Promise<AuthResponse> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: userData.username,
+          password: userData.passwordPlain,
+          fullName: userData.fullName,
+          email: userData.email,
+          role: userData.role,
+          department: userData.department,
+          employeeId: userData.employeeId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Registration failed' };
+      }
+      return data;
+    } catch (err: any) {
+      return { success: false, error: 'Database connection failed.' };
+    }
+  },
+
+  /**
+   * Get all database registered users
+   */
+  async getUsers(): Promise<UserAccount[]> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/users`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Get approval history & chain of custody records
+   */
+  async getApprovalHistory(): Promise<ApprovalHistoryItem[]> {
+    try {
+      const res = await fetch(`${API_BASE}/approvals/history`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
     }
   },
 
@@ -71,13 +169,14 @@ export const api = {
   },
 
   /**
-   * Submit planner decision to backend
+   * Submit planner decision to backend with digital signature & L5 tracking
    */
   async submitPlannerAction(
     updateId: string,
     actionType: PlannerActionType,
     targetActivityId?: string | null,
-    note?: string
+    note?: string,
+    userContext?: { userId?: string; userName?: string; userRole?: string }
   ): Promise<{ decision: PlannerDecision; auditLog: AuditLog } | null> {
     try {
       const res = await fetch(`${API_BASE}/planner/action`, {
@@ -88,6 +187,9 @@ export const api = {
           actionType,
           targetActivityId,
           note,
+          userId: userContext?.userId,
+          userName: userContext?.userName,
+          userRole: userContext?.userRole,
         }),
       });
 
@@ -187,5 +289,124 @@ export const api = {
    */
   getExportCsvUrl(): string {
     return `${API_BASE}/export/csv`;
+  },
+
+  /**
+   * Get schedule versions list
+   */
+  async getScheduleVersions(): Promise<import('../types').ScheduleVersion[]> {
+    try {
+      const res = await fetch(`${API_BASE}/schedule/versions`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Activate a schedule version
+   */
+  async activateScheduleVersion(versionId: string): Promise<{ success: boolean; activatedVersion?: import('../types').ScheduleVersion; message?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/schedule/activate-version`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versionId }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
+  },
+
+  /**
+   * Upload a new schedule version file
+   */
+  async uploadScheduleVersion(file: File, versionName?: string, uploadedBy?: string): Promise<any> {
+    try {
+      const formData = new FormData();
+      formData.append('scheduleFile', file);
+      if (versionName) formData.append('versionName', versionName);
+      if (uploadedBy) formData.append('uploadedBy', uploadedBy);
+
+      const res = await fetch(`${API_BASE}/schedule/upload-version`, {
+        method: 'POST',
+        body: formData,
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * Get incoming field submissions inbox
+   */
+  async getFieldSubmissions(): Promise<import('../types').FieldSubmissionInboxItem[]> {
+    try {
+      const res = await fetch(`${API_BASE}/submissions/inbox`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Create field submission inbox record
+   */
+  async createFieldSubmission(sub: Partial<import('../types').FieldSubmissionInboxItem>): Promise<any> {
+    try {
+      const res = await fetch(`${API_BASE}/submissions/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sub),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * Get system notifications
+   */
+  async getNotifications(role?: string): Promise<import('../types').SystemNotification[]> {
+    try {
+      const res = await fetch(`${API_BASE}/notifications${role ? `?role=${role}` : ''}`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Acknowledge schedule updates (Field Supervisor)
+   */
+  async acknowledgeSupervisorScheduleUpdates(): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/notifications/acknowledge-updates`, { method: 'POST' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Mark notification as read
+   */
+  async markNotificationRead(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/notifications/mark-read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 };

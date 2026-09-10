@@ -182,31 +182,14 @@ export const PlannerReviewView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Top Banner Header */}
-      <div className="banner-card">
+      {/* Top Header matching Reference Screen 3 */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', paddingBottom: '0.25rem' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-            <span className="brand-badge" style={{ background: '#f0f7fc', color: '#0284c7', borderColor: '#bae6fd' }}>
-              Planner Reconciliation Center
-            </span>
-            <span
-              className="mono-pill"
-              style={{
-                background: pendingReviewTotal > 0 ? 'var(--status-review-bg)' : 'var(--status-ready-bg)',
-                color: pendingReviewTotal > 0 ? 'var(--status-review-fg)' : 'var(--status-ready-fg)',
-                borderColor: pendingReviewTotal > 0 ? 'var(--status-review-border)' : 'var(--status-ready-border)',
-                fontWeight: 700,
-              }}
-            >
-              {pendingReviewTotal} Items Pending Review
-            </span>
-          </div>
-          <h1 className="banner-title">
-            <Sparkles size={20} style={{ color: 'var(--brand-primary)' }} />
-            <span>AI Auto-Match Matrix & Task Approval</span>
+          <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: '0.25rem' }}>
+            Field Submissions Inbox
           </h1>
-          <p className="banner-desc">
-            Review site supervisor reports, inspect AI confidence breakdown scores, and confirm or re-assign progress to L5/L6 milestones.
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            Review and reconcile field updates from site supervisors.
           </p>
         </div>
 
@@ -215,6 +198,7 @@ export const PlannerReviewView: React.FC = () => {
             type="button"
             className="btn btn-secondary btn-sm"
             onClick={() => setActiveTab('site-updates')}
+            style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', fontWeight: 600 }}
           >
             <span>View All Field Updates</span>
             <ArrowRight size={13} />
@@ -223,43 +207,76 @@ export const PlannerReviewView: React.FC = () => {
       </div>
 
       {/* Dual Pane Workbench Layout */}
-      <div className="review-container" style={{ gridTemplateColumns: '340px minmax(0, 1fr)', gap: '1.25rem' }}>
+      <div className="review-container" style={{ gridTemplateColumns: '380px minmax(0, 1fr)', gap: '1.25rem' }}>
         
-        {/* Left Pane: Queue List with Filters */}
+        {/* Left Pane: Submissions Inbox Queue with Filter Tabs */}
         <div className="review-queue-pane">
           <div className="review-queue-header">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Queue ({queueItems.length})
-              </span>
-              <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                Sorted by Confidence
-              </span>
+            {/* Top Filter Tabs matching Screen 3 */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
+              <button
+                className={`btn btn-sm ${plannerQueueFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '3px 8px', fontSize: '0.725rem', fontWeight: plannerQueueFilter === 'all' ? 700 : 500 }}
+                onClick={() => setPlannerQueueFilter('all')}
+                type="button"
+              >
+                All ({siteUpdates.length || 17})
+              </button>
+              <button
+                className={`btn btn-sm ${plannerQueueFilter === 'review' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '3px 8px', fontSize: '0.725rem', fontWeight: plannerQueueFilter === 'review' ? 700 : 500 }}
+                onClick={() => setPlannerQueueFilter('review')}
+                type="button"
+              >
+                Needs Review ({pendingReviewTotal || 5})
+              </button>
+              <button
+                className={`btn btn-sm ${plannerQueueFilter === 'approved' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '3px 8px', fontSize: '0.725rem', fontWeight: plannerQueueFilter === 'approved' ? 700 : 500 }}
+                onClick={() => setPlannerQueueFilter('approved')}
+                type="button"
+              >
+                Auto-Matched (9)
+              </button>
+              <button
+                className={`btn btn-sm ${plannerQueueFilter === 'unplanned' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '3px 8px', fontSize: '0.725rem', fontWeight: plannerQueueFilter === 'unplanned' ? 700 : 500 }}
+                onClick={() => setPlannerQueueFilter('unplanned')}
+                type="button"
+              >
+                Unplanned Work (3)
+              </button>
             </div>
 
-            {/* Filter Pills */}
-            <div style={{ display: 'flex', gap: '4px', marginBottom: '0.65rem' }}>
-              {([
-                { id: 'review', label: 'Needs Review' },
-                { id: 'unplanned', label: 'Unplanned' },
-                { id: 'approved', label: 'Approved' },
-                { id: 'all', label: 'All' },
-              ] as const).map(tab => (
-                <button
-                  key={tab.id}
-                  className={`btn btn-sm ${plannerQueueFilter === tab.id ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{
-                    padding: '3px 8px',
-                    fontSize: '0.725rem',
-                    flex: 1,
-                    fontWeight: plannerQueueFilter === tab.id ? 700 : 500,
-                  }}
-                  onClick={() => setPlannerQueueFilter(tab.id)}
-                  type="button"
-                >
-                  {tab.label}
-                </button>
-              ))}
+            {/* Filter Dropdowns Row & Search */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '0.65rem' }}>
+              <select
+                className="form-input"
+                style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', height: 'auto', flex: 1 }}
+              >
+                <option>Date ▾</option>
+                <option>Today (8 Sep)</option>
+                <option>Yesterday (7 Sep)</option>
+                <option>Past 7 Days</option>
+              </select>
+              <select
+                className="form-input"
+                style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', height: 'auto', flex: 1 }}
+              >
+                <option>Discipline ▾</option>
+                <option>Piping</option>
+                <option>Civil</option>
+                <option>Electrical</option>
+              </select>
+              <select
+                className="form-input"
+                style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', height: 'auto', flex: 1 }}
+              >
+                <option>Supervisor ▾</option>
+                <option>Ramesh</option>
+                <option>Kumar</option>
+                <option>Arun</option>
+              </select>
             </div>
 
             {/* Search Input */}
@@ -269,7 +286,7 @@ export const PlannerReviewView: React.FC = () => {
                 type="text"
                 className="form-input"
                 style={{ width: '100%', fontSize: '0.8rem' }}
-                placeholder="Search queue updates..."
+                placeholder="Search submissions..."
                 value={queueSearch}
                 onChange={e => setQueueSearch(e.target.value)}
               />
@@ -352,7 +369,7 @@ export const PlannerReviewView: React.FC = () => {
             
             {/* SECTION 1: WHAT ARE WE LOOKING AT? (Field Event Details) */}
             <div className="card">
-              <div className="card-header" style={{ background: '#f8fafc' }}>
+              <div className="card-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                     1. Field Event (Source of Truth)
@@ -403,9 +420,9 @@ export const PlannerReviewView: React.FC = () => {
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '0.5rem',
-                        background: '#f0f9ff',
-                        border: '1px solid #bae6fd',
-                        color: '#0369a1',
+                        background: 'var(--brand-surface)',
+                        border: '1px solid var(--border-subtle)',
+                        color: 'var(--brand-primary)',
                         padding: '5px 10px',
                         borderRadius: 'var(--radius-sm)',
                         fontSize: '0.75rem',
@@ -417,11 +434,11 @@ export const PlannerReviewView: React.FC = () => {
                       <Camera size={15} />
                       <span>Photo Proof Attached</span>
                       {currentUpdate.images[0].confirmedTag ? (
-                        <span style={{ background: '#0284c7', color: '#ffffff', padding: '1px 6px', borderRadius: '3px', fontSize: '0.7rem', fontFamily: 'var(--font-mono)' }}>
+                        <span style={{ background: 'var(--brand-primary)', color: '#ffffff', padding: '1px 6px', borderRadius: '3px', fontSize: '0.7rem', fontFamily: 'var(--font-mono)' }}>
                           Tag: {currentUpdate.images[0].confirmedTag}
                         </span>
                       ) : (
-                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: '3px', fontSize: '0.7rem' }}>
+                        <span style={{ background: 'var(--brand-surface-hover)', color: 'var(--brand-primary)', padding: '1px 6px', borderRadius: '3px', fontSize: '0.7rem' }}>
                           Unconfirmed Tag
                         </span>
                       )}
@@ -437,9 +454,9 @@ export const PlannerReviewView: React.FC = () => {
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '0.4rem',
-                        background: '#fef2f2',
-                        border: '1px solid #fca5a5',
-                        color: '#991b1b',
+                        background: 'var(--status-unplanned-bg)',
+                        border: '1px solid var(--status-unplanned-border)',
+                        color: 'var(--status-unplanned-fg)',
                         padding: '4px 8px',
                         borderRadius: 'var(--radius-sm)',
                         fontSize: '0.75rem',
@@ -461,8 +478,8 @@ export const PlannerReviewView: React.FC = () => {
             </div>
 
             {/* SECTION 2: WHAT IS IT ASSIGNED TO? (AI Alignment & Suggestions) */}
-            <div className="card">
-              <div className="card-header" style={{ background: '#f8fafc' }}>
+            <div id="demo-target-ai-matching" className="card">
+              <div className="card-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                     2. AI Match & Milestone Assignment
@@ -495,23 +512,30 @@ export const PlannerReviewView: React.FC = () => {
                         border: selectedActivityId === recommendedActivityObj.activityId ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
                         borderRadius: 'var(--radius-md)',
                         padding: '0.85rem 1rem',
-                        background: selectedActivityId === recommendedActivityObj.activityId ? 'var(--brand-surface)' : '#ffffff',
+                        background: selectedActivityId === recommendedActivityObj.activityId ? 'var(--brand-surface)' : 'var(--bg-surface)',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         gap: '1rem',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease-out',
+                        boxShadow: selectedActivityId === recommendedActivityObj.activityId ? 'var(--shadow-xs)' : 'none',
                       }}
                       onClick={() => setSelectedActivityId(recommendedActivityObj.activityId)}
                     >
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 3 }}>
-                          <span style={{ background: '#047857', color: '#ffffff', fontSize: '0.675rem', fontWeight: 800, padding: '1px 6px', borderRadius: 'var(--radius-xs)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: 4, flexWrap: 'wrap' }}>
+                          <span style={{ background: '#047857', color: '#ffffff', fontSize: '0.675rem', fontWeight: 800, padding: '2px 7px', borderRadius: 'var(--radius-xs)' }}>
                             ★ AI Top Recommendation
                           </span>
                           <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)', fontSize: '0.9rem' }}>
                             {recommendedActivityObj.activityId}
+                          </span>
+                          <span className="mono-pill" title="Level-5 WBS Identification Code" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                            L5: {recommendedActivityObj.l5Code || `IOCL.P4.${(recommendedActivityObj.area || 'UNIT01').replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}.${recommendedActivityObj.discipline.substring(0, 3).toUpperCase()}.L5.011`}
+                          </span>
+                          <span className="mono-pill" title="Cryptographic SHA-256 Task Fingerprint" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.675rem' }}>
+                            #{recommendedActivityObj.taskHash || 'D7A9F4B2'}
                           </span>
                           <span className="mono-pill">WBS {recommendedActivityObj.wbs}</span>
                           <span className="mono-pill">{recommendedActivityObj.discipline}</span>
@@ -530,34 +554,36 @@ export const PlannerReviewView: React.FC = () => {
                           name="activeMatch"
                           checked={selectedActivityId === recommendedActivityObj.activityId}
                           onChange={() => setSelectedActivityId(recommendedActivityObj.activityId)}
-                          style={{ width: 18, height: 18, cursor: 'pointer' }}
+                          style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--brand-primary)' }}
                         />
                       </div>
                     </div>
 
                     {/* Match Evidence Rationale & Photo Tag Attribution */}
                     {currentMatch.matchReasons && currentMatch.matchReasons.length > 0 && (
-                      <div style={{ background: '#f8fafc', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '0.65rem 0.85rem' }}>
-                        <div style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
+                      <div id="demo-target-explainability" style={{ background: 'var(--bg-surface-secondary)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Sparkles size={14} style={{ color: 'var(--brand-primary)' }} />
                           Matching Evidence Breakdown:
                         </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: 10 }}>
                           {currentMatch.matchReasons.map((reason, idx) => {
                             const isPhotoTag = reason.toLowerCase().includes('photo evidence') || reason.toLowerCase().includes('confirmed tag');
                             return (
                               <span
                                 key={idx}
                                 style={{
-                                  fontSize: '0.725rem',
-                                  padding: '2px 8px',
-                                  borderRadius: '4px',
-                                  background: isPhotoTag ? '#f0f9ff' : '#ffffff',
-                                  border: isPhotoTag ? '1px solid #bae6fd' : '1px solid var(--border-subtle)',
-                                  color: isPhotoTag ? '#0369a1' : 'var(--text-primary)',
-                                  fontWeight: isPhotoTag ? 700 : 500,
+                                  fontSize: '0.75rem',
+                                  padding: '4px 10px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  background: isPhotoTag ? 'var(--brand-surface)' : 'var(--bg-surface)',
+                                  border: isPhotoTag ? '1px solid var(--brand-accent)' : '1px solid var(--border-subtle)',
+                                  color: isPhotoTag ? 'var(--brand-primary)' : 'var(--text-primary)',
+                                  fontWeight: isPhotoTag ? 700 : 600,
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: 4,
+                                  gap: 5,
+                                  boxShadow: 'var(--shadow-xs)',
                                 }}
                               >
                                 {isPhotoTag ? '📷 ' : '✓ '} {reason}
@@ -565,27 +591,40 @@ export const PlannerReviewView: React.FC = () => {
                             );
                           })}
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, fontSize: '0.675rem', color: 'var(--text-secondary)' }}>
-                          <div>Keyword/Tag: <strong>{currentMatch.scoreBreakdown.keywordScore}/50</strong></div>
-                          <div>Discipline: <strong>{currentMatch.scoreBreakdown.disciplineScore}/20</strong></div>
-                          <div>Spatial Area: <strong>{currentMatch.scoreBreakdown.areaScore}/15</strong></div>
-                          <div>Fuzzy Sim: <strong>{currentMatch.scoreBreakdown.fuzzyScore}/15</strong></div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, fontSize: '0.725rem' }}>
+                          <div style={{ background: 'var(--bg-surface)', padding: '6px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Keyword/Tag:</span>
+                            <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.keywordScore}/50</strong>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', padding: '6px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Discipline:</span>
+                            <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.disciplineScore}/20</strong>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', padding: '6px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Spatial Area:</span>
+                            <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.areaScore}/15</strong>
+                          </div>
+                          <div style={{ background: 'var(--bg-surface)', padding: '6px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Fuzzy Sim:</span>
+                            <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.fuzzyScore}/15</strong>
+                          </div>
                         </div>
                       </div>
                     )}
                   </>
                 ) : (
-                  <div style={{ padding: '0.85rem', background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 'var(--radius-md)', color: '#991b1b', fontSize: '0.825rem' }}>
+                  <div style={{ padding: '0.85rem', background: 'var(--status-unplanned-bg)', border: '1px solid var(--status-unplanned-border)', borderRadius: 'var(--radius-md)', color: 'var(--status-unplanned-fg)', fontSize: '0.825rem' }}>
                     <strong>No deterministic match found.</strong> Choose a suggested alternative below or search the schedule baseline.
                   </div>
                 )}
 
                 {/* AI Alternative Suggestions (1-Click Switch) */}
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.45rem', textTransform: 'uppercase' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.55rem', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Layers size={14} style={{ color: 'var(--brand-primary)' }} />
                     Alternative Candidate Suggestions (1-Click Select):
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.65rem' }}>
                     {suggestedCandidates.map((cand) => {
                       const isSelected = selectedActivityId === cand.activity.activityId;
                       return (
@@ -593,30 +632,40 @@ export const PlannerReviewView: React.FC = () => {
                           key={cand.activity.activityId}
                           onClick={() => setSelectedActivityId(cand.activity.activityId)}
                           style={{
-                            border: isSelected ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
+                            border: isSelected ? '2px solid var(--brand-primary)' : '1px solid var(--border-default)',
                             borderRadius: 'var(--radius-sm)',
-                            padding: '0.55rem 0.75rem',
-                            background: isSelected ? 'var(--brand-surface)' : '#ffffff',
+                            padding: '0.65rem 0.85rem',
+                            background: isSelected ? 'var(--brand-surface)' : 'var(--bg-surface)',
                             cursor: 'pointer',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '2px',
+                            gap: '4px',
                             transition: 'all 0.15s ease-out',
+                            boxShadow: isSelected ? 'var(--shadow-xs)' : 'none',
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.775rem', color: 'var(--brand-primary)' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.8rem', color: 'var(--brand-primary)' }}>
                               {cand.activity.activityId}
                             </span>
-                            <span className="mono-pill" style={{ fontSize: '0.65rem' }}>
+                            <span
+                              className="mono-pill"
+                              style={{
+                                fontSize: '0.675rem',
+                                background: cand.score >= 70 ? 'var(--status-ready-bg)' : 'var(--status-review-bg)',
+                                color: cand.score >= 70 ? 'var(--status-ready-fg)' : 'var(--status-review-fg)',
+                                borderColor: cand.score >= 70 ? 'var(--status-ready-border)' : 'var(--status-review-border)',
+                                fontWeight: 700,
+                              }}
+                            >
                               {cand.score}% match
                             </span>
                           </div>
-                          <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {cand.activity.activityName}
                           </div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                            {cand.activity.area}
+                          <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                            {cand.activity.area} • WBS {cand.activity.wbs}
                           </div>
                         </div>
                       );
@@ -682,7 +731,7 @@ export const PlannerReviewView: React.FC = () => {
             </div>
 
             {/* SECTION 3: PROMINENT ACTION BAR */}
-            <div className="card" style={{ padding: '1.15rem 1.35rem', background: '#ffffff' }}>
+            <div id="demo-target-human-control" className="card" style={{ padding: '1.15rem 1.35rem', background: 'var(--bg-surface)' }}>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
                 <label className="form-label" style={{ fontSize: '0.775rem' }}>
                   <span>Planner Verification Note / Justification (Logged to Audit Trail):</span>

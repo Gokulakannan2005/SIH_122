@@ -25,28 +25,28 @@ export const ToastContainer: React.FC = () => {
   const getBorderColor = (type: ToastNotification['type']) => {
     switch (type) {
       case 'success':
-        return '#6ee7b7';
+        return 'var(--status-ready-border)';
       case 'warning':
-        return '#fcd34d';
+        return 'var(--status-review-border)';
       case 'error':
-        return '#fca5a5';
+        return 'var(--status-unplanned-border)';
       case 'info':
       default:
-        return '#bae6fd';
+        return 'var(--border-default)';
     }
   };
 
   const getBgColor = (type: ToastNotification['type']) => {
     switch (type) {
       case 'success':
-        return '#f0fdf4';
+        return 'var(--status-ready-bg)';
       case 'warning':
-        return '#fffbeb';
+        return 'var(--status-review-bg)';
       case 'error':
-        return '#fef2f2';
+        return 'var(--status-unplanned-bg)';
       case 'info':
       default:
-        return '#f0f9ff';
+        return 'var(--bg-surface)';
     }
   };
 
@@ -56,13 +56,13 @@ export const ToastContainer: React.FC = () => {
       aria-live="polite"
       style={{
         position: 'fixed',
-        bottom: '1.5rem',
+        top: '4.5rem',
         right: '1.5rem',
         zIndex: 9999,
         display: 'flex',
         flexDirection: 'column',
-        gap: '0.65rem',
-        maxWidth: '420px',
+        gap: '0.5rem',
+        maxWidth: '380px',
         width: 'calc(100vw - 3rem)',
         pointerEvents: 'none',
       }}
@@ -74,7 +74,7 @@ export const ToastContainer: React.FC = () => {
           role="alert"
           style={{
             pointerEvents: 'auto',
-            background: '#ffffff',
+            background: 'var(--bg-surface)',
             border: `1px solid ${getBorderColor(toast.type)}`,
             borderLeft: `4px solid ${
               toast.type === 'success'

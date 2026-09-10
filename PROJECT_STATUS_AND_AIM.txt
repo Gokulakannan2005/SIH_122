@@ -3,44 +3,44 @@ SIH 2026 - PROBLEM STATEMENT 122: PROJECT DOSSIER & COMPREHENSIVE STATUS REPORT
 ================================================================================
 PROJECT TITLE:
 AI-Driven Linking of Daily Site Progress Updates to Project Schedule Activities
-PLATFORM NAME: ProjectPulse (SIH-122 Industrial Schedule Linker)
+PLATFORM NAME: ProjectPulse (SIH-122 Industrial Schedule Intelligence System)
 ORGANIZATION / HACKATHON: Smart India Hackathon (SIH) 2026
 TARGET DOMAIN: Mega Infrastructure, EPC (Engineering, Procurement & Construction),
-               Oil & Gas, Power Plants, Heavy Industrial Construction
-DATE OF RECORD: September 6, 2026
-VERSION: 2.1 (Full-Stack Decoupled Architecture with Local SQLite Engine + Launch Scripts)
+               Oil & Gas, Power Plants, Heavy Industrial Construction, Metro Rail
+DATE OF RECORD: September 2026
+VERSION: 3.0 (Simplified Enterprise Architecture, 11-Step Deterministic Guided Demo, Slate/Cobalt Design System)
 
 --------------------------------------------------------------------------------
 1. EXECUTIVE SUMMARY & STRATEGIC CONTEXT
 --------------------------------------------------------------------------------
 In modern multi-billion-dollar infrastructure and EPC megaprojects (such as refineries,
-metro rail systems, fertilizer plants, thermal power stations, and chemical plants),
-project management relies heavily on Master Schedule Baselines (typically authored in
-Oracle Primavera P6 or Microsoft Project). These baselines break down the scope of work
-into thousands of discrete Work Breakdown Structure (WBS) deliverables down to Level 5
-(L5 - Package Sub-elements) and Level 6 (L6 - Individual Field Activity Items).
+metro rail networks, thermal power stations, and chemical plants), project execution
+relies heavily on Master Schedule Baselines authored in Oracle Primavera P6 or
+Microsoft Project (MSP). These baselines break down the project scope into thousands
+of discrete Work Breakdown Structure (WBS) deliverables down to Level 5 (Package
+Sub-elements) and Level 6 (Individual Field Activity Items).
 
 THE CRITICAL INDUSTRY PAIN POINT:
-While the Primavera P6 schedule specifies exact formal activity names, planned start
-dates, planned finish dates, and engineering tags (e.g. "PIP-L6-012: Erect Line 24-CW-017"),
-actual on-site execution is captured in completely unstructured, fragmented formats:
-  a) Daily Progress Reports (DPR) written in free-text by site supervisors (e.g.
+While the Primavera P6 schedule specifies exact formal activity names, planned start/finish
+dates, and engineering tags (e.g., "PIP-L6-012: Erect Line 24-CW-017"), actual on-site
+execution is recorded in completely unstructured, fragmented formats:
+  a) Daily Progress Reports (DPR) written in free-text by site supervisors (e.g.,
      "CW 24-inch spool was erected near Pump Bay today; alignment is in progress.")
-  b) Discipline-specific Excel logs (e.g. piping contractor spreadsheets listing
+  b) Discipline-specific Excel logs (e.g., piping contractor spreadsheets listing
      daily inch-dia welds, spool numbers, and joint statuses).
   c) Verbal updates, WhatsApp / radio transcripts, and shift handover diaries.
 
 Because site supervisors use colloquial field jargon, informal acronyms, partial tag
 numbers, and shorthand descriptions, project planners spend 15 to 25 hours every week
 manually reading supervisor text, figuring out which Primavera P6 activity it belongs to,
-and typing progress into the scheduling software. 
+and typing progress into the scheduling software.
 
 CONSEQUENCES OF THE CURRENT MANUAL PROCESS:
 1. Latency & Blind Spots: Planners are typically 3 to 7 days behind real site reality.
 2. Inaccurate Delay Tracking: Schedule delay variances are recognized too late to take
    mitigating corrective actions (such as re-sequencing work or adding shifts).
 3. Ghost Work & Unplanned Scope Creep: Field crews frequently perform out-of-scope work
-   (e.g. temporary bypasses, minor drain lines, rework) that never gets attributed to
+   (e.g., temporary bypasses, minor drain lines, rework) that never gets attributed to
    the baseline, leading to contractor claims, disputes, and budget overruns.
 4. Lack of Auditability: When disputes occur between project owners and contractors,
    there is no immutable audit trail connecting the supervisor's original written note
@@ -49,8 +49,8 @@ CONSEQUENCES OF THE CURRENT MANUAL PROCESS:
 --------------------------------------------------------------------------------
 2. PROJECT AIM & CORE OBJECTIVES
 --------------------------------------------------------------------------------
-ProjectPulse solves this industry bottleneck by providing an end-to-end, AI-powered,
-deterministic linking pipeline that ingests unstructured multi-format daily site updates,
+ProjectPulse solves this industry bottleneck by providing an end-to-end, AI-assisted,
+explainable linking pipeline that ingests unstructured multi-format daily site updates,
 intelligently matches them against L5/L6 Primavera P6 schedule deliverables with high
 precision, calculates real-time schedule variances, and routes ambiguous items through an
 ergonomic human-in-the-loop Planner Review workbench with full audit provenance.
@@ -59,17 +59,17 @@ PRIMARY TECHNICAL OBJECTIVES:
 1. Multi-Source Ingestion:
    Seamlessly ingest raw free-text DPR files (.txt), structured contractor spreadsheets
    (.xlsx / .xls), and schedule baselines (.csv / Primavera export).
-2. 4-Factor Deterministic Matching Algorithm:
-   Score similarity from 0% to 100% using a transparent, explainable scoring rubric:
-   - System Tag & Equipment Keyword Overlap (max 50 points)
-   - Engineering Discipline Consistency (max 20 points)
-   - Area / Location Proximity (max 15 points)
-   - Fuzzy Token Similarity (max 15 points)
-3. Intelligent Categorization:
-   - Ready (Confidence >= 75%): Automatically approved and linked.
-   - Review (40% - 74% or ambiguous text): Flagged for human planner review.
-   - Unplanned (< 40% or explicit [Not in baseline] tag): Flagged as new out-of-scope work.
-4. Schedule Performance & Variance Enrichment:
+2. 4-Factor Deterministic & Explainable Matching Algorithm:
+   Scores similarity from 0% to 100% using a transparent scoring rubric:
+   - System Tag & Equipment Keyword Overlap (50% weight)
+   - Engineering Discipline Consistency (20% weight)
+   - Area / Location Proximity (15% weight)
+   - Fuzzy Token Similarity (15% weight)
+3. Intelligent Categorization & Confidence Routing:
+   - Ready / Auto-Matched (Confidence >= 75%): High-confidence match with clear rationale.
+   - Review Required (40% - 74% or multi-candidate ambiguity): Flagged for human planner review.
+   - Unplanned Work (< 40% or explicit [Not in baseline] tag): Flagged as new out-of-scope work.
+4. Schedule Performance & Variance Intelligence:
    Extract actual start and finish dates from site evidence, calculate progress percentages,
    and compute schedule delay variance in days (Actual Finish vs Planned Finish).
 5. Human-in-the-Loop Planner Review Workbench:
@@ -79,203 +79,130 @@ PRIMARY TECHNICAL OBJECTIVES:
    Every auto-link, planner override, timestamp, and justification note is permanently
    logged in an audit ledger for contractual compliance and dispute resolution.
 7. One-Click Compliance Export:
-   Generate standard alignment CSV reports that can be directly audited or fed back
-   into Primavera P6 / MS Project.
+   Generate standard alignment CSV reports, Excel workbooks, and Microsoft Project XML
+   exports that can be directly audited or fed back into Primavera P6 / MS Project.
 
 --------------------------------------------------------------------------------
-3. ARCHITECTURE OVERVIEW (DECOUPLED FULL-STACK)
+3. SIMPLIFIED 6-PILLAR INFORMATION ARCHITECTURE
 --------------------------------------------------------------------------------
-The project is architected into two decoupled tiers:
+The application has been simplified into 6 core pillars to guarantee a clean, intuitive,
+judge-friendly workflow during presentations and real-world deployment:
 
-   [Client Browser]
-          |
-          v
-   +-------------------------------------------------------------+
-   | FRONTEND TIER (Vite + React 18 + TypeScript)                |
-   | - Port: 5173 (Vite Dev Server)                              |
-   | - Views: Dashboard, Site Updates, Schedule Activities,     |
-   |   Planner Review Workbench, Data Ingestion / Upload         |
-   | - Drawers: Site Update Inspector, Schedule Activity Drawer |
-   | - Modals: Audit Trail Provenance History                   |
-   | - Dual-Mode API Client: Seamless backend connectivity with  |
-   |   automatic offline standalone client-side fallback         |
-   +-------------------------------------------------------------+
-          |
-          | REST API (HTTP JSON / Multipart Uploads)
-          v
-   +-------------------------------------------------------------+
-   | BACKEND TIER (Express.js + Node.js 24 + TypeScript)        |
-   | - Port: 5000                                                |
-   | - Zero External Software Required (Uses Node 24 native TS)  |
-   | - Native Embedded SQLite Engine (node:sqlite)               |
-   | - Endpoints:                                                |
-   |   * GET  /api/health (Database & server health check)       |
-   |   * GET  /api/schedule (Enriched L5/L6 schedule + variance) |
-   |   * GET  /api/site-updates (Parsed site progress items)     |
-   |   * GET  /api/matches (4-factor confidence scores & reasons)|
-   |   * POST /api/planner/action (Approve, Relink, Unplanned)   |
-   |   * PUT  /api/site-updates/:id (Parameter modification)     |
-   |   * GET  /api/audit-trail (Immutable provenance history)    |
-   |   * POST /api/ingest/upload (Multi-file batch ingestion)    |
-   |   * POST /api/reset-demo (Reset DB to official benchmark)   |
-   |   * GET  /api/export/csv (Verified alignment CSV export)    |
-   +-------------------------------------------------------------+
-          |
-          v
-   +-------------------------------------------------------------+
-   | PERSISTENCE TIER (Local SQLite Database)                    |
-   | - File: backend/database.sqlite                             |
-   | - Tables: schedule_activities, site_updates, match_results, |
-   |           planner_decisions, audit_logs                     |
-   +-------------------------------------------------------------+
+  [ 1. Dashboard ]
+  Executive overview of schedule progress, delay alerts, planned vs. actual S-curve,
+  quick field ingestion bar, and one-click Guided Demo launcher.
+
+  [ 2. Updates / Analyze ]
+  Field reports hub listing all ingested DPRs and Excel logs with filter tabs:
+  All Reports, Needs Review (Amber), Auto-Matched (Blue), Approved & Linked (Green),
+  and Unplanned Work (Red). Includes an integrated 4-tab Report Inspector drawer.
+
+  [ 3. Review Queue ]
+  Dual-pane Planner Review Workbench displaying ambiguous site updates on the left
+  and candidate schedule activities with AI match explanations and action buttons on the right.
+
+  [ 4. Schedule ]
+  Hierarchical Primavera P6 master baseline schedule view supporting 4D Gantt & S-Curve,
+  interactive card grid, and structured tabular views with live variance badges.
+
+  [ 5. Audit Trail ]
+  Dedicated full-page compliance ledger recording every auto-link, human override,
+  confidence score, timestamp, and planner note with CSV export capabilities.
+
+  [ Start Guided Demo (Tour) ]
+  Pinned 11-step interactive, self-contained walkthrough that deterministically walks
+  judges through every major capability with presenter cheatsheet sidecards.
 
 --------------------------------------------------------------------------------
-4. CURRENT STATUS & COMPLETED FEATURES (WHAT WE HAVE BUILT)
+4. 11-STEP DETERMINISTIC GUIDED DEMO EXPERIENCE
 --------------------------------------------------------------------------------
-[100% COMPLETE] 1. Data Ingestion & Parser Engine:
-   - CSV Schedule Parser: Extracts Activity ID, WBS, Activity Name, Discipline,
-     Planned Start, Planned Finish, Area, and semicolon-delimited Aliases.
-   - Free-Text DPR Parser: Parses daily_report.txt, extracts report date, discipline
-     section headers (Civil, Piping, Electrical, HSE), numbered site progress items,
-     detects "[Not in baseline]" markers, infers event status, area, and line evidence.
-   - Excel Discipline Progress Parser: Reads piping_progress.xlsx, converts Excel serial
-     dates to ISO dates, extracts Entry ID, status, quantities, units, and supervisor names.
+The Guided Demo (`GuidedDemoWalkthroughView.tsx`) provides a 100% deterministic, zero-risk,
+high-impact presentation mode designed specifically for hackathon judging:
 
-[100% COMPLETE] 2. 4-Factor Deterministic Matching Algorithm:
-   - Evaluates keyword overlap (system tags like "24-CW-017", "CW", "FW", "Suction"),
-     discipline match, area proximity, and token similarity.
-   - Ambiguity detection: automatically flags vague reports like "cable pulling" or
-     close candidate scores for human Planner Review rather than guessing dangerously.
+  Step 1: The Baseline Schedule (The Source of Truth)
+    - Concept: Establishes the Primavera P6 master schedule structure (WBS, activities, planned dates).
+    - Talk Track: "Megaprojects have thousands of structured activities, but site progress arrives in messy text."
 
-[100% COMPLETE] 3. Schedule Performance & Variance Enrichment:
-   - Computes actual start date, actual finish date, progress percentage, and variance
-     in days (delay vs planned finish).
-   - Generates status: "Not Started", "In Progress", "Completed", "Delayed".
+  Step 2: Unstructured Site Progress Arrives (The Problem)
+    - Concept: Ingests raw supervisor text ("CW 24-inch spool erected near Pump Bay...") full of field jargon.
+    - Talk Track: "Notice how informal field terminology diverges completely from formal P6 activity names."
 
-[100% COMPLETE] 4. Executive Dashboard:
-   - 5 KPI Metric Cards: Extracted Site Updates, Verified & Linked, Pending Review,
-     Unplanned Activities, Schedule Delays.
-   - Discipline Completion & Health Progress Bars (Civil, Piping, Electrical, HSE).
-   - Schedule Variance Watchlist displaying critical delayed activities.
-   - Live Audit Trail feed of recent actions.
+  Step 3: AI Activity Matching & Confidence Scoring (The Solution)
+    - Concept: Real-time 6-point extraction analysis (Entity Extraction, Tag Resolution, Discipline Check,
+      Area Proximity, S-Curve Progress, Variance Detection).
+    - Talk Track: "The engine breaks down the text in milliseconds without hallucination."
 
-[100% COMPLETE] 5. Site Updates Table View:
-   - Full data table of all ingested updates with live keyword search.
-   - Filters by Discipline, Status (Approved, Review, Unplanned), and Source File.
-   - Sorting by Date and Confidence Score.
-   - Direct inspection and review action triggers.
+  Step 4: Explainable Matching Criteria (Explainability)
+    - Concept: Transparent breakdown of the 4 scoring factors (50% Keywords, 20% Discipline, 15% Area, 15% Fuzzy).
+    - Talk Track: "Unlike black-box LLMs, ProjectPulse scores every dimension with full mathematical transparency."
 
-[100% COMPLETE] 6. Master Schedule Activities Table View:
-   - Baseline view with WBS codes, planned dates, actual dates, variance badges,
-     and recognized aliases.
-   - Multi-field search and discipline/area filters.
+  Step 5: High-Confidence Auto-Linking (Automation)
+    - Concept: Evaluates 91% confidence score and auto-links update to `PIP-L6-012` (Erect 24-CW-017).
+    - Talk Track: "Clear updates with >= 75% confidence are matched instantly, saving 80% of planner time."
 
-[100% COMPLETE] 7. Interactive Planner Review Workbench:
-   - Dual-pane layout: Left queue sorted by lowest confidence / priority; Right workbench
-     with source text evidence, NLP score breakdown, and interactive schedule activity linker.
-   - Action buttons: "Confirm Link", "Classify as Unplanned Work", "Reject Report".
-   - Optional planner audit note recording.
-   - Auto-advance to next queue item upon action completion.
+  Step 6: Visualizing the Connected Bridge (The Connection)
+    - Concept: Animated visual bridge connecting the supervisor's field text directly to the P6 WBS node.
+    - Talk Track: "Contractors, planners, and clients now share a single connected truth."
 
-[100% COMPLETE] 8. Slide-Over Drawers & Audit Modal:
-   - Inspector Drawer: Inspect raw evidence, review score breakdown, edit extracted
-     parameters (description, area, status, date), and relink schedule activities.
-   - Schedule Activity Drawer: Inspect planned vs actual timeline, aliases, and all
-     linked site updates.
-   - Audit Trail Modal: View full provenance history of every decision.
+  Step 7: Schedule Intelligence & Delay Tracking (Impact)
+    - Concept: Detects that planned progress was 80% while actual is 60%, flagging a 5-day variance delay.
+    - Talk Track: "Instant variance detection prevents surprises before they become critical-path disasters."
 
-[100% COMPLETE] 9. Decoupled Backend & Persistence:
-   - Node 24 Express backend with native TypeScript execution.
-   - Native SQLite database persistence (`backend/database.sqlite`).
-   - Benchmark data auto-seeding.
-   - Single-click Windows launch scripts (`run_all.bat`, `run_backend.bat`, `run_frontend.bat`) [COMPLETED].
+  Step 8: Handling Uncertainty & Ambiguity (The Edge Case)
+    - Concept: Tests an ambiguous update ("Erected cooling line near turbine...") yielding 52%, 48%, 44% scores.
+    - Talk Track: "When confidence is below 75% or ambiguous, the AI halts auto-linking and requests human review."
 
-[100% COMPLETE] 10. Bug Fixes & Refinements:
-   - Replaced fragile data URI CSV export with standard Blob Object URL downloads,
-     preventing `#` symbol corruption in equipment tags and line numbers.
-   - Fixed variance badge logic to properly display on-track (0d), early finishes (-Xd),
-     and delays (+Xd).
-   - Fixed review queue auto-advance and filter state synchronization.
-   - Added live "Backend: SQLite Connected" status pill in the top navigation bar.
+  Step 9: Human-in-the-Loop Planner Review Workbench (Human Control)
+    - Concept: Planner inspects top 3 candidates and clicks 'Link to Selected Activity' or writes a note.
+    - Talk Track: "Human planners retain ultimate authority with one-click verification."
+
+  Step 10: Handling Unplanned Work (Scope Creep Detection)
+    - Concept: Identifies out-of-scope drain line installation (`[Not in baseline]`), flagging contractor scope creep.
+    - Talk Track: "ProjectPulse automatically isolates ghost work to prevent untracked budget overruns."
+
+  Step 11: Audit Trail & Project Governance (Accountability)
+    - Concept: Displays the chronological ledger recording every AI match, planner approval, and override.
+    - Talk Track: "Complete auditability for ISO compliance, claims defense, and dispute resolution."
+
+  Final Step: Demo Summary & ROI Dashboard
+    - 5 Core Takeaways (Zero Hallucination, 80% Time Saved, Scope Creep Protection, Full Auditability, ERP/P6 Ready).
+    - Interactive "Restart Demo" or "Explore Live Platform" options.
 
 --------------------------------------------------------------------------------
-5. OFFICIAL BENCHMARK DATASET COVERAGE (DEMO DATA)
+5. USER ACCOUNTS & ROLE-BASED ACCESS CONTROL (RBAC)
 --------------------------------------------------------------------------------
-The project is validated against the official SIH 122 Cooling Water Pump Package dataset:
-  1. schedule.csv: 16 L5/L6 baseline activities spanning Civil (1.1.1–1.1.4), Piping
-     (2.1.1–2.1.6), Electrical (3.1.1–3.1.4), Instrumentation (4.1.1), and HSE (5.1.1).
-  2. daily_report.txt: Free-text supervisor notes covering pump foundation excavation,
-     PCC concreting, CW 24-inch spool erection, spool fabrication in yard, FW spool erection,
-     out-of-scope drain line installation [Not in baseline], cable tray installation,
-     earthing strip work, ambiguous cable pulling report, and crane lifting inspection.
-  3. piping_progress.xlsx: Detailed Excel tracking sheet with quantities, inch-dia welds,
-     supervisors, and status codes.
+ProjectPulse provides two specialized personas tailored to industrial workflows:
+
+  1. Lead Project Planner (P6 Administrator)
+     - Username: planner@projectpulse.ai
+     - Access: Full access to Dashboard, Review Queue, Schedule Activities,
+       Site Updates, Audit Trail, and MSP/CSV export functions.
+     - Role: Verifies AI suggestions, overrides links, approves variances.
+
+  2. Site Field Supervisor (Execution Crew)
+     - Username: supervisor@projectpulse.ai
+     - Access: Simplified field report entry form, photo/evidence upload,
+       daily progress logging, and view of submitted field reports.
+     - Role: Submits raw daily progress logs, quantities installed, and site notes.
 
 --------------------------------------------------------------------------------
-6. FILE STRUCTURE REFERENCE
+6. DESIGN SYSTEM & UI TOKENS
 --------------------------------------------------------------------------------
-d:\SIH_122_AG
-├── PROJECT_STATUS_AND_AIM.txt           <- This document (Complete project dossier)
-├── SYSTEM_GUIDE_AND_FIELD_EXPLAINER.txt <- Complete user handbook & field glossary
-├── run_all.bat                          <- One-click launch for frontend and backend
-├── run_backend.bat                      <- Launch backend server standalone
-├── run_frontend.bat                     <- Launch frontend webapp standalone
-├── package.json                         <- Root package configuration
-├── demo-data/                           <- Source benchmark CSV, TXT, and XLSX files
-│   ├── schedule.csv
-│   ├── daily_report.txt
-│   ├── piping_progress.xlsx
-│   └── piping_progress_preview.png
-├── backend/                             <- Node 24 Express REST API + SQLite Tier
-│   ├── package.json
-│   ├── database.sqlite                  <- Embedded SQLite database
-│   └── src/
-│       ├── server.ts                    <- Express REST API endpoints & route handlers
-│       ├── db.ts                        <- SQLite schema definition & auto-seeder
-│       ├── matchingEngine.ts            <- 4-factor scoring algorithm
-│       └── parsers.ts                   <- CSV, TXT, and XLSX ingestion parsers
-└── frontend/                            <- Vite + React 18 + TypeScript Tier
-    ├── package.json
-    ├── vite.config.ts
-    ├── tsconfig.json
-    ├── index.html
-    ├── public/
-    │   └── demo-data/
-    └── src/
-        ├── App.tsx
-        ├── main.tsx
-        ├── index.css
-        ├── types/index.ts               <- Core domain TypeScript interfaces
-        ├── services/api.ts              <- Dual-mode REST API client
-        ├── context/ProjectContext.tsx   <- State store & pipeline orchestrator
-        ├── utils/
-        │   ├── matchingEngine.ts        <- Client-side matching engine (offline fallback)
-        │   └── parsers.ts               <- Client-side parsers (offline fallback)
-        └── components/
-            ├── Navbar.tsx               <- Navigation, CSV export, Backend status pill
-            ├── Dashboard.tsx            <- Executive KPIs, discipline progress, delay list
-            ├── SiteUpdatesView.tsx      <- Table view of parsed site updates
-            ├── ScheduleActivitiesView.tsx <- Baseline schedule & variance view
-            ├── PlannerReviewView.tsx    <- Dual-pane planner review workbench
-            ├── UploadDemoView.tsx       <- Ingestion pipeline & dataset previews
-            ├── InspectorDrawer.tsx      <- Site update slide-over inspector
-            ├── ScheduleActivityDrawer.tsx <- Baseline activity drilldown drawer
-            └── AuditTrailModal.tsx      <- Immutable provenance history modal
+The user interface follows a modern industrial SaaS design system inspired by
+Linear, Stripe, and Vercel:
+  - Color Palette: Crisp Cobalt Blue (`#2563EB` / `#3B82F6`), Slate Zinc (`#0F172A` / `#F8FAFC`),
+    Emerald Success (`#059669`), Amber Warning (`#D97706`), Crimson Danger (`#DC2626`).
+  - No AI Neon Glow: Clean satin borders, subtle translucent badges, and crisp focus rings.
+  - Theme Adaptation: Seamless support for Light Mode and Dark Mode across all views,
+    drawers, tables, and the Guided Demo walkthrough.
 
 --------------------------------------------------------------------------------
-7. FUTURE EXTENSIONS & ROADMAP (POST-HACKATHON)
+7. TECH STACK & EXECUTION
 --------------------------------------------------------------------------------
-1. Direct Primavera P6 API / XER integration:
-   Direct bi-directional sync with Oracle Primavera P6 Cloud API and .xer export/import.
-2. Large Language Model (LLM) Integration:
-   Integrate Gemini API / lightweight on-premise SLM for advanced multilingual field
-   transcription (e.g. Hindi, Tamil, or Hinglish voice notes from site supervisors).
-3. Mobile Voice & Photo Capture App:
-   Flutter or React Native companion mobile app for site engineers to capture geo-tagged
-   site photos and voice notes directly into the ingestion pipeline.
-4. Geospatial 3D / BIM Schedule Linking:
-   Overlay verified site progress directly onto Autodesk Navisworks / Revit 3D BIM models
-   to color-code 3D structures based on actual progress vs baseline schedule.
+  Frontend: React 18, TypeScript, Vite, Lucide Icons, Custom Pure CSS
+  Backend: Node.js / Express, SQLite (or embedded browser state engine)
+  Dev Server: http://localhost:5173/
+
 ================================================================================
-END OF DOSSIER — SIH-122 SCHEDULE LINKER (ProjectPulse)
+END OF DOSSIER - PROJECTPULSE SIH 2026
 ================================================================================

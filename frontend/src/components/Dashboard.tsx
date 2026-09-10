@@ -36,12 +36,17 @@ export const Dashboard: React.FC = () => {
     plannerDecisions,
     auditLogs,
     setActiveTab,
+    startGuidedDemo,
     setSelectedScheduleActivityId,
     setSelectedInspectorUpdateId,
     setSelectedAuditUpdateId,
     navigateToSiteUpdatesWithFilter,
     navigateToPlannerReviewWithFilter,
+    handleAddNewFieldEntry,
+    addToast,
   } = useProject();
+
+  const [quickUpdateText, setQuickUpdateText] = useState<string>('');
 
   const [activeDashboardTab, setActiveDashboardTab] = useState<'today-tasks' | 'classification-hub' | 'schedule-variance'>('today-tasks');
   const [selectedDisciplineFilter, setSelectedDisciplineFilter] = useState<string>('ALL');
@@ -155,11 +160,96 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div id="demo-target-project-intelligence" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Prominent Guided Demo Launch Card for SIH Presentation */}
+      <div
+        className="card"
+        style={{
+          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(16, 185, 129, 0.14))',
+          border: '1.5px solid rgba(59, 130, 246, 0.45)',
+          padding: '1.25rem 1.5rem',
+          boxShadow: '0 8px 24px rgba(37, 99, 235, 0.15)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ flex: 1, minWidth: '280px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+              <Compass size={20} style={{ color: '#60a5fa' }} />
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                ProjectPulse Guided Walkthrough Demo
+              </h2>
+              <span className="badge badge-primary">SIH Judge Mode</span>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45 }}>
+              Launch the complete 11-step interactive tour: from unstructured site reports → AI hybrid matching → human review → schedule intelligence → immutable audit trail.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button
+              type="button"
+              className="btn btn-primary btn-lg pulse-glow"
+              onClick={startGuidedDemo}
+              style={{ padding: '0.75rem 1.75rem', fontSize: '0.95rem', fontWeight: 800, gap: '0.5rem' }}
+            >
+              <Sparkles size={18} />
+              <span>Start Guided Demo</span>
+              <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Analyze Field Update Action Bar */}
+      <div className="card" style={{ padding: '1rem 1.25rem', background: 'var(--bg-surface)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <FileText size={16} style={{ color: 'var(--brand-primary)' }} />
+            <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+              Instant Field Update Ingestion & Match
+            </span>
+          </div>
+          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+            Type any site update to test AI Hybrid Match against 34 schedule activities
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <input
+            type="text"
+            className="form-control"
+            placeholder="e.g. Cooling water pipe section near Pump Bay was erected today. Alignment in progress..."
+            value={quickUpdateText}
+            onChange={e => setQuickUpdateText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && quickUpdateText.trim()) {
+                setActiveTab('site-updates');
+              }
+            }}
+            style={{ flex: 1, fontSize: '0.85rem' }}
+          />
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              if (quickUpdateText.trim()) {
+                setActiveTab('site-updates');
+              } else {
+                setActiveTab('site-updates');
+              }
+            }}
+            style={{ fontWeight: 700, whiteSpace: 'nowrap' }}
+          >
+            <Sparkles size={15} />
+            <span>Analyze Update</span>
+          </button>
+        </div>
+      </div>
+
       {/* 1. Industrial Hero Banner matching Reference Screen 1 */}
       <div className="dashboard-hero-banner">
         <div className="dashboard-hero-content">
           <span className="dashboard-hero-subtitle">PROJECT CONTROL CENTER</span>
-          <h1 className="dashboard-hero-title">IOCL Refinery - P4</h1>
+          <h1 className="dashboard-hero-title">IOCL Refinery Expansion - P4</h1>
           <p className="dashboard-hero-desc">
             Live project intelligence from field reality to schedule execution.
           </p>

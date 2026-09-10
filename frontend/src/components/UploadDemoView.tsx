@@ -18,7 +18,13 @@ import {
   Inbox,
   Clock,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck,
+  Sparkles,
+  Search,
+  Activity,
+  UserCheck,
+  Play
 } from 'lucide-react';
 
 export const UploadDemoView: React.FC = () => {
@@ -39,6 +45,7 @@ export const UploadDemoView: React.FC = () => {
     addToast,
     currentRole,
     isGuidedDemoActive,
+    matchResults,
   } = useProject();
 
   const isSupervisor = currentRole === 'supervisor';
@@ -47,6 +54,7 @@ export const UploadDemoView: React.FC = () => {
   const [uploadStatusMsg, setUploadStatusMsg] = useState<string | null>(null);
   const [isActivatingVersion, setIsActivatingVersion] = useState(false);
   const [supervisorSearch, setSupervisorSearch] = useState('');
+  const [simulationActive, setSimulationActive] = useState<string | null>(null);
 
   const scheduleInputRef = useRef<HTMLInputElement>(null);
   const scheduleRevisedInputRef = useRef<HTMLInputElement>(null);
@@ -56,6 +64,13 @@ export const UploadDemoView: React.FC = () => {
   const txtUpdates = siteUpdates.filter(u => u.sourceFile === 'daily_report.txt');
   const xlsxUpdates = siteUpdates.filter(u => u.sourceFile === 'piping_progress.xlsx');
 
+  // Stats calculation
+  const totalUpdates = siteUpdates.length;
+  const matchArray = Object.values(matchResults);
+  const readyCount = matchArray.filter(m => m.category === 'ready').length;
+  const reviewCount = matchArray.filter(m => m.category === 'review').length;
+  const unplannedCount = matchArray.filter(m => m.category === 'unplanned').length;
+
   // Handle schedule master upload (Planner only)
   const handleScheduleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -64,8 +79,8 @@ export const UploadDemoView: React.FC = () => {
     reader.onload = async event => {
       const text = event.target?.result as string;
       await handleCustomUpload({ scheduleCsv: text });
-      setUploadStatusMsg(`Uploaded & parsed ${file.name} successfully.`);
-      setTimeout(() => setUploadStatusMsg(null), 4000);
+      setUploadStatusMsg(`Uploaded & parsed ${file.name} successfully into Master Baseline.`);
+      setTimeout(() => setUploadStatusMsg(null), 5000);
     };
     reader.readAsText(file);
   };
@@ -94,8 +109,9 @@ export const UploadDemoView: React.FC = () => {
     reader.onload = async event => {
       const text = event.target?.result as string;
       await handleCustomUpload({ dailyReportTxt: text });
-      setUploadStatusMsg(`Uploaded & parsed ${file.name} successfully.`);
-      setTimeout(() => setUploadStatusMsg(null), 4000);
+      setUploadStatusMsg(`Ingested ${file.name}: Stored in Daily Reports feed & routed to AI Matching Engine.`);
+      setSelectedPreview('txt');
+      setTimeout(() => setUploadStatusMsg(null), 5000);
     };
     reader.readAsText(file);
   };
@@ -107,8 +123,9 @@ export const UploadDemoView: React.FC = () => {
     reader.onload = async event => {
       const buffer = event.target?.result as ArrayBuffer;
       await handleCustomUpload({ pipingProgressXlsx: buffer });
-      setUploadStatusMsg(`Uploaded & parsed ${file.name} successfully.`);
-      setTimeout(() => setUploadStatusMsg(null), 4000);
+      setUploadStatusMsg(`Ingested ${file.name}: Extracted rows & routed to AI Matching Engine.`);
+      setSelectedPreview('xlsx');
+      setTimeout(() => setUploadStatusMsg(null), 5000);
     };
     reader.readAsArrayBuffer(file);
   };
@@ -120,6 +137,27 @@ export const UploadDemoView: React.FC = () => {
     } finally {
       setIsActivatingVersion(false);
     }
+  };
+
+  const runSimulation = async (type: 'txt' | 'xlsx' | 'ambiguous') => {
+    setSimulationActive(type);
+    if (type === 'txt') {
+      await loadDemoData();
+      setSelectedPreview('txt');
+      setUploadStatusMsg('Simulated daily_report.txt ingestion: 14 items parsed & matched against active baseline.');
+    } else if (type === 'xlsx') {
+      await loadDemoData();
+      setSelectedPreview('xlsx');
+      setUploadStatusMsg('Simulated piping_progress.xlsx ingestion: 18 progress rows parsed & scored.');
+    } else if (type === 'ambiguous') {
+      await loadDemoData();
+      setSelectedPreview('txt');
+      setUploadStatusMsg('Simulated ambiguous log: 3 items scored <75% and flagged for human evaluation.');
+    }
+    setTimeout(() => {
+      setSimulationActive(null);
+      setTimeout(() => setUploadStatusMsg(null), 4000);
+    }, 800);
   };
 
   const activeVersion = activeScheduleVersion || {
@@ -139,194 +177,46 @@ export const UploadDemoView: React.FC = () => {
     },
   };
 
-  // Dedicated Supervisor Read-Only View (when not in guided demo tour)
-  if (isSupervisor && !isGuidedDemoActive) {
-    const filteredSchedule = schedule.filter(act => {
-      if (!supervisorSearch.trim()) return true;
-      const q = supervisorSearch.toLowerCase();
-      return (
-        act.activityId.toLowerCase().includes(q) ||
-        act.activityName.toLowerCase().includes(q) ||
-        act.discipline.toLowerCase().includes(q) ||
-        act.area.toLowerCase().includes(q) ||
-        act.wbs.toLowerCase().includes(q)
-      );
-    });
-
-    return (
-      <div id="demo-target-project-schedule" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {/* Read-Only Banner for Supervisor */}
-        <div className="banner-card">
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-              <span className="brand-badge" style={{ background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7' }}>
-                Field Supervisor Reference
-              </span>
-              <span
-                className="mono-pill"
-                style={{
-                  background: 'var(--status-ready-bg)',
-                  color: 'var(--status-ready-fg)',
-                  borderColor: 'var(--status-ready-border)',
-                  fontWeight: 700,
-                }}
-              >
-                Active Schedule: {activeVersion.versionId}
-              </span>
-            </div>
-            <h1 className="banner-title">
-              <Database size={20} style={{ color: 'var(--brand-primary)' }} />
-              <span>Project Schedule & Activity Reference</span>
-            </h1>
-            <p className="banner-desc">
-              Browse planned activities, WBS milestone identifiers, and execution windows for your workfront. Official schedule baselines are administered by the Lead Planner.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
-            <button
-              className="btn btn-primary"
-              onClick={() => setActiveTab('supervisor-entry')}
-              type="button"
-            >
-              <span>Go to Today's Tasks</span>
-              <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
-
-        {/* Active Schedule Metadata Card (Read-Only) */}
-        <div className="card" style={{ padding: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-sm)', background: 'var(--brand-surface)', color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Calendar size={20} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  {activeVersion.projectId || 'IOCL Refinery - P4'}
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Active Master Schedule • Version {activeVersion.versionId}
-                </span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span className="mono-pill" style={{ fontWeight: 700 }}>
-                {schedule.length} Activities Total
-              </span>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setActiveTab('schedule-activities')}
-                type="button"
-              >
-                <Eye size={13} />
-                <span>Open 4D Gantt View</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Search */}
-          <div className="search-input-box" style={{ marginBottom: '1rem' }}>
-            <input
-              type="text"
-              className="form-input"
-              style={{ width: '100%', fontSize: '0.825rem' }}
-              placeholder="Search planned activities by ID, name, discipline, or area..."
-              value={supervisorSearch}
-              onChange={e => setSupervisorSearch(e.target.value)}
-            />
-          </div>
-
-          {/* Clean Schedule Table */}
-          <div className="table-responsive">
-            <table className="industrial-table">
-              <thead>
-                <tr>
-                  <th>Activity ID</th>
-                  <th>L5 Code</th>
-                  <th>Fingerprint</th>
-                  <th>WBS</th>
-                  <th>Activity Name</th>
-                  <th>Discipline</th>
-                  <th>Area</th>
-                  <th>Planned Window</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSchedule.map(act => (
-                  <tr key={act.activityId}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>
-                      {act.activityId}
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.725rem', color: '#3b82f6' }}>
-                      {act.l5Code || `IOCL.P4.${(act.area || 'UNIT01').replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}.${act.discipline.substring(0, 3).toUpperCase()}.L5.011`}
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                      #{act.taskHash || 'D7A9F4B2'}
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.725rem' }}>{act.wbs}</td>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{act.activityName}</td>
-                    <td><span className="mono-pill">{act.discipline}</span></td>
-                    <td>{act.area}</td>
-                    <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
-                      {act.plannedStart} &rarr; {act.plannedFinish}
-                    </td>
-                    <td>
-                      <span className={`status-badge ${act.status === 'Completed' ? 'ready' : act.status === 'In Progress' ? 'review' : 'unplanned'}`}>
-                        {act.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Top Header matching Reference Screen 2 */}
+      {/* Top Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', paddingBottom: '0.25rem' }}>
         <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+            <span className="mono-pill" style={{ background: 'var(--brand-surface)', color: 'var(--brand-primary)', borderColor: 'var(--border-default)', fontWeight: 700 }}>
+              Live Data Pipeline
+            </span>
+            <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+              Active Baseline: {activeVersion.versionId}
+            </span>
+          </div>
           <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: '0.25rem' }}>
-            Project Schedule
+            Data Ingestion & AI Reconciliation Hub
           </h1>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            Upload, manage and compare project schedules. Keep the field and plan aligned.
+            Upload baseline schedules, supervisor logs, and progress sheets. Watch data ingest, match with AI, and route ambiguous items for human evaluation.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             className="btn btn-secondary btn-sm"
-            onClick={() => setActiveTab('schedule-activities')}
+            onClick={() => setActiveTab('site-updates')}
             type="button"
             style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', fontWeight: 600 }}
           >
-            <span>View Full Schedule</span>
+            <FileText size={13} />
+            <span>View Ingested Feed</span>
           </button>
 
-          <input
-            type="file"
-            ref={scheduleRevisedInputRef}
-            accept=".xlsx,.csv,.xml,.xer"
-            style={{ display: 'none' }}
-            onChange={handleRevisedScheduleUpload}
-          />
           <button
             className="btn btn-primary btn-sm"
-            onClick={() => scheduleRevisedInputRef.current?.click()}
+            onClick={() => setActiveTab('planner-review')}
             type="button"
             style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', fontWeight: 600 }}
           >
-            <FileUp size={13} />
-            <span>Upload New Schedule</span>
+            <ShieldCheck size={13} />
+            <span>AI Review Queue ({reviewCount})</span>
           </button>
         </div>
       </div>
@@ -351,84 +241,202 @@ export const UploadDemoView: React.FC = () => {
         </div>
       )}
 
-      {/* TOP: ACTIVE SCHEDULE CARD */}
-      <div id="demo-target-project-schedule" className="card" style={{ padding: '1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-sm)', background: 'rgba(5, 150, 105, 0.1)', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Database size={18} />
+      {/* =========================================================================
+          SECTION 1: THE 4-STAGE DATA JOURNEY VISUAL STEPPER
+          ========================================================================= */}
+      <div className="card" style={{ padding: '1.25rem', background: 'var(--bg-surface)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div>
+            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--brand-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Execution Lifecycle
             </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Active Schedule
-                </span>
-                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#059669', background: 'rgba(5, 150, 105, 0.12)', padding: '1px 6px', borderRadius: 3 }}>
-                  CURRENT
-                </span>
-              </div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>
-                {activeVersion.versionId} Production Schedule
-              </h3>
-            </div>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>
+              How Uploaded Data Flows Through Datum
+            </h3>
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span
-              className="status-badge ready"
-              style={{ fontWeight: 700, fontSize: '0.725rem' }}
-            >
-              ● Active
-            </span>
-          </div>
+          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+            Deterministic Multi-Factor Processing
+          </span>
         </div>
 
-        {/* Structured Metadata Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', background: 'var(--bg-subtle)', padding: '0.85rem 1.15rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-          <div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Uploaded by</div>
-            <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
-              {activeVersion.uploadedBy || 'Gokulakannan P.'}
+        {/* 4 Connected Flow Columns */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
+          {/* Step 1 */}
+          <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--brand-primary)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.725rem', fontWeight: 800 }}>
+                1
+              </div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Upload / Input Data
+              </div>
+            </div>
+            <p style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              Drop your Primavera P6 XLSX, MS Project CSV, daily supervisor TXT notes, or voice/photo entries.
+            </p>
+            <div style={{ marginTop: 'auto', paddingTop: '0.35rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.675rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <UploadCloud size={12} />
+              <span>Multi-format Ingestion</span>
             </div>
           </div>
 
-          <div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Date</div>
-            <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
-              {activeVersion.uploadedAt || '5 Sep 2026'}
+          {/* Step 2 */}
+          <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#0284c7', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.725rem', fontWeight: 800 }}>
+                2
+              </div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Live Ingestion & Staging
+              </div>
+            </div>
+            <p style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              Parsed into normalized rows with report dates, source line numbers, raw payloads, and SHA-256 evidence hashes.
+            </p>
+            <div style={{ marginTop: 'auto', paddingTop: '0.35rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.675rem', color: '#0284c7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <FileText size={12} />
+              <span>{totalUpdates} Records Ingested</span>
             </div>
           </div>
 
-          <div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Source</div>
-            <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
-              Primavera P6
+          {/* Step 3 */}
+          <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#d97706', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.725rem', fontWeight: 800 }}>
+                3
+              </div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                AI Matching Engine
+              </div>
+            </div>
+            <p style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              Evaluated against baseline activities via 4 factors: Tag & Alias (50%), Discipline (20%), Area (15%), Fuzzy Tokens (15%).
+            </p>
+            <div style={{ marginTop: 'auto', paddingTop: '0.35rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.675rem', color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <CheckCircle2 size={12} />
+              <span>{readyCount} Auto-Matched (&ge;75%)</span>
             </div>
           </div>
 
-          <div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Format</div>
-            <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
-              XLSX
+          {/* Step 4 */}
+          <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#059669', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.725rem', fontWeight: 800 }}>
+                4
+              </div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Human Review & Gate
+              </div>
             </div>
-          </div>
-
-          <div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Activities</div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
-              {(activeVersion.activitiesCount || schedule.length).toLocaleString()}
+            <p style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              Ambiguous items (40–74%) or unlisted scope are escalated with audit evidence to the Lead Planner for approval.
+            </p>
+            <div style={{ marginTop: 'auto', paddingTop: '0.35rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.675rem', color: '#d97706', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <AlertTriangle size={12} />
+              <span>{reviewCount + unplannedCount} In Human Queue</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* MIDDLE TWO-COLUMN GRID: UPLOAD REVISED SCHEDULE & SCHEDULE COMPARISON */}
+      {/* =========================================================================
+          SECTION 2: INTERACTIVE PIPELINE SIMULATION TRIGGERS
+          ========================================================================= */}
+      <div className="card" style={{ padding: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Interactive Ingestion & Matching Simulator
+            </h3>
+            <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+              Test how raw files flow through ingestion, scoring, and human escalation in real time
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => runSimulation('txt')}
+            style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '0.75rem' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-xs)', background: 'var(--status-review-bg)', color: 'var(--status-review-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FileText size={16} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Simulate Daily TXT Log
+                </div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                  14 field updates &rarr; Ingest & Score
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => runSimulation('xlsx')}
+            style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '0.75rem' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-xs)', background: 'var(--status-ready-bg)', color: 'var(--status-ready-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FileSpreadsheet size={16} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Simulate Piping Excel Sheet
+                </div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                  18 progress rows &rarr; Auto-link
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => runSimulation('ambiguous')}
+            style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '0.75rem' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-xs)', background: 'rgba(239, 68, 68, 0.12)', color: 'var(--status-unplanned-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertTriangle size={16} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Simulate Ambiguous Log
+                </div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                  Missing Tag &rarr; Escalates to Planner
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* =========================================================================
+          SECTION 3: ACTIVE SCHEDULE BASELINE & REVISED VERSION DROPZONES
+          ========================================================================= */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '1.25rem' }}>
         {/* Left Column: Upload Revised Schedule */}
         <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
           <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.85rem' }}>
-            Upload Revised Schedule
+            Upload Schedule Revision (P6 / MS Project / CSV)
           </h3>
+
+          <input
+            type="file"
+            ref={scheduleRevisedInputRef}
+            accept=".xlsx,.csv,.xml,.xer"
+            style={{ display: 'none' }}
+            onChange={handleRevisedScheduleUpload}
+          />
 
           {/* Dotted Drag & Drop Box */}
           <div
@@ -477,45 +485,40 @@ export const UploadDemoView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Schedule Comparison */}
+        {/* Right Column: Active Schedule Status */}
         <div id="demo-target-version-control" className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                Schedule Comparison
-              </h3>
-              <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>5 Sep 2026</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span className="status-badge ready" style={{ fontSize: '0.675rem' }}>● Active Master</span>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {activeVersion.versionId}
+                </h3>
+              </div>
+              <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>{activeVersion.uploadedAt}</span>
             </div>
 
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.85rem' }}>
-              Rev-02 &rarr; Rev-03
+            <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', marginBottom: '0.85rem' }}>
+              <strong>{activeVersion.projectId || 'IOCL Refinery - P4'}</strong> • {schedule.length} Master Activities
             </div>
 
             {/* Comparison Metrics List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.775rem', color: '#059669', fontWeight: 600 }}>
-                <span style={{ fontSize: '0.9rem', fontWeight: 800 }}>+</span>
-                <span>12 New Activities</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', background: 'var(--bg-subtle)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Baseline Scope</span>
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{schedule.length} Milestones</span>
               </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.775rem', color: '#2563eb', fontWeight: 600 }}>
-                <span style={{ fontSize: '0.9rem', fontWeight: 800 }}>~</span>
-                <span>27 Modified Activities</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Auto-Matched Updates</span>
+                <span style={{ fontWeight: 700, color: 'var(--status-ready-fg)' }}>{readyCount} updates</span>
               </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.775rem', color: '#d97706', fontWeight: 600 }}>
-                <span style={{ fontSize: '0.9rem', fontWeight: 800 }}>~</span>
-                <span>41 Date Changes</span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.775rem', color: '#dc2626', fontWeight: 600 }}>
-                <span style={{ fontSize: '0.9rem', fontWeight: 800 }}>−</span>
-                <span>3 Removed Activities</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Pending Human Review</span>
+                <span style={{ fontWeight: 700, color: 'var(--status-review-fg)' }}>{reviewCount + unplannedCount} items</span>
               </div>
             </div>
           </div>
 
-          {/* Comparison Actions */}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem' }}>
             <button
               type="button"
@@ -523,83 +526,23 @@ export const UploadDemoView: React.FC = () => {
               style={{ flex: 1, padding: '0.4rem', fontSize: '0.725rem', justifyContent: 'center' }}
               onClick={() => setActiveTab('schedule-activities')}
             >
-              View Detailed Changes
+              Open 4D Gantt View
             </button>
             <button
               type="button"
               className="btn btn-primary btn-sm"
               style={{ flex: 1, padding: '0.4rem', fontSize: '0.725rem', justifyContent: 'center' }}
-              onClick={() => handleVersionActivate('Rev-03')}
-              disabled={isActivatingVersion}
+              onClick={() => setActiveTab('planner-review')}
             >
-              {isActivatingVersion ? 'Activating...' : 'Activate Schedule'}
+              Reconcile Matches
             </button>
           </div>
         </div>
       </div>
 
-      {/* BOTTOM: SCHEDULE VERSIONS TABLE */}
-      <div className="card" style={{ padding: '1.25rem' }}>
-        <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.85rem' }}>
-          Schedule Versions
-        </h3>
-
-        <div className="table-responsive">
-          <table className="industrial-table">
-            <thead>
-              <tr>
-                <th>Version</th>
-                <th>Date Uploaded</th>
-                <th>Uploaded By</th>
-                <th>Activities</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scheduleVersions.map(ver => {
-                const isActive = ver.isActive;
-                return (
-                  <tr key={ver.versionId}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)', fontSize: '0.8rem' }}>
-                      {ver.versionId}
-                    </td>
-                    <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
-                      {ver.uploadedAt}
-                    </td>
-                    <td style={{ fontSize: '0.775rem', color: 'var(--text-primary)' }}>
-                      {ver.uploadedBy}
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.775rem' }}>
-                      {ver.activitiesCount?.toLocaleString() || '1,248'}
-                    </td>
-                    <td>
-                      <span
-                        className={`status-badge ${isActive ? 'ready' : 'rejected'}`}
-                        style={{ fontSize: '0.675rem' }}
-                      >
-                        {isActive ? 'Active' : 'Archived'}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setActiveTab('schedule-activities')}
-                        style={{ padding: '0.25rem 0.55rem', fontSize: '0.7rem' }}
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* SECTION 4: DATASET INGESTION & UPLOAD DROPZONES */}
+      {/* =========================================================================
+          SECTION 4: DATASET INGESTION DROPZONES (SCHEDULE, TXT, EXCEL)
+          ========================================================================= */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
         {/* Schedule Master */}
         <div className="card" style={{ padding: '1.15rem', display: 'flex', flexDirection: 'column' }}>
@@ -630,7 +573,7 @@ export const UploadDemoView: React.FC = () => {
               type="button"
             >
               <Eye size={13} />
-              <span>Preview Data</span>
+              <span>Preview Baseline</span>
             </button>
 
             <input
@@ -661,7 +604,7 @@ export const UploadDemoView: React.FC = () => {
               </div>
               <div>
                 <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>daily_report.txt</h4>
-                <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>Field Supervisor Log</span>
+                <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>Supervisor Field Logs</span>
               </div>
             </div>
             <span className="mono-pill" style={{ fontWeight: 700 }}>
@@ -670,7 +613,7 @@ export const UploadDemoView: React.FC = () => {
           </div>
 
           <p style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', flex: 1, marginBottom: '0.85rem', lineHeight: 1.4 }}>
-            Unstructured daily log entries containing supervisor work notes, progress statements, and informal terminology.
+            Unstructured daily log entries containing supervisor work notes, progress statements, and informal site terminology.
           </p>
 
           <div style={{ display: 'flex', gap: '0.45rem' }}>
@@ -681,7 +624,7 @@ export const UploadDemoView: React.FC = () => {
               type="button"
             >
               <Eye size={13} />
-              <span>Preview Data</span>
+              <span>Preview Ingested</span>
             </button>
 
             <input
@@ -712,7 +655,7 @@ export const UploadDemoView: React.FC = () => {
               </div>
               <div>
                 <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>piping_progress.xlsx</h4>
-                <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>Discipline Tracker</span>
+                <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>Discipline Excel Sheet</span>
               </div>
             </div>
             <span className="mono-pill" style={{ fontWeight: 700 }}>
@@ -732,7 +675,7 @@ export const UploadDemoView: React.FC = () => {
               type="button"
             >
               <Eye size={13} />
-              <span>Preview Data</span>
+              <span>Preview Ingested</span>
             </button>
 
             <input
@@ -755,25 +698,44 @@ export const UploadDemoView: React.FC = () => {
         </div>
       </div>
 
-      {/* Ingested Data Preview Table */}
+      {/* =========================================================================
+          SECTION 5: INGESTED DATA PREVIEW TABLE
+          ========================================================================= */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '0.85rem 1.15rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-            Data Preview &mdash;{' '}
-            {selectedPreview === 'schedule'
-              ? 'Schedule Master Baseline'
-              : selectedPreview === 'txt'
-              ? 'Daily Report Free-Text Entries'
-              : 'Piping Progress Excel Rows'}
-          </h3>
+        <div style={{ padding: '0.85rem 1.15rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Staged Data Preview &mdash;{' '}
+              {selectedPreview === 'schedule'
+                ? 'Master Schedule Baseline'
+                : selectedPreview === 'txt'
+                ? 'Ingested Field Daily Report Log'
+                : 'Ingested Piping Progress Excel Rows'}
+            </h3>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+              {selectedPreview === 'schedule' ? 'Active master activities in memory' : 'Raw updates staged in database and processed by AI engine'}
+            </span>
+          </div>
 
-          <span className="mono-pill">
-            {selectedPreview === 'schedule'
-              ? `${schedule.length} items`
-              : selectedPreview === 'txt'
-              ? `${txtUpdates.length} items`
-              : `${xlsxUpdates.length} items`}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="mono-pill">
+              {selectedPreview === 'schedule'
+                ? `${schedule.length} activities`
+                : selectedPreview === 'txt'
+                ? `${txtUpdates.length} staged records`
+                : `${xlsxUpdates.length} staged rows`}
+            </span>
+            {selectedPreview !== 'schedule' && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setActiveTab('site-updates')}
+                style={{ padding: '0.25rem 0.55rem', fontSize: '0.7rem' }}
+              >
+                Open in Daily Feed
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="table-responsive" style={{ maxHeight: 360, overflowY: 'auto' }}>
@@ -783,7 +745,6 @@ export const UploadDemoView: React.FC = () => {
                 <tr>
                   <th>Activity ID</th>
                   <th>L5 Code</th>
-                  <th>Fingerprint</th>
                   <th>WBS</th>
                   <th>Activity Name</th>
                   <th>Discipline</th>
@@ -798,9 +759,6 @@ export const UploadDemoView: React.FC = () => {
                     <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>{act.activityId}</td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.725rem', color: '#3b82f6' }}>
                       {act.l5Code || `IOCL.P4.${(act.area || 'UNIT01').replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}.${act.discipline.substring(0, 3).toUpperCase()}.L5.011`}
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                      #{act.taskHash || 'D7A9F4B2'}
                     </td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.725rem' }}>{act.wbs}</td>
                     <td style={{ fontWeight: 600 }}>{act.activityName}</td>
@@ -817,30 +775,43 @@ export const UploadDemoView: React.FC = () => {
               <thead>
                 <tr>
                   <th>Update ID</th>
-                  <th>Date</th>
+                  <th>Report Date</th>
                   <th>Discipline</th>
                   <th>Area</th>
                   <th>Status</th>
                   <th>Raw Extracted Text</th>
-                  <th>Line/Row #</th>
+                  <th>Line #</th>
+                  <th>AI Match Category</th>
                 </tr>
               </thead>
               <tbody>
-                {(selectedPreview === 'txt' ? txtUpdates : xlsxUpdates).map(u => (
-                  <tr key={u.id}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>{u.id}</td>
-                    <td style={{ fontSize: '0.775rem' }}>{u.reportDate}</td>
-                    <td><span className="mono-pill">{u.discipline}</span></td>
-                    <td>{u.area || '—'}</td>
-                    <td>
-                      <span className="status-badge ready">
-                        {u.eventStatus}
-                      </span>
-                    </td>
-                    <td style={{ maxWidth: 320, fontSize: '0.825rem', fontWeight: 600 }}>{u.rawText}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.725rem' }}>#{u.lineEvidence || '—'}</td>
-                  </tr>
-                ))}
+                {(selectedPreview === 'txt' ? txtUpdates : xlsxUpdates).map(u => {
+                  const match = matchResults[u.id];
+                  const category = match?.category || 'unplanned';
+                  return (
+                    <tr key={u.id}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>{u.id}</td>
+                      <td style={{ fontSize: '0.775rem' }}>{u.reportDate}</td>
+                      <td><span className="mono-pill">{u.discipline}</span></td>
+                      <td>{u.area || '—'}</td>
+                      <td>
+                        <span className={`status-badge ${u.eventStatus === 'Completed' ? 'ready' : 'review'}`}>
+                          {u.eventStatus}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: 300, fontSize: '0.8rem', fontWeight: 600 }}>{u.rawText}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.725rem' }}>#{u.lineEvidence || '—'}</td>
+                      <td>
+                        <span
+                          className={`status-badge ${category === 'ready' ? 'ready' : category === 'review' ? 'review' : 'unplanned'}`}
+                          style={{ fontSize: '0.7rem' }}
+                        >
+                          {category === 'ready' ? '✓ Auto-Match' : category === 'review' ? '⚠️ Planner Review' : '✕ Unplanned Scope'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -849,4 +820,3 @@ export const UploadDemoView: React.FC = () => {
     </div>
   );
 };
-

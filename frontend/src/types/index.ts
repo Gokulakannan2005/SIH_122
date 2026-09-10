@@ -1,4 +1,4 @@
-export type NavigationTab = 'home' | 'dashboard' | 'site-updates' | 'schedule-activities' | 'planner-review' | 'upload' | 'supervisor-entry' | 'copilot';
+export type NavigationTab = 'home' | 'dashboard' | 'site-updates' | 'schedule-activities' | 'planner-review' | 'upload' | 'supervisor-entry' | 'copilot' | 'audit-trail';
 
 export type AppSystemMode = 'enterprise' | 'executive';
 
@@ -317,14 +317,18 @@ export interface SpokenParseResult {
   normalizedTranscript?: string;
   cleanDescription: string;
   extractedDescription?: string;
-  discipline: string;
+  discipline?: string;
   extractedDiscipline?: string;
-  area: string;
+  isDisciplineDetected?: boolean;
+  area?: string;
   extractedArea?: string;
-  eventStatus: EventStatus;
+  isAreaDetected?: boolean;
+  eventStatus?: EventStatus;
   extractedStatus?: EventStatus;
+  isStatusDetected?: boolean;
   detectedTag?: string;
   extractedTag?: string;
+  isTagDetected?: boolean;
   quantity?: string;
   extractedQuantity?: string;
   unit?: string;
@@ -336,6 +340,8 @@ export interface SpokenParseResult {
   confidenceScore: number;
   confidence?: number;
   language: 'en-IN' | 'hi-IN' | 'ta-IN';
+  missingFields?: string[];
+  warnings?: string[];
 }
 
 export type GuidedDemoStepId =
@@ -368,6 +374,10 @@ export interface GuidedDemoStep {
   tagline?: string;
   description: string;
   explanationWhy?: string;
+  whatIsHappening?: string;
+  whyItMatters?: string;
+  whatToInteract?: string;
+  whatToNotice?: string;
   targetTab: NavigationTab;
   targetSelector: string;
   cardPlacement?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left' | 'right' | 'left' | 'center';

@@ -193,12 +193,15 @@ export function parseSpokenUpdate(
 ): SpokenParseResult {
   const normalized = normalizeSpokenText(rawTranscript);
   const lower = normalized.toLowerCase();
+  const warnings: string[] = [];
+  const missingFields: string[] = [];
 
   // -------------------------------------------------------------
   // 1. DISCIPLINE RECOGNITION (Covers Piping, Civil, Electrical, Instrumentation, HSE, Mechanical, Scaffolding)
   // -------------------------------------------------------------
-  let discipline = 'Piping';
-  let disciplineConfidence = 60;
+  let discipline: string | undefined = undefined;
+  let disciplineConfidence = 0;
+  let isDisciplineDetected = false;
 
   if (
     /(pipe|piping|spool|flange|weld|welding|hydrotest|fit-up|fittings|valve|inch-dia|joint|tie-in|paiping|isometrics|पाइपिंग|पाइप|स्पूल|वेल्ड|वेल्डिंग|फ्लैंज|हाइड्रोटेस्ट|பைப்|குழாய்|இணைப்பு|வெல்டிங்|கசிவு)/i.test(
@@ -208,6 +211,7 @@ export function parseSpokenUpdate(
   ) {
     discipline = 'Piping';
     disciplineConfidence = 95;
+    isDisciplineDetected = true;
   } else if (
     /(civil|concrete|concreting|excavation|foundation|puddle|trench|raft|rebar|shuttering|casting|reinforcement|backfill|plinth|curing|paving|masonry|slab|dhalai|sariya|सिविल|कंक्रीट|खुदाई|नींव|फाउंडेशन|ढलाई|सरिया|ராப்ட்|அடித்தளம்|கான்கிரீட்|குழி|கம்பி)/i.test(
       lower
@@ -216,6 +220,7 @@ export function parseSpokenUpdate(
   ) {
     discipline = 'Civil';
     disciplineConfidence = 95;
+    isDisciplineDetected = true;
   } else if (
     /(electrical|cable|tray|conduit|mcc|switchgear|transformer|earthing|termination|feeder|wire|pulling|gland|swg|breaker|substation|high tension|ht|lt|इलेक्ट्रिकल|केबल|ट्रे|एमसीसी|स्विचगियर|மின்சாரம்|வடம்|டிரே)/i.test(
       lower
@@ -224,6 +229,7 @@ export function parseSpokenUpdate(
   ) {
     discipline = 'Electrical';
     disciplineConfidence = 95;
+    isDisciplineDetected = true;
   } else if (
     /(instrumentation|sensor|transmitter|pt-|lt-|tt-|fit-|calibration|tubing|loop|junction box|jb|gauge|scada|dcs|plc|इन्स्ट्रुमेंटेशन|ट्रांसमीटर|கருவி|சென்சார்|அளவீடு)/i.test(
       lower
@@ -232,6 +238,7 @@ export function parseSpokenUpdate(
   ) {
     discipline = 'Instrumentation';
     disciplineConfidence = 95;
+    isDisciplineDetected = true;
   } else if (
     /(safety|hse|hazard|permit|ppe|barrier|incident|fire|spill|toolbox|loto|quarantine|suraksha|सुरक्षा|एचएसई|खतरा|பாதுகாப்பு|அபாயம்|விபத்து)/i.test(
       lower
@@ -240,6 +247,7 @@ export function parseSpokenUpdate(
   ) {
     discipline = 'HSE';
     disciplineConfidence = 95;
+    isDisciplineDetected = true;
   } else if (
     /(mechanical|pump|compressor|blower|turbine|alignment|coupling|skid|crane|hoist|rigging|eot|यांत्रिक|மெக்கானிக்கல்)/i.test(
       lower
@@ -247,6 +255,7 @@ export function parseSpokenUpdate(
   ) {
     discipline = 'Mechanical';
     disciplineConfidence = 90;
+    isDisciplineDetected = true;
   } else if (
     /(scaffold|scaffolding|cuplok|staging|erecting platform|पाड़|செப்பனிடுதல்)/i.test(
       lower
@@ -254,13 +263,20 @@ export function parseSpokenUpdate(
   ) {
     discipline = 'Scaffolding';
     disciplineConfidence = 90;
+    isDisciplineDetected = true;
+  }
+
+  if (!isDisciplineDetected) {
+    missingFields.push('discipline');
+    warnings.push('Discipline not identified in spoken transcript. Please select manually.');
   }
 
   // -------------------------------------------------------------
   // 2. EVENT STATUS RECOGNITION (Started, In Progress, Completed, On Hold, Delayed)
   // -------------------------------------------------------------
   let eventStatus: EventStatus = 'In Progress';
-  let statusConfidence = 70;
+  let statusConfidence = 60;
+  let isStatusDetected = false;
 
   if (
     /(completed|done|finished|erected|poured|cleared|installed|ready|100 percent|100%|welded|casted|tested|commissioned|ho gaya|khatam|poora|complete hua|mudinjadhu|mudinthadhu|முடிந்தது|முடிவடைந்தது|பூர்த்தி)/i.test(
@@ -269,6 +285,7 @@ export function parseSpokenUpdate(
   ) {
     eventStatus = 'Completed';
     statusConfidence = 95;
+    isStatusDetected = true;
   } else if (
     /(started|commenced|begun|initiated|mobilized|start hua|shuru|shuruat|aarambham|aarambichom|ஆரம்பமானது|துவங்கியது|தொடக்கம்)/i.test(
       lower
@@ -276,6 +293,7 @@ export function parseSpokenUpdate(
   ) {
     eventStatus = 'Started';
     statusConfidence = 95;
+    isStatusDetected = true;
   } else if (
     /(in progress|ongoing|pulling|welding|pouring|running|working|carrying out|underway|continuing|chal raha|progress mein|nadakudhu|nadandhukittu|நடைபெறுகிறது|செயலில்)/i.test(
       lower
@@ -283,82 +301,109 @@ export function parseSpokenUpdate(
   ) {
     eventStatus = 'In Progress';
     statusConfidence = 90;
+    isStatusDetected = true;
   }
 
   // -------------------------------------------------------------
   // 3. EQUIPMENT TAG & LINE NUMBER DETECTION
   // -------------------------------------------------------------
   let detectedTag: string | undefined = undefined;
+  let isTagDetected = false;
   const candidateTags = extractCandidateTags(normalized);
   if (candidateTags.length > 0) {
     detectedTag = candidateTags[0];
+    isTagDetected = true;
   } else {
     // Intelligent Domain Keyword Mappings
     if (lower.includes('24-cw-017') || lower.includes('cw-017') || lower.includes('cw 017') || lower.includes('cooling water') || lower.includes('cooling-water')) {
       detectedTag = '24-CW-017';
+      isTagDetected = true;
     } else if (lower.includes('18-fw-008') || lower.includes('fw-008') || lower.includes('fire water') || lower.includes('firewater')) {
       detectedTag = '18-FW-008';
+      isTagDetected = true;
     } else if (lower.includes('civ-l6-002') || lower.includes('pump foundation') || lower.includes('raft foundation') || lower.includes('pump bay civil')) {
       detectedTag = 'CIV-L6-002';
+      isTagDetected = true;
     } else if (lower.includes('ele-l6-021') || lower.includes('mcc-415v') || lower.includes('mcc 415') || lower.includes('switchgear panel') || lower.includes('415v')) {
       detectedTag = 'MCC-415V';
+      isTagDetected = true;
     } else if (lower.includes('50t-crane-01') || lower.includes('crane-01') || lower.includes('50 ton crane') || lower.includes('crane breakdown')) {
       detectedTag = '50T-CRANE-01';
+      isTagDetected = true;
     } else if (lower.includes('pip-l6-012')) {
       detectedTag = 'PIP-L6-012';
+      isTagDetected = true;
     } else if (lower.includes('ins-l6-031') || lower.includes('pt-2401') || lower.includes('pressure transmitter')) {
       detectedTag = 'PT-2401';
+      isTagDetected = true;
     }
   }
 
   // -------------------------------------------------------------
   // 4. SPATIAL WORKFRONT / AREA RESOLUTION
   // -------------------------------------------------------------
-  let area = 'Utility Yard';
+  let area: string | undefined = undefined;
+  let isAreaDetected = false;
+
   if (
     /(pump bay|pump house|pump foundation|cooling water pump|पंप बे|पंप|பம்ப பே|பம்பு)/i.test(
       lower
     )
   ) {
     area = 'Pump Bay';
+    isAreaDetected = true;
   } else if (
     /(pipe rack|rack|tier-2|tier 2|tier-1|pipe bridge|पाइप रैक|ரெக்)/i.test(lower)
   ) {
     area = 'Pipe Rack';
+    isAreaDetected = true;
   } else if (
     /(substation|switchgear room|mcc room|control room|swg room|सबस्टेशन|कंट्रोल रूम|துணை மின்நிலையம்)/i.test(
       lower
     )
   ) {
     area = 'Substation';
+    isAreaDetected = true;
   } else if (
     /(tank farm|tank area|storage tank|oil tank|टैंक फार्म|தொட்டி)/i.test(lower)
   ) {
     area = 'Tank Farm';
+    isAreaDetected = true;
   } else if (
     /(cable trench|trench|duct bank|conduit run|ट्रेंच|नाला)/i.test(lower)
   ) {
     area = 'Cable Trench';
+    isAreaDetected = true;
   } else if (
     /(boiler house|boiler structure|steam gen|बॉयलर)/i.test(lower)
   ) {
     area = 'Boiler House';
+    isAreaDetected = true;
   } else if (
     /(turbine building|turbine hall|tg building|टर्बाइन)/i.test(lower)
   ) {
     area = 'Turbine Building';
+    isAreaDetected = true;
   } else if (
     /(cooling tower|ct area|कूलिंग टावर)/i.test(lower)
   ) {
     area = 'Cooling Tower';
+    isAreaDetected = true;
   } else if (
     /(switchyard|yard 400kv|yard 220kv|स्विचयार्ड)/i.test(lower)
   ) {
     area = 'Switchyard';
+    isAreaDetected = true;
   } else if (
-    /(utility yard|yard|यूनिट|யார்டு)/i.test(lower)
+    /(utility yard|fabrication yard|स्टॉक यार्ड|யார்டு)/i.test(lower)
   ) {
     area = 'Utility Yard';
+    isAreaDetected = true;
+  }
+
+  if (!isAreaDetected) {
+    missingFields.push('area');
+    warnings.push('Workfront area not specified. Please assign area from dropdown.');
   }
 
   // -------------------------------------------------------------
@@ -416,15 +461,19 @@ export function parseSpokenUpdate(
   // 7. STRUCTURED PROJECT CONTROLS DESCRIPTION SYNTHESIS
   // -------------------------------------------------------------
   let cleanDescription = rawTranscript.trim();
-  if (detectedTag || discipline) {
+  if (isDisciplineDetected || detectedTag) {
+    const disciplinePart = discipline || 'Field Work';
+    const areaPart = area ? ` in ${area}` : '';
+    const tagPart = detectedTag ? ` on tag ${detectedTag}` : '';
     const qtyPart = quantity ? ` [Quantity: ${quantity} ${unit || ''}]` : '';
     const issuePart = isIssue ? ` ⚠️ Blocker Flagged: ${issueDescription || 'Site Hold Reported'}` : '';
-    cleanDescription = `${discipline} progress in ${area}: ${eventStatus} activities on ${detectedTag ? `tag ${detectedTag}` : 'milestone package'}${qtyPart}.${issuePart}`;
+    cleanDescription = `${disciplinePart} progress${areaPart}: ${eventStatus} activities${tagPart}${qtyPart}.${issuePart}`;
   }
 
-  const tagConfidence = detectedTag ? 100 : 65;
+  const tagConfidence = detectedTag ? 100 : 40;
+  const areaConfidence = isAreaDetected ? 90 : 20;
   const computedConfidence = Math.round(
-    disciplineConfidence * 0.35 + statusConfidence * 0.35 + tagConfidence * 0.30
+    disciplineConfidence * 0.35 + statusConfidence * 0.25 + tagConfidence * 0.25 + areaConfidence * 0.15
   );
 
   return {
@@ -433,12 +482,16 @@ export function parseSpokenUpdate(
     language,
     discipline,
     extractedDiscipline: discipline,
+    isDisciplineDetected,
     eventStatus,
     extractedStatus: eventStatus,
+    isStatusDetected,
     area,
     extractedArea: area,
+    isAreaDetected,
     detectedTag: detectedTag ? normalizeEquipmentTag(detectedTag) : undefined,
     extractedTag: detectedTag ? normalizeEquipmentTag(detectedTag) : undefined,
+    isTagDetected,
     quantity,
     extractedQuantity: quantity,
     unit,
@@ -451,5 +504,7 @@ export function parseSpokenUpdate(
     issueSeverity: severity,
     confidenceScore: computedConfidence,
     confidence: computedConfidence,
+    missingFields,
+    warnings,
   };
 }

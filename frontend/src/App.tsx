@@ -20,6 +20,8 @@ import { DemoSpotlightOverlay } from './components/DemoSpotlightOverlay';
 import { DemoCompletionModal } from './components/DemoCompletionModal';
 import { CommandPaletteModal } from './components/CommandPaletteModal';
 import { LoginView } from './components/LoginView';
+import { AuditTrailView } from './components/AuditTrailView';
+import { GuidedDemoWalkthroughView } from './components/GuidedDemoWalkthroughView';
 import { GUIDED_DEMO_STEPS } from './utils/guidedDemoData';
 
 const AppContent: React.FC = () => {
@@ -83,6 +85,7 @@ const AppContent: React.FC = () => {
               {activeTab === 'site-updates' && <SiteUpdatesView />}
               {activeTab === 'schedule-activities' && <ScheduleActivitiesView />}
               {activeTab === 'planner-review' && <PlannerReviewView />}
+              {activeTab === 'audit-trail' && <AuditTrailView />}
               {activeTab === 'supervisor-entry' && <SupervisorEntryView />}
               {activeTab === 'copilot' && <CopilotView />}
               {activeTab === 'upload' && <UploadDemoView />}
@@ -91,9 +94,21 @@ const AppContent: React.FC = () => {
         </>
       )}
 
+      {/* Full Dedicated Interactive Presentation Walkthrough (Steps 1 to 11 + Summary) */}
+      {isGuidedDemoActive && (
+        <GuidedDemoWalkthroughView
+          currentStepIndex={guidedDemoStepIndex}
+          onNext={nextGuidedDemoStep}
+          onPrev={prevGuidedDemoStep}
+          onJumpToStep={jumpToGuidedDemoStep}
+          onRestart={startGuidedDemo}
+          onExit={exitGuidedDemo}
+        />
+      )}
+
       {/* Onboarding Welcome Prompt Modal */}
       <GuidedDemoModal
-        isOpen={startupComplete && isWelcomeModalOpen}
+        isOpen={startupComplete && isWelcomeModalOpen && !isGuidedDemoActive}
         onStartDemo={startGuidedDemo}
         onExploreWorkspace={() => {
           localStorage.setItem('datum_onboarding_dismissed', 'true');
@@ -103,26 +118,6 @@ const AppContent: React.FC = () => {
           localStorage.setItem('datum_onboarding_dismissed', 'true');
           setIsWelcomeModalOpen(false);
         }}
-      />
-
-      {/* Interactive Game-Tutorial Spotlight Overlay & Contextual Instruction Card */}
-      {isGuidedDemoActive && currentGuidedDemoStep && (
-        <DemoSpotlightOverlay
-          currentStep={currentGuidedDemoStep}
-          currentStepIndex={guidedDemoStepIndex}
-          totalSteps={GUIDED_DEMO_STEPS.length}
-          onNext={nextGuidedDemoStep}
-          onPrev={prevGuidedDemoStep}
-          onSkip={exitGuidedDemo}
-          onJumpToTab={setActiveTab}
-        />
-      )}
-
-      {/* Demo Completion Success Modal */}
-      <DemoCompletionModal
-        isOpen={isDemoCompletionModalOpen}
-        onReplayDemo={startGuidedDemo}
-        onExploreWorkspace={() => setIsDemoCompletionModalOpen(false)}
       />
 
       {/* Command Palette Modal (Ctrl + K) */}

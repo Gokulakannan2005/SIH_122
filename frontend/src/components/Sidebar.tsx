@@ -20,7 +20,9 @@ import {
   RotateCcw,
   Calendar,
   AlertCircle,
-  CheckSquare
+  CheckSquare,
+  UploadCloud,
+  ShieldCheck,
 } from 'lucide-react';
 import { NavigationTab } from '../types';
 
@@ -189,225 +191,86 @@ export const Sidebar: React.FC = () => {
 
       {/* Primary Navigation Links */}
       <nav className="sidebar-nav" style={{ padding: '0.5rem 0.65rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', flex: 1, overflowY: 'auto' }}>
-        {/* Field Supervisor Navigation */}
-        {isSupervisor ? (
-          <>
-            {/* MAIN Category */}
-            <div>
-              <span className="sidebar-category-label">MAIN</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill supervisor ${activeTab === 'home' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('home')}
-                >
-                  <Home size={15} />
-                  <span>Overview</span>
-                </button>
+        <div>
+          <span className="sidebar-category-label">CORE WORKFLOW</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* 1. Dashboard */}
+            <button
+              type="button"
+              className={`sidebar-nav-pill ${activeTab === 'dashboard' ? 'active' : ''}`}
+              onClick={() => handleTabClick('dashboard')}
+              title="Overview & Executive Control Center"
+            >
+              <LayoutDashboard size={15} />
+              <span>1. Dashboard</span>
+            </button>
 
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill supervisor ${activeTab === 'supervisor-entry' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('supervisor-entry')}
-                >
-                  <CheckSquare size={15} />
-                  <span>My Tasks</span>
-                  <span className="sidebar-badge">4</span>
-                </button>
+            {/* 2. Updates / Analyze */}
+            <button
+              type="button"
+              className={`sidebar-nav-pill ${activeTab === 'site-updates' ? 'active' : ''}`}
+              onClick={() => handleTabClick('site-updates')}
+              title="Input, extract, and analyze unstructured field updates"
+            >
+              <FileText size={15} />
+              <span>2. Updates / Analyze</span>
+              <span className="sidebar-badge live">AI Match</span>
+            </button>
 
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill supervisor`}
-                  onClick={() => {
-                    handleTabClick('supervisor-entry');
-                    const el = document.getElementById('field-submission-studio');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                >
-                  <FileText size={15} />
-                  <span>Submit Field Update</span>
-                </button>
+            {/* 3. Review Queue */}
+            <button
+              type="button"
+              className={`sidebar-nav-pill ${activeTab === 'planner-review' ? 'active' : ''}`}
+              onClick={() => handleTabClick('planner-review')}
+              title="Human-in-the-loop review workbench for ambiguous updates"
+            >
+              <FileCheck2 size={15} />
+              <span>3. Review Queue</span>
+              <span className="sidebar-badge amber">Review</span>
+            </button>
 
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill supervisor`}
-                  onClick={() => {
-                    handleTabClick('supervisor-entry');
-                    const el = document.getElementById('field-submission-studio');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                >
-                  <Camera size={15} />
-                  <span>Evidence Capture</span>
-                </button>
+            {/* 4. Schedule */}
+            <button
+              type="button"
+              className={`sidebar-nav-pill ${activeTab === 'schedule-activities' ? 'active' : ''}`}
+              onClick={() => handleTabClick('schedule-activities')}
+              title="Structured schedule activities and Planned vs Actual progress"
+            >
+              <Calendar size={15} />
+              <span>4. Schedule</span>
+            </button>
 
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill supervisor ${activeTab === 'site-updates' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('site-updates')}
-                >
-                  <FileText size={15} />
-                  <span>Daily Reports</span>
-                </button>
-              </div>
-            </div>
-
-            {/* PROJECT Category */}
-            <div>
-              <span className="sidebar-category-label">PROJECT</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill supervisor ${activeTab === 'schedule-activities' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('schedule-activities')}
-                >
-                  <Calendar size={15} />
-                  <span>Project Schedule</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill supervisor ${activeTab === 'upload' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('upload')}
-                >
-                  <RotateCcw size={15} />
-                  <span>Schedule Updates</span>
-                  <span className="sidebar-badge amber">2</span>
-                </button>
-              </div>
-            </div>
-
-            {/* ANALYSIS Category */}
-            <div>
-              <span className="sidebar-category-label">ANALYSIS</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill supervisor ${activeTab === 'dashboard' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('dashboard')}
-                >
-                  <LayoutDashboard size={15} />
-                  <span>Project Control Center</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill supervisor ${activeTab === 'copilot' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('copilot')}
-                >
-                  <Sliders size={15} />
-                  <span>Delay Simulator</span>
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          /* Lead Planner Navigation */
-          <>
-            {/* MAIN Category */}
-            <div>
-              <span className="sidebar-category-label">MAIN</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill ${activeTab === 'home' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('home')}
-                >
-                  <Home size={15} />
-                  <span>Overview</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill ${activeTab === 'upload' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('upload')}
-                >
-                  <Database size={15} />
-                  <span>Project Schedule</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill ${activeTab === 'planner-review' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('planner-review')}
-                >
-                  <FileCheck2 size={15} />
-                  <span>Field Submissions</span>
-                  <span className="sidebar-badge">12</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill ${activeTab === 'planner-review' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('planner-review')}
-                >
-                  <Layers size={15} />
-                  <span>Reconciliation</span>
-                </button>
-              </div>
-            </div>
-
-            {/* ANALYSIS Category */}
-            <div>
-              <span className="sidebar-category-label">ANALYSIS</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill ${activeTab === 'dashboard' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('dashboard')}
-                >
-                  <LayoutDashboard size={15} />
-                  <span>Project Control Center</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill ${activeTab === 'copilot' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('copilot')}
-                >
-                  <Sliders size={15} />
-                  <span>Delay Simulator</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill ${activeTab === 'site-updates' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('site-updates')}
-                >
-                  <TrendingUp size={15} />
-                  <span>Reports & Insights</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`sidebar-nav-pill ${activeTab === 'schedule-activities' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('schedule-activities')}
-                >
-                  <Calendar size={15} />
-                  <span>4D Gantt & Milestones</span>
-                </button>
-              </div>
-            </div>
-          </>
-        )}
+            {/* 5. Audit Trail */}
+            <button
+              type="button"
+              className={`sidebar-nav-pill ${activeTab === 'audit-trail' ? 'active' : ''}`}
+              onClick={() => handleTabClick('audit-trail')}
+              title="Complete chronological decision provenance and audit log"
+            >
+              <ShieldCheck size={15} />
+              <span>5. Audit Trail</span>
+            </button>
+          </div>
+        </div>
 
         {/* Guided Demo Launch Banner in Sidebar */}
-        <div style={{ marginTop: '0.4rem', padding: '0.65rem', background: 'rgba(255, 255, 255, 0.04)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-            <Compass size={13} style={{ color: '#60a5fa' }} />
-            <span style={{ fontSize: '0.725rem', fontWeight: 700, color: '#f1f5f9' }}>
-              Interactive Walkthrough
+        <div style={{ marginTop: 'auto', padding: '0.75rem', background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(16, 185, 129, 0.12))', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <Compass size={14} style={{ color: '#60a5fa' }} />
+            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f1f5f9' }}>
+              SIH Presentation Tour
             </span>
           </div>
-          <div style={{ fontSize: '0.675rem', color: '#94a3b8', marginBottom: 6, lineHeight: 1.3 }}>
-            Step through the complete end-to-end evidence reconciliation tour.
+          <div style={{ fontSize: '0.675rem', color: '#94a3b8', marginBottom: 8, lineHeight: 1.35 }}>
+            11-step interactive judge walkthrough with 100% deterministic reliability.
           </div>
           <button
             type="button"
             className="btn btn-primary btn-sm"
             onClick={startGuidedDemo}
-            style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.7rem', fontWeight: 700, justifyContent: 'center' }}
+            style={{ width: '100%', padding: '0.45rem 0.5rem', fontSize: '0.75rem', fontWeight: 800, justifyContent: 'center' }}
           >
+            <Sparkles size={13} />
             <span>{isGuidedDemoActive ? 'Resume Demo Tour' : 'Start Guided Demo'}</span>
           </button>
         </div>
@@ -423,10 +286,10 @@ export const Sidebar: React.FC = () => {
               bottom: 'calc(100% + 8px)',
               left: '0.75rem',
               right: '0.75rem',
-              background: 'var(--sidebar-surface, #111C31)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-default)',
               borderRadius: 'var(--radius-md)',
-              boxShadow: '0 16px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+              boxShadow: 'var(--shadow-lg)',
               padding: '0.75rem',
               zIndex: 300,
               display: 'flex',
@@ -435,14 +298,14 @@ export const Sidebar: React.FC = () => {
               animation: 'fadeIn 0.15s ease-out',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Building2 size={14} style={{ color: '#60a5fa' }} />
-                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#F8FAFC', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <Building2 size={14} style={{ color: 'var(--brand-primary)' }} />
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Switch Workspace
                 </span>
               </div>
-              <span style={{ fontSize: '0.65rem', background: 'rgba(255, 255, 255, 0.08)', padding: '2px 6px', borderRadius: 10, color: '#94A3B8', fontWeight: 600 }}>
+              <span style={{ fontSize: '0.65rem', background: 'var(--brand-surface)', padding: '2px 6px', borderRadius: 10, color: 'var(--brand-primary)', fontWeight: 600 }}>
                 {AVAILABLE_PROJECTS.length} Projects
               </span>
             </div>
@@ -462,8 +325,8 @@ export const Sidebar: React.FC = () => {
                       justifyContent: 'space-between',
                       padding: '0.55rem',
                       borderRadius: 'var(--radius-sm)',
-                      background: isSelected ? 'rgba(37, 99, 235, 0.22)' : 'rgba(255, 255, 255, 0.03)',
-                      border: `1px solid ${isSelected ? 'rgba(37, 99, 235, 0.5)' : 'rgba(255, 255, 255, 0.06)'}`,
+                      background: isSelected ? 'var(--brand-surface)' : 'var(--bg-subtle)',
+                      border: `1px solid ${isSelected ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
                       cursor: 'pointer',
                       textAlign: 'left',
                       transition: 'all 0.15s ease',
@@ -471,7 +334,7 @@ export const Sidebar: React.FC = () => {
                   >
                     <div style={{ minWidth: 0, flex: 1, marginRight: '0.5rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isSelected ? '#93c5fd' : '#F8FAFC' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isSelected ? 'var(--brand-primary)' : 'var(--text-primary)' }}>
                           {proj.name}
                         </span>
                         <span
@@ -480,23 +343,23 @@ export const Sidebar: React.FC = () => {
                             fontWeight: 700,
                             padding: '1px 5px',
                             borderRadius: 3,
-                            background: isSelected ? 'var(--brand-primary)' : 'rgba(255, 255, 255, 0.08)',
-                            color: isSelected ? '#ffffff' : '#94a3b8',
+                            background: isSelected ? 'var(--brand-primary)' : 'var(--border-subtle)',
+                            color: isSelected ? '#ffffff' : 'var(--text-muted)',
                           }}
                         >
                           {proj.status}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.65rem', color: '#94A3B8', marginBottom: 4 }}>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: 4 }}>
                         {proj.location} • {proj.workfronts}
                       </div>
 
                       {/* Micro Progress Bar */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ flex: 1, height: 4, background: 'rgba(255, 255, 255, 0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ flex: 1, height: 4, background: 'var(--border-default)', borderRadius: 2, overflow: 'hidden' }}>
                           <div style={{ width: `${proj.progress}%`, height: '100%', background: isSelected ? '#10b981' : '#64748b', borderRadius: 2 }} />
                         </div>
-                        <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#cbd5e1' }}>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
                           {proj.progress}%
                         </span>
                       </div>
@@ -513,7 +376,7 @@ export const Sidebar: React.FC = () => {
             </div>
 
             {/* Quick Action Shortcuts */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, paddingTop: '0.4rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, paddingTop: '0.4rem', borderTop: '1px solid var(--border-subtle)' }}>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -521,7 +384,7 @@ export const Sidebar: React.FC = () => {
                   setShowProjectSwitcher(false);
                   setActiveTab('dashboard');
                 }}
-                style={{ padding: '0.3rem 0.4rem', fontSize: '0.675rem', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.06)', color: '#e2e8f0', borderColor: 'rgba(255, 255, 255, 0.12)' }}
+                style={{ padding: '0.3rem 0.4rem', fontSize: '0.675rem', justifyContent: 'center' }}
               >
                 <LayoutDashboard size={12} />
                 <span>Control Center</span>
@@ -533,7 +396,7 @@ export const Sidebar: React.FC = () => {
                   setShowProjectSwitcher(false);
                   setActiveTab('upload');
                 }}
-                style={{ padding: '0.3rem 0.4rem', fontSize: '0.675rem', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.06)', color: '#e2e8f0', borderColor: 'rgba(255, 255, 255, 0.12)' }}
+                style={{ padding: '0.3rem 0.4rem', fontSize: '0.675rem', justifyContent: 'center' }}
               >
                 <Database size={12} />
                 <span>Ingest Schemas</span>
@@ -550,11 +413,11 @@ export const Sidebar: React.FC = () => {
           aria-label="Toggle Project Switcher Menu"
           style={{
             width: '100%',
-            background: showProjectSwitcher ? 'var(--sidebar-active, #1E3A5F)' : 'var(--sidebar-surface, #111C31)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: showProjectSwitcher ? 'var(--bg-sidebar-active)' : 'var(--bg-surface)',
+            border: '1px solid var(--border-sidebar)',
             borderRadius: 'var(--radius-md)',
             padding: '0.75rem',
-            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
+            boxShadow: 'var(--shadow-card)',
             display: 'flex',
             flexDirection: 'column',
             gap: '0.65rem',
@@ -584,7 +447,7 @@ export const Sidebar: React.FC = () => {
                 <Layers size={13} />
               </div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F8FAFC', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-sidebar-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {currentProject.shortCode}
                 </div>
                 <div style={{ fontSize: '0.65rem', color: currentProject.statusColor, fontWeight: 600 }}>
@@ -595,7 +458,7 @@ export const Sidebar: React.FC = () => {
             <ChevronDown
               size={14}
               style={{
-                color: '#94A3B8',
+                color: 'var(--text-sidebar-muted)',
                 flexShrink: 0,
                 transform: showProjectSwitcher ? 'rotate(180deg)' : 'rotate(0deg)',
                 transition: 'transform 0.15s ease',
@@ -612,7 +475,7 @@ export const Sidebar: React.FC = () => {
                   cy="19"
                   r="15"
                   fill="none"
-                  stroke="rgba(255, 255, 255, 0.12)"
+                  stroke="var(--border-default)"
                   strokeWidth="3.5"
                 />
                 <circle
@@ -638,7 +501,7 @@ export const Sidebar: React.FC = () => {
                   justifyContent: 'center',
                   fontSize: '0.65rem',
                   fontWeight: 800,
-                  color: '#F8FAFC',
+                  color: 'var(--text-sidebar-primary)',
                 }}
               >
                 {currentProject.progress}%
@@ -646,10 +509,10 @@ export const Sidebar: React.FC = () => {
             </div>
 
             <div>
-              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#F8FAFC' }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-sidebar-primary)' }}>
                 Overall Progress
               </div>
-              <div style={{ fontSize: '0.65rem', color: '#34d399', fontWeight: 700 }}>
+              <div style={{ fontSize: '0.65rem', color: '#059669', fontWeight: 700 }}>
                 {currentProject.progressDelta}
               </div>
             </div>
@@ -657,7 +520,7 @@ export const Sidebar: React.FC = () => {
         </button>
 
         {/* Brand Version Footer */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: '0.5rem', paddingLeft: 2, color: 'var(--text-muted)', fontSize: '0.65rem', fontWeight: 500 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: '0.5rem', paddingLeft: 2, color: 'var(--text-sidebar-muted)', fontSize: '0.65rem', fontWeight: 500 }}>
           <Layers size={10} />
           <span>DATUM v1.0 • Enterprise Edition</span>
         </div>

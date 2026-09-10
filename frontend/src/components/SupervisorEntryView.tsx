@@ -343,15 +343,21 @@ export const SupervisorEntryView: React.FC = () => {
   const handleApplyVoiceToForm = () => {
     if (!parsedVoiceResult) return;
 
-    setDiscipline(parsedVoiceResult.discipline);
-    setArea(parsedVoiceResult.area);
-    setEventStatus(parsedVoiceResult.eventStatus);
+    if (parsedVoiceResult.discipline) {
+      setDiscipline(parsedVoiceResult.discipline);
+    }
+    if (parsedVoiceResult.area) {
+      setArea(parsedVoiceResult.area);
+    }
+    if (parsedVoiceResult.eventStatus) {
+      setEventStatus(parsedVoiceResult.eventStatus);
+    }
     if (parsedVoiceResult.quantity) setQuantity(parsedVoiceResult.quantity);
     if (parsedVoiceResult.detectedTag) {
       setConfirmedTag(parsedVoiceResult.detectedTag);
       setManualTagInput(parsedVoiceResult.detectedTag);
     }
-    setDescription(parsedVoiceResult.cleanDescription);
+    setDescription(parsedVoiceResult.cleanDescription || parsedVoiceResult.rawTranscript);
     setRawText(`[VOICE LOG (${parsedVoiceResult.language})]: ${parsedVoiceResult.rawTranscript}`);
 
     if (parsedVoiceResult.issueFlag) {
@@ -364,7 +370,7 @@ export const SupervisorEntryView: React.FC = () => {
     addToast({
       type: 'success',
       title: 'Spoken Fields Applied to Form',
-      message: `Populated ${parsedVoiceResult.discipline} • ${parsedVoiceResult.area}${parsedVoiceResult.detectedTag ? ` • Tag [${parsedVoiceResult.detectedTag}]` : ''}.`,
+      message: `Populated ${parsedVoiceResult.discipline || discipline} • ${parsedVoiceResult.area || area}${parsedVoiceResult.detectedTag ? ` • Tag [${parsedVoiceResult.detectedTag}]` : ''}.`,
     });
   };
 
@@ -1580,20 +1586,123 @@ export const SupervisorEntryView: React.FC = () => {
                     borderRadius: 'var(--radius-md)',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '0.5rem',
+                    gap: '0.65rem',
                   }}
                 >
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
-                    Structured Information Extracted:
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Deterministic NLP Extraction Results:
+                    </div>
+                    <span className="mono-pill" style={{ fontWeight: 700, fontSize: '0.675rem' }}>
+                      Confidence: {parsedVoiceResult.confidenceScore}%
+                    </span>
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                    <span className="mono-pill">Discipline: {parsedVoiceResult.discipline}</span>
-                    <span className="mono-pill">Area: {parsedVoiceResult.area}</span>
-                    <span className="mono-pill">Status: {parsedVoiceResult.eventStatus}</span>
-                    {parsedVoiceResult.detectedTag && (
+
+                  {/* Warning notice if fields not detected */}
+                  {parsedVoiceResult.warnings && parsedVoiceResult.warnings.length > 0 && (
+                    <div
+                      style={{
+                        background: 'var(--status-review-bg)',
+                        border: '1px solid var(--status-review-border)',
+                        color: 'var(--status-review-fg)',
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.725rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.25rem',
+                      }}
+                    >
+                      {parsedVoiceResult.warnings.map((warn, wIdx) => (
+                        <div key={wIdx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <AlertTriangle size={13} style={{ flexShrink: 0 }} />
+                          <span>{warn}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Extracted or Missing Badges */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center' }}>
+                    {parsedVoiceResult.isDisciplineDetected && parsedVoiceResult.discipline ? (
+                      <span className="mono-pill" style={{ background: 'var(--status-ready-bg)', color: 'var(--status-ready-fg)', borderColor: 'var(--status-ready-border)', fontWeight: 700 }}>
+                        ✓ Discipline: {parsedVoiceResult.discipline}
+                      </span>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                        <span className="status-badge review" style={{ fontSize: '0.7rem' }}>
+                          ⚠️ Discipline: Not Detected
+                        </span>
+                        {['Piping', 'Civil', 'Electrical', 'Instrumentation', 'HSE'].map(d => (
+                          <button
+                            key={d}
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.675rem' }}
+                            onClick={() => {
+                              setParsedVoiceResult({
+                                ...parsedVoiceResult,
+                                discipline: d,
+                                isDisciplineDetected: true,
+                                warnings: parsedVoiceResult.warnings?.filter(w => !w.includes('Discipline')),
+                              });
+                            }}
+                          >
+                            + {d}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {parsedVoiceResult.isAreaDetected && parsedVoiceResult.area ? (
+                      <span className="mono-pill" style={{ background: 'var(--status-ready-bg)', color: 'var(--status-ready-fg)', borderColor: 'var(--status-ready-border)', fontWeight: 700 }}>
+                        ✓ Area: {parsedVoiceResult.area}
+                      </span>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+                        <span className="status-badge review" style={{ fontSize: '0.7rem' }}>
+                          ⚠️ Area: Not Detected
+                        </span>
+                        {['Pump Bay', 'Pipe Rack', 'Substation', 'Tank Farm', 'Utility Yard'].map(a => (
+                          <button
+                            key={a}
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.675rem' }}
+                            onClick={() => {
+                              setParsedVoiceResult({
+                                ...parsedVoiceResult,
+                                area: a,
+                                isAreaDetected: true,
+                                warnings: parsedVoiceResult.warnings?.filter(w => !w.includes('Workfront')),
+                              });
+                            }}
+                          >
+                            + {a}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <span className="mono-pill">
+                      Status: {parsedVoiceResult.eventStatus || 'In Progress'}
+                    </span>
+
+                    {parsedVoiceResult.detectedTag ? (
                       <span className="status-badge ready">Tag: {parsedVoiceResult.detectedTag}</span>
+                    ) : (
+                      <span className="mono-pill" style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+                        Tag: Package-level activity
+                      </span>
+                    )}
+
+                    {parsedVoiceResult.quantity && (
+                      <span className="mono-pill">
+                        Qty: {parsedVoiceResult.quantity} {parsedVoiceResult.unit || ''}
+                      </span>
                     )}
                   </div>
+
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
                     <button
                       type="button"

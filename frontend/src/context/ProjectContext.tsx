@@ -458,11 +458,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const nextGuidedDemoStep = () => {
-    if (guidedDemoStepIndex < GUIDED_DEMO_STEPS.length - 1) {
+    if (guidedDemoStepIndex <= GUIDED_DEMO_STEPS.length - 1) {
       const nextIndex = guidedDemoStepIndex + 1;
       setGuidedDemoStepIndex(nextIndex);
       const step = GUIDED_DEMO_STEPS[nextIndex];
-      setActiveTab(step.targetTab);
+      if (step) {
+        setActiveTab(step.targetTab);
+      }
     } else {
       setIsGuidedDemoActive(false);
       setIsDemoCompletionModalOpen(true);

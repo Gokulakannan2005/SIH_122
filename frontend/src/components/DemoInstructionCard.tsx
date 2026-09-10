@@ -9,6 +9,7 @@ interface DemoInstructionCardProps {
   onNext: () => void;
   onPrev: () => void;
   onSkip: () => void;
+  onMinimize?: () => void;
   style?: React.CSSProperties;
 }
 
@@ -19,6 +20,7 @@ export const DemoInstructionCard: React.FC<DemoInstructionCardProps> = ({
   onNext,
   onPrev,
   onSkip,
+  onMinimize,
   style,
 }) => {
   const isFirstStep = stepIndex === 0;
@@ -47,34 +49,76 @@ export const DemoInstructionCard: React.FC<DemoInstructionCardProps> = ({
         ...style,
       }}
     >
-      {/* Top Header: Step Counter & Dot Progress */}
+      {/* Top Header: Step Counter, Dot Progress & Minimize / Close */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span
-          style={{
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            letterSpacing: '0.04em',
-            color: '#93c5fd',
-            textTransform: 'uppercase',
-          }}
-        >
-          Step {step.stepNumber} of {totalSteps}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              color: '#93c5fd',
+              textTransform: 'uppercase',
+            }}
+          >
+            Step {step.stepNumber} of {totalSteps}
+          </span>
+          <span
+            style={{
+              fontSize: '0.65rem',
+              fontWeight: 600,
+              background: 'rgba(59, 130, 246, 0.2)',
+              border: '1px solid rgba(59, 130, 246, 0.4)',
+              color: '#bfdbfe',
+              padding: '1px 6px',
+              borderRadius: '999px',
+            }}
+          >
+            Live Demo
+          </span>
+        </div>
 
-        {/* Minimal dot progress */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          {Array.from({ length: totalSteps }).map((_, idx) => (
-            <div
-              key={idx}
+        {/* Minimal dot progress + Dock button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {Array.from({ length: totalSteps }).map((_, idx) => (
+              <div
+                key={idx}
+                style={{
+                  width: idx === stepIndex ? 14 : 4,
+                  height: 4,
+                  borderRadius: 2,
+                  background: idx === stepIndex ? '#3b82f6' : idx < stepIndex ? '#10b981' : 'rgba(255, 255, 255, 0.2)',
+                  transition: 'all 0.2s ease',
+                }}
+              />
+            ))}
+          </div>
+
+          {onMinimize && (
+            <button
+              type="button"
+              onClick={onMinimize}
+              title="Dock demo & inspect page freely"
               style={{
-                width: idx === stepIndex ? 16 : 5,
-                height: 5,
-                borderRadius: 3,
-                background: idx === stepIndex ? '#3b82f6' : idx < stepIndex ? '#10b981' : 'rgba(255, 255, 255, 0.2)',
-                transition: 'all 0.2s ease',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#cbd5e1',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '0.65rem',
+                cursor: 'pointer',
+                marginLeft: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
               }}
-            />
-          ))}
+              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = 'rgba(255, 255, 255, 0.18)')}
+              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)')}
+            >
+              Dock ▾
+            </button>
+          )}
         </div>
       </div>
 

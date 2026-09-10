@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GuidedDemoStep, NavigationTab } from '../types';
 import { DemoInstructionCard } from './DemoInstructionCard';
+import { useProject } from '../context/ProjectContext';
+import { Play, Pause, X, ExternalLink, Layers } from 'lucide-react';
 
 interface DemoSpotlightOverlayProps {
   currentStep: GuidedDemoStep;
@@ -31,6 +33,17 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
   onSkip,
   onJumpToTab,
 }) => {
+  const {
+    selectedInspectorUpdateId,
+    setSelectedInspectorUpdateId,
+    selectedScheduleActivityId,
+    setSelectedScheduleActivityId,
+    selectedReviewUpdateId,
+    setSelectedReviewUpdateId,
+    selectedAuditUpdateId,
+    setSelectedAuditUpdateId,
+  } = useProject();
+
   const [targetRect, setTargetRect] = useState<TargetRect>({
     top: 0,
     left: 0,
@@ -44,11 +57,23 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
     height: typeof window !== 'undefined' ? window.innerHeight : 800,
   });
 
+  const [isManualPaused, setIsManualPaused] = useState(false);
+
+  // Any active drawer or manual minimize constitutes inspecting mode
+  const isDrawerOpen = Boolean(
+    selectedInspectorUpdateId ||
+    selectedScheduleActivityId ||
+    selectedReviewUpdateId ||
+    selectedAuditUpdateId
+  );
+
+  const isInspecting = isDrawerOpen || isManualPaused;
+
   const activeElementRef = useRef<HTMLElement | null>(null);
 
   // Helper to find and calculate target rect
   const updateTargetRect = useCallback(() => {
-    if (!currentStep.targetSelector) {
+    if (isInspecting || !currentStep.targetSelector) {
       if (activeElementRef.current) {
         activeElementRef.current.classList.remove('demo-spotlight-active-target');
         activeElementRef.current = null;
@@ -108,7 +133,7 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
       }
       setTargetRect(prev => (prev.found ? { ...prev, found: false } : prev));
     }
-  }, [currentStep.targetSelector]);
+  }, [currentStep.targetSelector, isInspecting]);
 
   // Clean up class on unmount
   useEffect(() => {
@@ -119,8 +144,10 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
     };
   }, []);
 
-  // Scroll to target and switch tab when step changes
+  // Scroll to target and switch tab when step changes (only if not inspecting)
   useEffect(() => {
+    if (isInspecting) return;
+
     if (onJumpToTab && currentStep.targetTab) {
       onJumpToTab(currentStep.targetTab);
     }
@@ -148,7 +175,7 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
       clearTimeout(followUpTimer);
       clearTimeout(settleTimer);
     };
-  }, [currentStepIndex, currentStep, onJumpToTab, updateTargetRect]);
+  }, [currentStepIndex, currentStep, onJumpToTab, updateTargetRect, isInspecting]);
 
   // Handle resize, scroll, and continuous DOM tracking
   useEffect(() => {
@@ -172,7 +199,6 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
     window.addEventListener('resize', handleResize);
     window.addEventListener('scroll', handleScroll, true);
 
-    // Periodic check for dynamic content resizing
     const interval = setInterval(updateTargetRect, 500);
 
     return () => {
@@ -181,6 +207,30 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
       clearInterval(interval);
     };
   }, [updateTargetRect]);
+
+  const handleResume = () => {
+    // Close any open drawers
+    setSelectedInspectorUpdateId(null);
+    setSelectedScheduleActivityId(null);
+    setSelectedReviewUpdateId(null);
+    setSelectedAuditUpdateId(null);
+    setIsManualPaused(false);
+
+    // Scroll to target element if present
+    setTimeout(() => {
+      if (currentStep.targetSelector) {
+        const selectors = currentStep.targetSelector.split(',').map(s => s.trim());
+        for (const sel of selectors) {
+          const el = document.querySelector(sel);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            break;
+          }
+        }
+      }
+      updateTargetRect();
+    }, 100);
+  };
 
   // Intelligent Contextual positioning of the card
   const getCardPosition = (): React.CSSProperties => {
@@ -226,7 +276,6 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
     // Safety checks: ensure it does not overlap target and stays in viewport
     if (cardTop + cardHeight > winH - margin) {
       if (spaceAbove >= cardHeight + margin) {
-        // Flip to above
         cardTop = top - cardHeight - margin;
       } else {
         cardTop = Math.max(margin, winH - cardHeight - margin);
@@ -270,8 +319,8 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
 
   return (
     <>
-      {/* 4 Blocker Backdrop Panels: Creates an unobstructed physical cutout hole around the target */}
-      {targetRect.found ? (
+      {/* 4 Blocker Backdrop Panels: When NOT inspecting, creates a physical cutout around target */}
+      {!isInspecting && targetRect.found ? (
         <div
           className="demo-spotlight-layer"
           style={{
@@ -280,6 +329,8 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
             zIndex: 8880,
             pointerEvents: 'none',
             overflow: 'hidden',
+            opacity: 1,
+            transition: 'opacity 0.25s ease',
           }}
         >
           {/* Top Blocker */}
@@ -346,7 +397,7 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
             onClick={e => e.stopPropagation()}
           />
 
-          {/* Spotlight Highlight Frame with subtle elevation and accent border around the cutout */}
+          {/* Spotlight Highlight Frame */}
           <div
             className="demo-spotlight-frame"
             style={{
@@ -356,16 +407,16 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
               width: `${targetRect.width}px`,
               height: `${targetRect.height}px`,
               borderRadius: '12px',
-              border: '1.5px solid rgba(59, 130, 246, 0.85)',
-              boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 20px rgba(59, 130, 246, 0.2), inset 0 0 15px rgba(59, 130, 246, 0.05)',
+              border: '2px solid rgba(59, 130, 246, 0.95)',
+              boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.15), 0 0 24px rgba(59, 130, 246, 0.35)',
               pointerEvents: 'none',
               zIndex: 8885,
               transition: 'all 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           />
         </div>
-      ) : (
-        /* Fullscreen Dimmed Backdrop fallback when target is locating/switching */
+      ) : !isInspecting && !targetRect.found ? (
+        /* Fullscreen Dimmed Backdrop fallback when target is switching */
         <div
           style={{
             position: 'fixed',
@@ -377,27 +428,138 @@ export const DemoSpotlightOverlay: React.FC<DemoSpotlightOverlayProps> = ({
           }}
           onClick={e => e.stopPropagation()}
         />
-      )}
+      ) : null}
 
-      {/* Floating Demo Instruction Card with top-level z-index layer */}
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          pointerEvents: 'none',
-          zIndex: 99999,
-        }}
-      >
-        <DemoInstructionCard
-          step={currentStep}
-          stepIndex={currentStepIndex}
-          totalSteps={totalSteps}
-          onNext={onNext}
-          onPrev={onPrev}
-          onSkip={onSkip}
-          style={getCardPosition()}
-        />
-      </div>
+      {/* Floating Demo Instruction Card OR Docked Bottom Bar */}
+      {!isInspecting ? (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            pointerEvents: 'none',
+            zIndex: 99999,
+          }}
+        >
+          <DemoInstructionCard
+            step={currentStep}
+            stepIndex={currentStepIndex}
+            totalSteps={totalSteps}
+            onNext={onNext}
+            onPrev={onPrev}
+            onSkip={onSkip}
+            onMinimize={() => setIsManualPaused(true)}
+            style={getCardPosition()}
+          />
+        </div>
+      ) : (
+        /* Animated Docked Bottom Pill when Inspecting or Paused */
+        <div
+          className="demo-docked-pill-container"
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 25000,
+            pointerEvents: 'auto',
+            animation: 'demoDockSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        >
+          <div
+            style={{
+              background: '#0c1322',
+              border: '1.5px solid #3b82f6',
+              boxShadow: '0 12px 36px rgba(0, 0, 0, 0.8), 0 0 20px rgba(59, 130, 246, 0.25)',
+              borderRadius: '999px',
+              padding: '0.55rem 1.15rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              color: '#f8fafc',
+            }}
+          >
+            {/* Status Pulse */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <span
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  background: '#10b981',
+                  boxShadow: '0 0 8px #10b981',
+                  display: 'inline-block',
+                }}
+              />
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Tour Paused for Inspection
+              </span>
+            </div>
+
+            {/* Current Step Name */}
+            <div
+              style={{
+                fontSize: '0.8rem',
+                color: '#cbd5e1',
+                borderLeft: '1px solid rgba(255, 255, 255, 0.15)',
+                paddingLeft: '0.85rem',
+                maxWidth: '280px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              <strong style={{ color: '#ffffff' }}>Step {currentStep.stepNumber}:</strong> {currentStep.title}
+            </div>
+
+            {/* Resume Button */}
+            <button
+              type="button"
+              onClick={handleResume}
+              style={{
+                background: '#2563eb',
+                border: '1px solid #60a5fa',
+                color: '#ffffff',
+                padding: '0.4rem 0.95rem',
+                borderRadius: '999px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                boxShadow: '0 2px 10px rgba(37, 99, 235, 0.5)',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = '#1d4ed8')}
+              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = '#2563eb')}
+            >
+              <Play size={13} fill="currentColor" />
+              <span>Resume Walkthrough ▶</span>
+            </button>
+
+            {/* Exit Demo button */}
+            <button
+              type="button"
+              onClick={onSkip}
+              title="Exit Walkthrough"
+              style={{
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                color: '#94a3b8',
+                padding: '0.35rem 0.65rem',
+                borderRadius: '999px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = '#ffffff')}
+              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = '#94a3b8')}
+            >
+              Exit Tour
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 };

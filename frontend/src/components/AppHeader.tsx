@@ -154,12 +154,12 @@ export const AppHeader: React.FC = () => {
     switch (tab) {
       case 'home': return 'Overview';
       case 'supervisor-entry': return isSupervisor ? "Today's Field Tasks" : 'Field Entry Portal';
-      case 'site-updates': return 'Daily Reports';
+      case 'site-updates': return 'Daily Site Reports';
       case 'dashboard': return 'Project Control Center';
-      case 'planner-review': return 'Field Submissions Inbox';
-      case 'schedule-activities': return 'Project Schedule';
+      case 'planner-review': return 'AI Matching & Field Review';
+      case 'schedule-activities': return 'Project Schedule & 4D Gantt';
       case 'copilot': return 'Delay Simulator';
-      case 'upload': return 'Project Schedule';
+      case 'upload': return 'Data Ingestion & Uploads Hub';
       default: return 'Overview';
     }
   };
@@ -252,31 +252,18 @@ export const AppHeader: React.FC = () => {
           </span>
         </div>
 
-        {/* Context-Aware Quick Action */}
+        {/* Universal Quick Action: Upload / Ingest Data */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {isSupervisor ? (
-            <button
-              type="button"
-              className={`btn btn-sm ${activeTab === 'site-updates' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setActiveTab('site-updates')}
-              title="Open Daily Field Reports Feed"
-              style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 600 }}
-            >
-              <FileText size={13} />
-              <span>Field Feed</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              className={`btn btn-sm ${activeTab === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setActiveTab('upload')}
-              title="Upload / Ingest Project Schedule"
-              style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 600 }}
-            >
-              <Database size={13} />
-              <span>Upload Schedule</span>
-            </button>
-          )}
+          <button
+            type="button"
+            className={`btn btn-sm ${activeTab === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('upload')}
+            title="Upload schedule baselines, daily supervisor logs, or excel progress files"
+            style={{ padding: '0.32rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, gap: 5 }}
+          >
+            <Database size={13} />
+            <span>Upload / Ingest Data</span>
+          </button>
         </div>
       </div>
 

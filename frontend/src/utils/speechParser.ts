@@ -6,8 +6,8 @@
  * Discipline, Area, Equipment Tag, Status, Quantity, Units, Blocker Flags, Severity, and Clean Summaries.
  */
 
-import { EventStatus, SpokenParseResult } from '../types';
-import { extractCandidateTags, normalizeEquipmentTag } from './ocrService';
+import type { EventStatus, SpokenParseResult } from '../types/index.ts';
+import { extractCandidateTags, normalizeEquipmentTag } from './ocrService.ts';
 
 // Comprehensive spoken numbers, fractions, and multi-lingual word mappings
 const SPOKEN_NUMBERS: Record<string, string> = {
@@ -175,6 +175,42 @@ export function normalizeSpokenText(transcript: string): string {
 
   // Clean up extra spaces
   text = text.replace(/\s+/g, ' ').trim();
+
+  // Construction Domain Acoustic & Phonetic Normalization
+  // 1. Line 24-CW-017
+  text = text.replace(/\b(?:line\s+)?24\s*[-–\s]*(?:see\s*double\s*u|see\s*w|c\s*w|cw|kw|c-w)\s*[-–\s]*(?:zero\s*|o\s*)?0?17\b/gi, '24-CW-017');
+  text = text.replace(/\b(?:twenty\s*four)\s*[-–\s]*(?:see\s*double\s*u|see\s*w|c\s*w|cw)\s*[-–\s]*(?:zero\s*|o\s*)?0?17\b/gi, '24-CW-017');
+  text = text.replace(/\b(?:cw|c\s*w)\s*[-–\s]*0?17\b/gi, '24-CW-017');
+
+  // 2. Line 18-FW-008
+  text = text.replace(/\b(?:line\s+)?18\s*[-–\s]*(?:eff\s*double\s*u|eff\s*w|f\s*w|fw|f-w)\s*[-–\s]*(?:zero\s*|o\s*)?0?0?8\b/gi, '18-FW-008');
+  text = text.replace(/\b(?:eighteen)\s*[-–\s]*(?:eff\s*double\s*u|eff\s*w|f\s*w|fw)\s*[-–\s]*(?:zero\s*|o\s*)?0?0?8\b/gi, '18-FW-008');
+  text = text.replace(/\b(?:fw|f\s*w)\s*[-–\s]*0?0?8\b/gi, '18-FW-008');
+
+  // 3. Line 12-MS-002
+  text = text.replace(/\b(?:line\s+)?12\s*[-–\s]*(?:m\s*s|ms|m-s)\s*[-–\s]*(?:zero\s*|o\s*)?0?0?2\b/gi, '12-MS-002');
+
+  // 4. Electrical MCC-415V
+  text = text.replace(/\bmcc\s*[-–\s]*(?:four\s*fifteen|415)\s*(?:v|volt|volts)?\b/gi, 'MCC-415V');
+
+  // 5. Civil Foundation CIV-L6-002
+  text = text.replace(/\b(?:civ|civil)\s*[-–\s]*(?:l\s*6|el\s*6|level\s*6)\s*[-–\s]*(?:zero\s*|o\s*)?0?0?2\b/gi, 'CIV-L6-002');
+
+  // 6. 50T Mobile Crane
+  text = text.replace(/\b(?:fifty\s*ton|50\s*ton|50\s*t|50t)\s*(?:mobile\s*)?crane(?:-01)?\b/gi, '50T-CRANE-01');
+
+  // 7. Pressure Transmitter PT-2401
+  text = text.replace(/\b(?:pt|p\s*t)\s*[-–\s]*(?:twenty\s*four\s*zero\s*one|2401)\b/gi, 'PT-2401');
+
+  // 8. Construction Actions & Phonetic corrections
+  text = text.replace(/\bspool\s+(?:reaction|direction|section|erect)\b/gi, 'spool erection');
+  text = text.replace(/\bflange\s+(?:fitup|fit\s+up|setup|fit\s+in)\b/gi, 'flange fit-up');
+  text = text.replace(/\bhydro\s+test\b/gi, 'hydrotest');
+  text = text.replace(/\brough\s+concrete\b/gi, 'raft concrete');
+  text = text.replace(/\b(?:one\s+hundred\s+percent|100\s*percent)\b/gi, '100%');
+  text = text.replace(/\bforty\s+five\s+cubic\s+meters?\b/gi, '45 cum');
+  text = text.replace(/\bone\s+twenty\s+meters?\b/gi, '120 meters');
+  text = text.replace(/\b(?:inch\s+dia|inch\s+diameter)\b/gi, 'inch-dia');
 
   // Re-join spoken letters with numbers (e.g., "24 - cw - 017" -> "24-CW-017")
   text = text.replace(/(\d+)\s*[- ]\s*([a-z]+)\s*[- ]\s*(\d+)/gi, '$1-$2-$3');
@@ -346,56 +382,57 @@ export function parseSpokenUpdate(
   let isAreaDetected = false;
 
   if (
-    /(pump bay|pump house|pump foundation|cooling water pump|पंप बे|पंप|பம்ப பே|பம்பு)/i.test(
+    /(pump\s*bay|pump\s*house|pump\s*foundation|cooling\s*water\s*pump|pumping\s+bay|bay\s+area|near\s+bay|in\s+bay|at\s+bay|the\s+bay|\bbay\b|pump\s*station|pump\s*shed|pump\s*room|पंप बे|पंप|பம்ப பே|பம்பு)/i.test(
       lower
-    )
+    ) ||
+    (/(pump|pumping)/i.test(lower) && /\bbay\b/i.test(lower))
   ) {
     area = 'Pump Bay';
     isAreaDetected = true;
   } else if (
-    /(pipe rack|rack|tier-2|tier 2|tier-1|pipe bridge|पाइप रैक|ரெக்)/i.test(lower)
+    /(pipe\s*rack|\brack\b|tier[- ]?2|tier[- ]?1|tier[- ]?3|pipe\s*bridge|near\s*rack|rack\s*area|पाइप रैक|ரெக்)/i.test(lower)
   ) {
     area = 'Pipe Rack';
     isAreaDetected = true;
   } else if (
-    /(substation|switchgear room|mcc room|control room|swg room|सबस्टेशन|कंट्रोल रूम|துணை மின்நிலையம்)/i.test(
+    /(substation|sub-station|switchgear\s*room|mcc\s*room|control\s*room|swg\s*room|transformer\s*yard|सबस्टेशन|कंट्रोल रूम|துணை மின்நிலையம்)/i.test(
       lower
     )
   ) {
     area = 'Substation';
     isAreaDetected = true;
   } else if (
-    /(tank farm|tank area|storage tank|oil tank|टैंक फार्म|தொட்டி)/i.test(lower)
+    /(tank\s*farm|tank\s*area|storage\s*tank|oil\s*tank|fuel\s*tank|water\s*tank|टैंक फार्म|தொட்டி)/i.test(lower)
   ) {
     area = 'Tank Farm';
     isAreaDetected = true;
   } else if (
-    /(cable trench|trench|duct bank|conduit run|ट्रेंच|नाला)/i.test(lower)
+    /(cable\s*trench|\btrench\b|duct\s*bank|conduit\s*run|trench\s*area|ट्रेंच|नाला)/i.test(lower)
   ) {
     area = 'Cable Trench';
     isAreaDetected = true;
   } else if (
-    /(boiler house|boiler structure|steam gen|बॉयलर)/i.test(lower)
+    /(boiler\s*house|boiler\s*structure|boiler\s*area|steam\s*gen|बॉयलर)/i.test(lower)
   ) {
     area = 'Boiler House';
     isAreaDetected = true;
   } else if (
-    /(turbine building|turbine hall|tg building|टर्बाइन)/i.test(lower)
+    /(turbine\s*building|turbine\s*hall|tg\s*building|turbine\s*area|टर्बाइन)/i.test(lower)
   ) {
     area = 'Turbine Building';
     isAreaDetected = true;
   } else if (
-    /(cooling tower|ct area|कूलिंग टावर)/i.test(lower)
+    /(cooling\s*tower|ct\s*area|cooling\s*tower\s*basin|कूलिंग टावर)/i.test(lower)
   ) {
     area = 'Cooling Tower';
     isAreaDetected = true;
   } else if (
-    /(switchyard|yard 400kv|yard 220kv|स्विचयार्ड)/i.test(lower)
+    /(switchyard|yard\s*400kv|yard\s*220kv|gis\s*yard|स्विचयार्ड)/i.test(lower)
   ) {
     area = 'Switchyard';
     isAreaDetected = true;
   } else if (
-    /(utility yard|fabrication yard|स्टॉक यार्ड|யார்டு)/i.test(lower)
+    /(utility\s*yard|fabrication\s*yard|fab\s*yard|stock\s*yard|utility\s*area|\byard\b|स्टॉक यार्ड|யார்டு)/i.test(lower)
   ) {
     area = 'Utility Yard';
     isAreaDetected = true;
@@ -470,11 +507,11 @@ export function parseSpokenUpdate(
     cleanDescription = `${disciplinePart} progress${areaPart}: ${eventStatus} activities${tagPart}${qtyPart}.${issuePart}`;
   }
 
-  const tagConfidence = detectedTag ? 100 : 40;
-  const areaConfidence = isAreaDetected ? 90 : 20;
-  const computedConfidence = Math.round(
+  const tagConfidence = detectedTag ? 100 : (isDisciplineDetected && isAreaDetected ? 85 : 40);
+  const areaConfidence = isAreaDetected ? 95 : 20;
+  const computedConfidence = Math.min(100, Math.round(
     disciplineConfidence * 0.35 + statusConfidence * 0.25 + tagConfidence * 0.25 + areaConfidence * 0.15
-  );
+  ));
 
   return {
     rawTranscript,

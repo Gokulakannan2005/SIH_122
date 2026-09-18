@@ -23,6 +23,7 @@ import {
   CheckSquare,
   UploadCloud,
   ShieldCheck,
+  HardHat,
 } from 'lucide-react';
 import { NavigationTab } from '../types';
 
@@ -92,6 +93,8 @@ export const Sidebar: React.FC = () => {
     isGuidedDemoActive,
     addToast,
     loadDemoData,
+    presentationMode,
+    setPresentationMode,
   } = useProject();
 
   const isSupervisor = currentRole === 'supervisor';
@@ -161,63 +164,146 @@ export const Sidebar: React.FC = () => {
               DATUM
             </div>
             <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '-0.01em' }}>
-              {isSupervisor ? 'Field Supervisor Portal' : 'The Record of Execution'}
+              Planning-to-Execution Bridge
             </div>
           </div>
         </div>
 
-        {/* Role Authority Indicator Badge */}
+        {/* Mode & Role Authority Indicator Badge */}
         <div
           style={{
             marginTop: '0.65rem',
-            padding: '0.3rem 0.55rem',
+            padding: '0.35rem 0.55rem',
             borderRadius: 'var(--radius-xs)',
-            background: isSupervisor ? 'rgba(2, 132, 199, 0.12)' : 'rgba(4, 120, 87, 0.12)',
-            border: `1px solid ${isSupervisor ? 'rgba(2, 132, 199, 0.25)' : 'rgba(4, 120, 87, 0.25)'}`,
+            background: presentationMode === 'sih' ? 'rgba(2, 132, 199, 0.15)' : 'rgba(4, 120, 87, 0.12)',
+            border: `1px solid ${presentationMode === 'sih' ? 'rgba(56, 189, 248, 0.35)' : 'rgba(4, 120, 87, 0.25)'}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             fontSize: '0.675rem',
           }}
         >
-          <span style={{ fontWeight: 700, color: isSupervisor ? '#0284c7' : '#047857', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-            {isSupervisor ? 'Field Supervisor' : 'Lead Planning Eng'}
+          <span style={{ fontWeight: 800, color: presentationMode === 'sih' ? '#38bdf8' : '#047857', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+            {presentationMode === 'sih' ? 'Pipeline View' : (isSupervisor ? 'Field Supervisor' : 'Lead Planning Eng')}
           </span>
           <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-            {currentUser?.username || (isSupervisor ? 'rajesh' : 'gokul')}
+            {presentationMode === 'sih' ? 'Core System' : (currentUser?.username || (isSupervisor ? 'rajesh' : 'gokul'))}
           </span>
         </div>
       </div>
 
       {/* Primary Navigation Links */}
       <nav className="sidebar-nav" style={{ padding: '0.5rem 0.65rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', flex: 1, overflowY: 'auto' }}>
-        <div>
-          <span className="sidebar-category-label">CORE WORKFLOW</span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {/* 1. Dashboard */}
+        {presentationMode === 'sih' ? (
+          <div>
+            <span className="sidebar-category-label">END-TO-END PIPELINE</span>
+            <div style={{ padding: '0.55rem 0.65rem', background: 'rgba(2, 132, 199, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: 6, marginBottom: 8 }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8', marginBottom: 2 }}>
+                Core Execution Pipeline
+              </div>
+              <div style={{ fontSize: '0.66rem', color: '#94a3b8', lineHeight: 1.35 }}>
+                12 continuous stages: Baseline → Capture → Extraction → Talk to DATUM → Match → Verify → Out-of-Baseline → Actuals → Dataset → Intelligence → Memory → Audit.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <button
+                type="button"
+                className="sidebar-nav-pill active"
+                onClick={() => setPresentationMode('sih')}
+                title="Active Execution Pipeline"
+              >
+                <Sparkles size={15} style={{ color: '#38bdf8' }} />
+                <span>12-Stage Pipeline View</span>
+                <span className="sidebar-badge live">Active</span>
+              </button>
+
+              <button
+                type="button"
+                className="sidebar-nav-pill"
+                onClick={() => {
+                  setPresentationMode('standard');
+                  setActiveTab('dashboard');
+                }}
+                title="Switch to full standard engineering workspace"
+              >
+                <LayoutDashboard size={15} />
+                <span>Operations Workspace</span>
+                <span className="sidebar-badge" style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)' }}>Full Platform</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span className="sidebar-category-label" style={{ margin: 0 }}>CORE WORKFLOW</span>
+              <button
+                type="button"
+                onClick={() => setPresentationMode('sih')}
+                style={{
+                  background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(16, 185, 129, 0.2))',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  borderRadius: 4,
+                  padding: '1px 6px',
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  color: '#38bdf8',
+                  cursor: 'pointer',
+                }}
+                title="Switch to End-to-End Pipeline"
+              >
+                Pipeline View
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* 1. Dashboard */}
+              <button
+                type="button"
+                className={`sidebar-nav-pill ${activeTab === 'dashboard' ? 'active' : ''}`}
+                onClick={() => handleTabClick('dashboard')}
+                title="Overview & Executive Control Center"
+              >
+                <LayoutDashboard size={15} />
+                <span>1. Dashboard</span>
+              </button>
+
+            {/* 2. Daily Field Log & Upload */}
             <button
               type="button"
-              className={`sidebar-nav-pill ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => handleTabClick('dashboard')}
-              title="Overview & Executive Control Center"
+              className={`sidebar-nav-pill ${activeTab === 'supervisor-entry' ? 'active' : ''}`}
+              onClick={() => handleTabClick('supervisor-entry')}
+              title="Supervisor daily task execution, voice dictation, photo OCR, and text log upload"
             >
-              <LayoutDashboard size={15} />
-              <span>1. Dashboard</span>
+              <HardHat size={15} />
+              <span>2. Daily Field Log & Upload</span>
+              <span className="sidebar-badge live">Log Entry</span>
             </button>
 
-            {/* 2. Updates / Analyze */}
+            {/* 3. Tasks & Master Schedule (WBS) */}
+            <button
+              type="button"
+              className={`sidebar-nav-pill ${activeTab === 'schedule-activities' ? 'active' : ''}`}
+              onClick={() => handleTabClick('schedule-activities')}
+              title="WBS Master Schedule Tasks, 4D Critical Path Gantt, and Planned vs Actual progress"
+            >
+              <CheckSquare size={15} />
+              <span>3. Tasks & Schedule (WBS)</span>
+              <span className="sidebar-badge" style={{ background: 'var(--brand-surface)', color: 'var(--brand-primary)', fontWeight: 700 }}>Tasks</span>
+            </button>
+
+            {/* 4. Field Reports & AI Inspector */}
             <button
               type="button"
               className={`sidebar-nav-pill ${activeTab === 'site-updates' ? 'active' : ''}`}
               onClick={() => handleTabClick('site-updates')}
-              title="Input, extract, and analyze unstructured field updates"
+              title="Uploaded text logs, field reports, and explainable AI matching inspector"
             >
               <FileText size={15} />
-              <span>2. Updates / Analyze</span>
+              <span>4. Field Reports & Inspector</span>
               <span className="sidebar-badge live">AI Match</span>
             </button>
 
-            {/* 3. Review Queue */}
+            {/* 5. Review Queue */}
             <button
               type="button"
               className={`sidebar-nav-pill ${activeTab === 'planner-review' ? 'active' : ''}`}
@@ -225,44 +311,46 @@ export const Sidebar: React.FC = () => {
               title="Human-in-the-loop review workbench for ambiguous updates"
             >
               <FileCheck2 size={15} />
-              <span>3. Review Queue</span>
-              <span className="sidebar-badge amber">Review</span>
+              <span>5. Review Queue</span>
+              <span className="sidebar-badge amber">Approvals</span>
             </button>
 
-            {/* 4. Schedule */}
+            {/* 6. Direct File Ingestion */}
             <button
               type="button"
-              className={`sidebar-nav-pill ${activeTab === 'schedule-activities' ? 'active' : ''}`}
-              onClick={() => handleTabClick('schedule-activities')}
-              title="Structured schedule activities and Planned vs Actual progress"
+              className={`sidebar-nav-pill ${activeTab === 'upload' ? 'active' : ''}`}
+              onClick={() => handleTabClick('upload')}
+              title="Direct upload center for P6 baselines, daily_report.txt, and excel progress files"
             >
-              <Calendar size={15} />
-              <span>4. Schedule</span>
+              <UploadCloud size={15} />
+              <span>6. Data Ingestion & Uploads</span>
+              <span className="sidebar-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontWeight: 700 }}>Upload</span>
             </button>
 
-            {/* 5. Audit Trail */}
-            <button
-              type="button"
-              className={`sidebar-nav-pill ${activeTab === 'audit-trail' ? 'active' : ''}`}
-              onClick={() => handleTabClick('audit-trail')}
-              title="Complete chronological decision provenance and audit log"
-            >
-              <ShieldCheck size={15} />
-              <span>5. Audit Trail</span>
-            </button>
+              {/* 7. Audit Trail */}
+              <button
+                type="button"
+                className={`sidebar-nav-pill ${activeTab === 'audit-trail' ? 'active' : ''}`}
+                onClick={() => handleTabClick('audit-trail')}
+                title="Complete chronological decision provenance and audit log"
+              >
+                <ShieldCheck size={15} />
+                <span>7. Audit Trail</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Guided Demo Launch Banner in Sidebar */}
         <div style={{ marginTop: 'auto', padding: '0.75rem', background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(16, 185, 129, 0.12))', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
             <Compass size={14} style={{ color: '#60a5fa' }} />
             <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f1f5f9' }}>
-              SIH Presentation Tour
+              Interactive System Tour
             </span>
           </div>
           <div style={{ fontSize: '0.675rem', color: '#94a3b8', marginBottom: 8, lineHeight: 1.35 }}>
-            11-step interactive judge walkthrough with 100% deterministic reliability.
+            Guided architectural walkthrough across all automated data-linking stages.
           </div>
           <button
             type="button"
@@ -271,7 +359,7 @@ export const Sidebar: React.FC = () => {
             style={{ width: '100%', padding: '0.45rem 0.5rem', fontSize: '0.75rem', fontWeight: 800, justifyContent: 'center' }}
           >
             <Sparkles size={13} />
-            <span>{isGuidedDemoActive ? 'Resume Demo Tour' : 'Start Guided Demo'}</span>
+            <span>{isGuidedDemoActive ? 'Resume System Tour' : 'Start System Tour'}</span>
           </button>
         </div>
       </nav>

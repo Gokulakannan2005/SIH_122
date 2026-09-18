@@ -1,4 +1,4 @@
-import {
+import type {
   ScheduleActivity,
   SiteUpdate,
   MatchResult,
@@ -9,7 +9,37 @@ import {
   ApprovalHistoryItem,
 } from '../types';
 
-const API_BASE = 'http://localhost:5000/api';
+let cachedApiBase = '/api';
+
+export const getApiBase = async (): Promise<string> => {
+  const candidates = [cachedApiBase, '/api', 'http://localhost:5000/api', 'http://localhost:5001/api', 'http://localhost:5002/api', 'http://localhost:5050/api'];
+  const unique = Array.from(new Set(candidates));
+  for (const c of unique) {
+    try {
+      const res = await fetch(`${c}/health`, { method: 'GET', cache: 'no-store' });
+      if (res.ok) {
+        cachedApiBase = c;
+        return c;
+      }
+    } catch {}
+  }
+  return cachedApiBase;
+};
+
+async function apiFetch(endpoint: string, init?: RequestInit): Promise<Response> {
+  const base = await getApiBase();
+  try {
+    const res = await fetch(`${base}${endpoint}`, init);
+    return res;
+  } catch (err) {
+    // If request failed, try candidate ports in case backend shifted port
+    const freshBase = await getApiBase();
+    if (freshBase !== base) {
+      return await fetch(`${freshBase}${endpoint}`, init);
+    }
+    throw err;
+  }
+}
 
 export interface HealthResponse {
   status: string;
@@ -32,16 +62,21 @@ export interface AuthResponse {
 
 export const api = {
   /**
-   * Check if backend REST API is responsive
+   * Check if backend REST API is responsive across candidate ports
    */
   async checkHealth(): Promise<HealthResponse | null> {
-    try {
-      const res = await fetch(`${API_BASE}/health`, { method: 'GET', cache: 'no-store' });
-      if (!res.ok) return null;
-      return await res.json();
-    } catch {
-      return null;
+    const candidates = [cachedApiBase, '/api', 'http://localhost:5000/api', 'http://localhost:5001/api', 'http://localhost:5002/api', 'http://localhost:5050/api'];
+    const unique = Array.from(new Set(candidates));
+    for (const c of unique) {
+      try {
+        const res = await fetch(`${c}/health`, { method: 'GET', cache: 'no-store' });
+        if (res.ok) {
+          cachedApiBase = c;
+          return await res.json();
+        }
+      } catch {}
     }
+    return null;
   },
 
   /**
@@ -49,7 +84,7 @@ export const api = {
    */
   async login(username: string, passwordPlain: string): Promise<AuthResponse> {
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const res = await apiFetch('/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password: passwordPlain }),
@@ -77,7 +112,7 @@ export const api = {
     employeeId?: string;
   }): Promise<AuthResponse> {
     try {
-      const res = await fetch(`${API_BASE}/auth/register`, {
+      const res = await apiFetch('/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -105,7 +140,7 @@ export const api = {
    */
   async getUsers(): Promise<UserAccount[]> {
     try {
-      const res = await fetch(`${API_BASE}/auth/users`);
+      const res = await apiFetch('/auth/users');
       if (!res.ok) return [];
       return await res.json();
     } catch {
@@ -118,7 +153,7 @@ export const api = {
    */
   async getApprovalHistory(): Promise<ApprovalHistoryItem[]> {
     try {
-      const res = await fetch(`${API_BASE}/approvals/history`);
+      const res = await apiFetch('/approvals/history');
       if (!res.ok) return [];
       return await res.json();
     } catch {
@@ -138,11 +173,11 @@ export const api = {
   } | null> {
     try {
       const [scheduleRes, updatesRes, matchesRes, decisionsRes, auditRes] = await Promise.all([
-        fetch(`${API_BASE}/schedule`),
-        fetch(`${API_BASE}/site-updates`),
-        fetch(`${API_BASE}/matches`),
-        fetch(`${API_BASE}/planner/decisions`),
-        fetch(`${API_BASE}/audit-trail`),
+        apiFetch('/schedule'),
+        apiFetch('/site-updates'),
+        apiFetch('/matches'),
+        apiFetch('/planner/decisions'),
+        apiFetch('/audit-trail'),
       ]);
 
       if (!scheduleRes.ok || !updatesRes.ok || !matchesRes.ok) {
@@ -163,23 +198,23 @@ export const api = {
         auditLogs,
       };
     } catch (err) {
-      console.warn('Could not fetch from backend REST API, will fall back to local mode:', err);
+      console.error('Error fetching data from DATUM backend:', err);
       return null;
     }
   },
 
   /**
-   * Submit planner decision to backend with digital signature & L5 tracking
+   * Submit planner action (approve, relink, mark_unplanned, reject) with cryptographically verified decision
    */
   async submitPlannerAction(
     updateId: string,
-    actionType: PlannerActionType,
+    actionType: string,
     targetActivityId?: string | null,
     note?: string,
     userContext?: { userId?: string; userName?: string; userRole?: string }
-  ): Promise<{ decision: PlannerDecision; auditLog: AuditLog } | null> {
+  ): Promise<{ success: boolean; decision: PlannerDecision; auditLog: AuditLog } | null> {
     try {
-      const res = await fetch(`${API_BASE}/planner/action`, {
+      const res = await apiFetch('/planner/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -194,11 +229,7 @@ export const api = {
       });
 
       if (!res.ok) return null;
-      const data = await res.json();
-      return {
-        decision: data.decision,
-        auditLog: data.auditLog,
-      };
+      return await res.json();
     } catch (err) {
       console.error('Error submitting planner action to backend:', err);
       return null;
@@ -206,45 +237,69 @@ export const api = {
   },
 
   /**
-   * Edit site update parameters in backend
+   * Save planner decision & audit log
    */
-  async updateSiteUpdate(
-    updateId: string,
-    fields: Partial<SiteUpdate>
-  ): Promise<{ siteUpdate: SiteUpdate; matchResult: MatchResult } | null> {
+  async recordPlannerDecision(params: {
+    updateId: string;
+    actionType: PlannerActionType;
+    linkedActivityId?: string;
+    plannerNote?: string;
+    newActivityName?: string;
+    newDiscipline?: string;
+    userId?: string;
+    userName?: string;
+    userRole?: string;
+    l5Code?: string;
+    taskHash?: string;
+    evidenceHash?: string;
+    digitalSignature?: string;
+  }): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/site-updates/${updateId}`, {
+      const res = await apiFetch('/planner/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+
+      return res.ok;
+    } catch (err) {
+      console.error('Error saving decision to backend:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Update site update details (e.g. status, quantity)
+   */
+  async updateSiteUpdate(updateId: string, fields: Partial<SiteUpdate>): Promise<{ siteUpdate: SiteUpdate; matchResult: MatchResult } | null> {
+    try {
+      const res = await apiFetch(`/site-updates/${updateId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fields),
       });
 
       if (!res.ok) return null;
-      return await res.json();
+      const data = await res.json();
+      return {
+        siteUpdate: data.siteUpdate,
+        matchResult: data.matchResult,
+      };
     } catch (err) {
-      console.error('Error updating site update in backend:', err);
+      console.error('Error updating site update:', err);
       return null;
     }
   },
 
   /**
-   * Upload custom files to backend
+   * Upload site raw files to backend for ingestion
    */
   async uploadFiles(files: {
-    scheduleCsv?: File | Blob | string;
-    dailyReportTxt?: File | Blob | string;
-    pipingProgressXlsx?: File | Blob | ArrayBuffer;
+    dailyReportTxt?: File | string;
+    pipingProgressXlsx?: File | ArrayBuffer;
   }): Promise<boolean> {
     try {
       const formData = new FormData();
-
-      if (files.scheduleCsv) {
-        const blob = typeof files.scheduleCsv === 'string'
-          ? new Blob([files.scheduleCsv], { type: 'text/csv' })
-          : files.scheduleCsv;
-        formData.append('scheduleCsv', blob as any, 'schedule.csv');
-      }
-
       if (files.dailyReportTxt) {
         const blob = typeof files.dailyReportTxt === 'string'
           ? new Blob([files.dailyReportTxt], { type: 'text/plain' })
@@ -259,7 +314,7 @@ export const api = {
         formData.append('pipingProgressXlsx', blob as any, 'piping_progress.xlsx');
       }
 
-      const res = await fetch(`${API_BASE}/ingest/upload`, {
+      const res = await apiFetch('/ingest/upload', {
         method: 'POST',
         body: formData,
       });
@@ -276,7 +331,7 @@ export const api = {
    */
   async resetDemo(): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/reset-demo`, { method: 'POST' });
+      const res = await apiFetch('/reset-demo', { method: 'POST' });
       return res.ok;
     } catch (err) {
       console.error('Error resetting backend demo data:', err);
@@ -288,7 +343,7 @@ export const api = {
    * Get server-side CSV export URL
    */
   getExportCsvUrl(): string {
-    return `${API_BASE}/export/csv`;
+    return `${cachedApiBase}/export/csv`;
   },
 
   /**
@@ -296,7 +351,7 @@ export const api = {
    */
   async getScheduleVersions(): Promise<import('../types').ScheduleVersion[]> {
     try {
-      const res = await fetch(`${API_BASE}/schedule/versions`);
+      const res = await apiFetch('/schedule/versions');
       if (!res.ok) return [];
       return await res.json();
     } catch {
@@ -309,7 +364,7 @@ export const api = {
    */
   async activateScheduleVersion(versionId: string): Promise<{ success: boolean; activatedVersion?: import('../types').ScheduleVersion; message?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/schedule/activate-version`, {
+      const res = await apiFetch('/schedule/activate-version', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ versionId }),
@@ -330,7 +385,7 @@ export const api = {
       if (versionName) formData.append('versionName', versionName);
       if (uploadedBy) formData.append('uploadedBy', uploadedBy);
 
-      const res = await fetch(`${API_BASE}/schedule/upload-version`, {
+      const res = await apiFetch('/schedule/upload-version', {
         method: 'POST',
         body: formData,
       });
@@ -345,7 +400,7 @@ export const api = {
    */
   async getFieldSubmissions(): Promise<import('../types').FieldSubmissionInboxItem[]> {
     try {
-      const res = await fetch(`${API_BASE}/submissions/inbox`);
+      const res = await apiFetch('/submissions/inbox');
       if (!res.ok) return [];
       return await res.json();
     } catch {
@@ -358,7 +413,7 @@ export const api = {
    */
   async createFieldSubmission(sub: Partial<import('../types').FieldSubmissionInboxItem>): Promise<any> {
     try {
-      const res = await fetch(`${API_BASE}/submissions/create`, {
+      const res = await apiFetch('/submissions/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sub),
@@ -374,7 +429,7 @@ export const api = {
    */
   async getNotifications(role?: string): Promise<import('../types').SystemNotification[]> {
     try {
-      const res = await fetch(`${API_BASE}/notifications${role ? `?role=${role}` : ''}`);
+      const res = await apiFetch(`/notifications${role ? `?role=${role}` : ''}`);
       if (!res.ok) return [];
       return await res.json();
     } catch {
@@ -387,7 +442,7 @@ export const api = {
    */
   async acknowledgeSupervisorScheduleUpdates(): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/notifications/acknowledge-updates`, { method: 'POST' });
+      const res = await apiFetch('/notifications/acknowledge-updates', { method: 'POST' });
       return res.ok;
     } catch {
       return false;
@@ -399,7 +454,7 @@ export const api = {
    */
   async markNotificationRead(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/notifications/mark-read`, {
+      const res = await apiFetch('/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),

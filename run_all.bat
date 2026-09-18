@@ -1,14 +1,14 @@
 @echo off
 echo ========================================================
-echo  SIH-122 ProjectPulse - Full System Launch
+echo  SIH-122 DATUM - Full System Launch
 echo ========================================================
 echo.
 echo [1/2] Launching Backend REST API (Port 5000)...
-start "ProjectPulse Backend" cmd /k "cd /d "%~dp0backend" && node --experimental-strip-types src/server.ts"
+start "DATUM Backend" cmd /k "cd /d "%~dp0backend" && node --experimental-strip-types src/server.ts"
 
 echo [2/2] Launching Frontend Vite Dev Server (Port 5173)...
 timeout /t 2 /nobreak > nul
-start "ProjectPulse Frontend" cmd /k "cd /d "%~dp0frontend" && cmd /c npm run dev"
+start "DATUM Frontend" cmd /k "cd /d "%~dp0frontend" && cmd /c npm run dev"
 
 echo.
 echo ========================================================

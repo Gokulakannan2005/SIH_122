@@ -175,9 +175,9 @@ export const Dashboard: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
               <Compass size={20} style={{ color: '#60a5fa' }} />
               <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-                ProjectPulse Guided Walkthrough Demo
+                DATUM Guided Walkthrough Demo
               </h2>
-              <span className="badge badge-primary">SIH Judge Mode</span>
+              <span className="badge badge-primary">Enterprise Controls</span>
             </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45 }}>
               Launch the complete 11-step interactive tour: from unstructured site reports → AI hybrid matching → human review → schedule intelligence → immutable audit trail.

@@ -3,7 +3,7 @@ SIH 2026 - PROBLEM STATEMENT 122: PROJECT DOSSIER & COMPREHENSIVE STATUS REPORT
 ================================================================================
 PROJECT TITLE:
 AI-Driven Linking of Daily Site Progress Updates to Project Schedule Activities
-PLATFORM NAME: ProjectPulse (SIH-122 Industrial Schedule Intelligence System)
+PLATFORM NAME: DATUM (SIH-122 Industrial Schedule Intelligence System)
 ORGANIZATION / HACKATHON: Smart India Hackathon (SIH) 2026
 TARGET DOMAIN: Mega Infrastructure, EPC (Engineering, Procurement & Construction),
                Oil & Gas, Power Plants, Heavy Industrial Construction, Metro Rail
@@ -49,7 +49,7 @@ CONSEQUENCES OF THE CURRENT MANUAL PROCESS:
 --------------------------------------------------------------------------------
 2. PROJECT AIM & CORE OBJECTIVES
 --------------------------------------------------------------------------------
-ProjectPulse solves this industry bottleneck by providing an end-to-end, AI-assisted,
+DATUM solves this industry bottleneck by providing an end-to-end, AI-assisted,
 explainable linking pipeline that ingests unstructured multi-format daily site updates,
 intelligently matches them against L5/L6 Primavera P6 schedule deliverables with high
 precision, calculates real-time schedule variances, and routes ambiguous items through an
@@ -134,7 +134,7 @@ high-impact presentation mode designed specifically for hackathon judging:
 
   Step 4: Explainable Matching Criteria (Explainability)
     - Concept: Transparent breakdown of the 4 scoring factors (50% Keywords, 20% Discipline, 15% Area, 15% Fuzzy).
-    - Talk Track: "Unlike black-box LLMs, ProjectPulse scores every dimension with full mathematical transparency."
+    - Talk Track: "Unlike black-box LLMs, DATUM scores every dimension with full mathematical transparency."
 
   Step 5: High-Confidence Auto-Linking (Automation)
     - Concept: Evaluates 91% confidence score and auto-links update to `PIP-L6-012` (Erect 24-CW-017).
@@ -158,7 +158,7 @@ high-impact presentation mode designed specifically for hackathon judging:
 
   Step 10: Handling Unplanned Work (Scope Creep Detection)
     - Concept: Identifies out-of-scope drain line installation (`[Not in baseline]`), flagging contractor scope creep.
-    - Talk Track: "ProjectPulse automatically isolates ghost work to prevent untracked budget overruns."
+    - Talk Track: "DATUM automatically isolates ghost work to prevent untracked budget overruns."
 
   Step 11: Audit Trail & Project Governance (Accountability)
     - Concept: Displays the chronological ledger recording every AI match, planner approval, and override.
@@ -171,16 +171,16 @@ high-impact presentation mode designed specifically for hackathon judging:
 --------------------------------------------------------------------------------
 5. USER ACCOUNTS & ROLE-BASED ACCESS CONTROL (RBAC)
 --------------------------------------------------------------------------------
-ProjectPulse provides two specialized personas tailored to industrial workflows:
+DATUM provides two specialized personas tailored to industrial workflows:
 
   1. Lead Project Planner (P6 Administrator)
-     - Username: planner@projectpulse.ai
+     - Username: planner@datum.ai
      - Access: Full access to Dashboard, Review Queue, Schedule Activities,
        Site Updates, Audit Trail, and MSP/CSV export functions.
      - Role: Verifies AI suggestions, overrides links, approves variances.
 
   2. Site Field Supervisor (Execution Crew)
-     - Username: supervisor@projectpulse.ai
+     - Username: supervisor@datum.ai
      - Access: Simplified field report entry form, photo/evidence upload,
        daily progress logging, and view of submitted field reports.
      - Role: Submits raw daily progress logs, quantities installed, and site notes.
@@ -204,5 +204,5 @@ Linear, Stripe, and Vercel:
   Dev Server: http://localhost:5173/
 
 ================================================================================
-END OF DOSSIER - PROJECTPULSE SIH 2026
+END OF DOSSIER - DATUM SIH 2026
 ================================================================================

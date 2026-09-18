@@ -1,6 +1,6 @@
 @echo off
 echo ========================================================
-echo  SIH-122 ProjectPulse - Frontend (Port 5173)
+echo  SIH-122 DATUM - Frontend (Port 5173)
 echo ========================================================
 echo.
 echo Starting Vite + React Development Server...

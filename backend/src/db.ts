@@ -277,6 +277,37 @@ export function initSchema() {
       acknowledged INTEGER
     );
   `);
+
+  // Safe schema migrations for existing SQLite databases
+  const ensureColumn = (tableName: string, columnName: string, columnDef: string) => {
+    try {
+      const cols = db.prepare(`PRAGMA table_info(${tableName})`).all() as any[];
+      if (!cols.some(c => c.name.toLowerCase() === columnName.toLowerCase())) {
+        db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
+      }
+    } catch (err) {
+      console.warn(`Column check failed for ${tableName}.${columnName}:`, err);
+    }
+  };
+
+  ensureColumn('schedule_activities', 'l5_code', 'TEXT');
+  ensureColumn('schedule_activities', 'task_hash', 'TEXT');
+  ensureColumn('site_updates', 'task_hash', 'TEXT');
+  ensureColumn('site_updates', 'l5_code', 'TEXT');
+  ensureColumn('planner_decisions', 'user_id', 'TEXT');
+  ensureColumn('planner_decisions', 'user_name', 'TEXT');
+  ensureColumn('planner_decisions', 'user_role', 'TEXT');
+  ensureColumn('planner_decisions', 'l5_code', 'TEXT');
+  ensureColumn('planner_decisions', 'task_hash', 'TEXT');
+  ensureColumn('planner_decisions', 'evidence_hash', 'TEXT');
+  ensureColumn('planner_decisions', 'digital_signature', 'TEXT');
+  ensureColumn('audit_logs', 'user_id', 'TEXT');
+  ensureColumn('audit_logs', 'user_name', 'TEXT');
+  ensureColumn('audit_logs', 'user_role', 'TEXT');
+  ensureColumn('audit_logs', 'l5_code', 'TEXT');
+  ensureColumn('audit_logs', 'task_hash', 'TEXT');
+  ensureColumn('audit_logs', 'evidence_hash', 'TEXT');
+  ensureColumn('audit_logs', 'digital_signature', 'TEXT');
 }
 
 /**

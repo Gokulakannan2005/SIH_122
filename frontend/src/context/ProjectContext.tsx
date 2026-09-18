@@ -21,6 +21,7 @@ import {
   ScheduleVersion,
   FieldSubmissionInboxItem,
   SystemNotification,
+  PresentationMode,
 } from '../types';
 import { parseScheduleCSV, parseDailyReportTXT, parsePipingProgressXLSX } from '../utils/parsers';
 import { processAllMatches } from '../utils/matchingEngine';
@@ -73,6 +74,9 @@ interface ProjectContextType {
 
   activeTab: NavigationTab;
   setActiveTab: (tab: NavigationTab) => void;
+
+  presentationMode: PresentationMode;
+  setPresentationMode: (mode: PresentationMode) => void;
 
   systemMode: AppSystemMode;
   setSystemMode: (mode: AppSystemMode) => void;
@@ -221,6 +225,23 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const activeTab = activeTabState;
+
+  const [presentationMode, setPresentationModeState] = useState<PresentationMode>(() => {
+    try {
+      const saved = localStorage.getItem('datum_presentation_mode');
+      return (saved as PresentationMode) || 'sih';
+    } catch {
+      return 'sih';
+    }
+  });
+
+  const setPresentationMode = (mode: PresentationMode) => {
+    setPresentationModeState(mode);
+    try {
+      localStorage.setItem('datum_presentation_mode', mode);
+    } catch {}
+  };
+
   const [systemMode, setSystemMode] = useState<AppSystemMode>('executive');
   const demoMode = systemMode;
   const setDemoMode = setSystemMode;
@@ -1887,6 +1908,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         logout,
         activeTab,
         setActiveTab,
+        presentationMode,
+        setPresentationMode,
         systemMode,
         setSystemMode,
         loadScenarioPreset,

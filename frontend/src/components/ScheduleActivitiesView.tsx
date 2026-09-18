@@ -154,14 +154,20 @@ export const ScheduleActivitiesView: React.FC = () => {
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+            <span style={{ fontSize: '0.675rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-primary)', background: 'var(--brand-surface)', padding: '2px 7px', borderRadius: 4 }}>
+              WBS Master Tasks
+            </span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+              ({enrichedSchedule.length} Project Tasks)
+            </span>
+          </div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
             <CalendarCheck size={20} style={{ color: 'var(--brand-primary)' }} />
-            {isSupervisor ? 'Project Schedule Baseline & Workfront Deliverables' : 'Master Schedule Activities & 4D Progress Intelligence'}
+            <span>Master Schedule Tasks & 4D Progress Intelligence</span>
           </h2>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
-            {isSupervisor
-              ? 'Active engineering milestones, planned execution windows, WBS Level 5 deliverables, and site progress.'
-              : 'Oracle Primavera P6 & MS Project WBS baselines, 4D Critical Path Gantt, Earned Value S-Curves, and real-time field progress.'}
+            Master WBS schedule tasks and engineering milestones linked to incoming field logs and physical evidence.
           </p>
         </div>
 

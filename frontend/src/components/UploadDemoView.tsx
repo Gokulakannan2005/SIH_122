@@ -46,6 +46,7 @@ export const UploadDemoView: React.FC = () => {
     currentRole,
     isGuidedDemoActive,
     matchResults,
+    setPresentationMode,
   } = useProject();
 
   const isSupervisor = currentRole === 'supervisor';
@@ -201,6 +202,20 @@ export const UploadDemoView: React.FC = () => {
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setPresentationMode('sih');
+              setActiveTab('dashboard');
+            }}
+            type="button"
+            style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', fontWeight: 600, gap: 5 }}
+            title="Return to 12-stage execution pipeline"
+          >
+            <Sparkles size={13} style={{ color: '#38bdf8' }} />
+            <span>Return to Pipeline</span>
+          </button>
+
+          <button
+            className="btn btn-secondary btn-sm"
             onClick={() => setActiveTab('site-updates')}
             type="button"
             style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', fontWeight: 600 }}
@@ -224,20 +239,67 @@ export const UploadDemoView: React.FC = () => {
       {uploadStatusMsg && (
         <div
           style={{
-            background: 'var(--status-ready-bg)',
-            border: '1px solid var(--status-ready-border)',
-            color: 'var(--status-ready-fg)',
-            padding: '0.75rem 1rem',
-            borderRadius: 'var(--radius-sm)',
+            background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.16), rgba(16, 185, 129, 0.08))',
+            border: '1px solid rgba(16, 185, 129, 0.4)',
+            borderRadius: 'var(--radius-md)',
+            padding: '1rem 1.25rem',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
-            fontWeight: 600,
-            fontSize: '0.85rem',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem',
+            boxShadow: '0 4px 16px rgba(16, 185, 129, 0.12)',
+            animation: 'fadeIn 0.2s ease-out',
           }}
         >
-          <Check size={16} />
-          <span>{uploadStatusMsg}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#10b981', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Check size={20} strokeWidth={2.5} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 2 }}>
+                <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  ✓ Status: Approved & Reconciled With WBS Schedule
+                </span>
+                <span className="badge" style={{ background: '#059669', color: '#ffffff', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', padding: '2px 7px' }}>
+                  Approved
+                </span>
+              </div>
+              <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
+                {uploadStatusMsg}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setActiveTab('site-updates')}
+              style={{ padding: '0.4rem 0.85rem', fontSize: '0.775rem', fontWeight: 700, gap: 5 }}
+            >
+              <Sparkles size={13} />
+              <span>Open in AI Inspector Tab →</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setActiveTab('schedule-activities')}
+              style={{ padding: '0.4rem 0.85rem', fontSize: '0.775rem', fontWeight: 600, gap: 5 }}
+            >
+              <Calendar size={13} />
+              <span>View Tasks (WBS Schedule)</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setUploadStatusMsg(null)}
+              style={{ padding: '0.35rem 0.5rem', color: 'var(--text-muted)' }}
+              title="Dismiss banner"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 

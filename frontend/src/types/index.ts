@@ -2,6 +2,10 @@ export type NavigationTab = 'home' | 'dashboard' | 'site-updates' | 'schedule-ac
 
 export type AppSystemMode = 'enterprise' | 'executive';
 
+export type PresentationMode = 'sih' | 'standard';
+
+export type PptScreenshotState = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
 export type UserRole = 'admin' | 'supervisor';
 
 export type DensityMode = 'comfortable' | 'compact';
@@ -382,4 +386,37 @@ export interface GuidedDemoStep {
   targetSelector: string;
   cardPlacement?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left' | 'right' | 'left' | 'center';
   actionLabel?: string;
+}
+
+export interface ProjectMemoryPattern {
+  id: string;
+  category: 'duration_variance' | 'bottleneck' | 'productivity' | 'execution_pattern';
+  discipline: string;
+  activityName?: string;
+  activityId?: string;
+  area?: string;
+  plannedMetric: string;
+  observedMetric: string;
+  varianceNote: string;
+  occurrences: number;
+  confidenceScore: number;
+  recommendation: string;
+}
+
+export interface ProjectMemoryQueryAnswer {
+  query: string;
+  answer: string;
+  evidencePoints: string[];
+  matchedDiscipline?: string;
+  recordsAnalyzed: number;
+}
+
+export interface SihPsCoverageItem {
+  id: string;
+  requirementNumber: number;
+  title: string;
+  psRequirement: string;
+  datumCapability: string;
+  targetStepNumber: number;
+  status: 'demonstrated' | 'active';
 }

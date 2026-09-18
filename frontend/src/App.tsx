@@ -22,12 +22,15 @@ import { CommandPaletteModal } from './components/CommandPaletteModal';
 import { LoginView } from './components/LoginView';
 import { AuditTrailView } from './components/AuditTrailView';
 import { GuidedDemoWalkthroughView } from './components/GuidedDemoWalkthroughView';
+import { SihPresentationContainer } from './components/presentation/SihPresentationContainer';
 import { GUIDED_DEMO_STEPS } from './utils/guidedDemoData';
 
 const AppContent: React.FC = () => {
   const {
     activeTab,
     setActiveTab,
+    presentationMode,
+    theme,
     isAuthenticated,
     isGuidedDemoActive,
     guidedDemoStepIndex,
@@ -61,7 +64,7 @@ const AppContent: React.FC = () => {
   }, [toggleCommandPalette]);
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout theme-${theme}`} data-theme={theme}>
       {/* 1.5s Enterprise Startup Animation */}
       {!startupComplete && (
         <StartupExperience onComplete={() => setStartupComplete(true)} />
@@ -80,15 +83,22 @@ const AppContent: React.FC = () => {
             <AppHeader />
 
             <div className="page-body">
-              {activeTab === 'home' && <HomeIntroductionView />}
-              {activeTab === 'dashboard' && <Dashboard />}
-              {activeTab === 'site-updates' && <SiteUpdatesView />}
-              {activeTab === 'schedule-activities' && <ScheduleActivitiesView />}
-              {activeTab === 'planner-review' && <PlannerReviewView />}
-              {activeTab === 'audit-trail' && <AuditTrailView />}
-              {activeTab === 'supervisor-entry' && <SupervisorEntryView />}
-              {activeTab === 'copilot' && <CopilotView />}
-              {activeTab === 'upload' && <UploadDemoView />}
+              {activeTab === 'upload' ? (
+                <UploadDemoView />
+              ) : presentationMode === 'sih' ? (
+                <SihPresentationContainer />
+              ) : (
+                <>
+                  {activeTab === 'home' && <HomeIntroductionView />}
+                  {activeTab === 'dashboard' && <Dashboard />}
+                  {activeTab === 'site-updates' && <SiteUpdatesView />}
+                  {activeTab === 'schedule-activities' && <ScheduleActivitiesView />}
+                  {activeTab === 'planner-review' && <PlannerReviewView />}
+                  {activeTab === 'audit-trail' && <AuditTrailView />}
+                  {activeTab === 'supervisor-entry' && <SupervisorEntryView />}
+                  {activeTab === 'copilot' && <CopilotView />}
+                </>
+              )}
             </div>
           </div>
         </>

@@ -25,7 +25,10 @@ import {
   MoreHorizontal,
   Layers,
   FileCode,
-  ShieldCheck
+  ShieldCheck,
+  UploadCloud,
+  Download,
+  Check
 } from 'lucide-react';
 import { SiteUpdate } from '../types';
 
@@ -41,12 +44,18 @@ export const SiteUpdatesView: React.FC = () => {
     siteUpdatesFilter,
     setSiteUpdatesFilter,
     navigateToPlannerReviewWithFilter,
+    addToast,
+    exportAlignmentCSV,
+    handlePlannerAction,
   } = useProject();
 
   // Selected Update for the integrated Report Details Panel (defaults to first item)
   const [selectedUpdateId, setSelectedUpdateId] = useState<string>(() => {
     return siteUpdates[0]?.id || 'XLSX-ROW-PIP-SEP05-01';
   });
+
+  // Selected reports for multi-select batch actions
+  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
 
   // Report Details Inspector active sub-tab
   const [inspectorSubTab, setInspectorSubTab] = useState<'summary' | 'extracted' | 'evidence' | 'analysis'>('summary');
@@ -58,6 +67,10 @@ export const SiteUpdatesView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedDiscipline, setSelectedDiscipline] = useState<string>('ALL');
   const [selectedArea, setSelectedArea] = useState<string>('ALL');
+  const [selectedDate, setSelectedDate] = useState<string>('ALL');
+  const [showFilterMenu, setShowFilterMenu] = useState<boolean>(false);
+  const [activeRowActionId, setActiveRowActionId] = useState<string | null>(null);
+  const [confidenceSort, setConfidenceSort] = useState<'default' | 'high-first' | 'low-first'>('default');
 
   // Counts for top status tabs
   const statusCounts = useMemo(() => {
@@ -103,6 +116,12 @@ export const SiteUpdatesView: React.FC = () => {
     return Array.from(set).sort();
   }, [siteUpdates]);
 
+  const uniqueDates = useMemo(() => {
+    const set = new Set<string>();
+    siteUpdates.forEach(u => u.reportDate && set.add(u.reportDate));
+    return Array.from(set).sort().reverse();
+  }, [siteUpdates]);
+
   // Discipline Color Map
   const getDisciplineColor = (disc: string) => {
     switch (disc) {
@@ -123,7 +142,7 @@ export const SiteUpdatesView: React.FC = () => {
 
   // Filtered list of updates
   const filteredUpdates = useMemo(() => {
-    return siteUpdates.filter(update => {
+    const filtered = siteUpdates.filter(update => {
       const match = matchResults[update.id];
       const decision = plannerDecisions[update.id];
 
@@ -164,9 +183,98 @@ export const SiteUpdatesView: React.FC = () => {
         return false;
       }
 
+      // Date filter
+      if (selectedDate !== 'ALL' && update.reportDate !== selectedDate) {
+        return false;
+      }
+
       return true;
     });
-  }, [siteUpdates, matchResults, plannerDecisions, activeStatusTab, searchQuery, selectedDiscipline, selectedArea]);
+
+    if (confidenceSort === 'high-first') {
+      return [...filtered].sort((a, b) => {
+        const scoreA = matchResults[a.id]?.confidenceScore || 0;
+        const scoreB = matchResults[b.id]?.confidenceScore || 0;
+        return scoreB - scoreA;
+      });
+    } else if (confidenceSort === 'low-first') {
+      return [...filtered].sort((a, b) => {
+        const scoreA = matchResults[a.id]?.confidenceScore || 0;
+        const scoreB = matchResults[b.id]?.confidenceScore || 0;
+        return scoreA - scoreB;
+      });
+    }
+
+    return filtered;
+  }, [siteUpdates, matchResults, plannerDecisions, activeStatusTab, searchQuery, selectedDiscipline, selectedArea, selectedDate, confidenceSort]);
+
+  // Bulk Actions
+  const handleBulkApprove = async () => {
+    if (selectedRowIds.length === 0) return;
+    for (const id of selectedRowIds) {
+      const match = matchResults[id];
+      const targetId = match?.candidateActivityId || null;
+      await handlePlannerAction(id, 'approve', targetId, 'Batch approved via Multi-Select Toolbar');
+    }
+    addToast({
+      type: 'success',
+      title: 'Batch Reports Approved',
+      message: `Successfully approved ${selectedRowIds.length} site report(s) into project schedule.`,
+    });
+    setSelectedRowIds([]);
+  };
+
+  const handleExportSelectedCSV = () => {
+    if (selectedRowIds.length === 0) {
+      exportAlignmentCSV();
+      return;
+    }
+    const selectedUpdates = siteUpdates.filter(u => selectedRowIds.includes(u.id));
+    const rows: string[][] = [
+      [
+        'Report ID',
+        'Source File',
+        'Report Date',
+        'Discipline',
+        'Extracted Description',
+        'Event Status',
+        'Area',
+        'Matched Activity ID',
+        'Confidence Score',
+        'Planner Action Status',
+      ],
+    ];
+    selectedUpdates.forEach(u => {
+      const match = matchResults[u.id];
+      const decision = plannerDecisions[u.id];
+      rows.push([
+        u.id,
+        u.sourceFile || '',
+        u.reportDate || '',
+        u.discipline,
+        `"${(u.extractedDescription || '').replace(/"/g, '""')}"`,
+        u.eventStatus,
+        u.area || '',
+        decision?.linkedActivityId || match?.candidateActivityId || 'UNPLANNED',
+        `${match?.confidenceScore || 0}%`,
+        decision?.status || 'review',
+      ]);
+    });
+    const csvContent = rows.map(e => e.join(',')).join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Selected_Reports_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addToast({
+      type: 'success',
+      title: 'CSV Exported',
+      message: `Exported ${selectedRowIds.length} selected report(s) to CSV.`,
+    });
+  };
 
   // Selected update object
   const activeUpdate = useMemo(() => {
@@ -288,62 +396,270 @@ export const SiteUpdatesView: React.FC = () => {
 
         {/* Right Search & Quick Filters */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <div className="search-input-box" style={{ width: 260 }}>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => setActiveTab('upload')}
+            style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, gap: 5 }}
+            title="Upload daily reports (.txt), P6 schedules, or progress files"
+          >
+            <UploadCloud size={13} />
+            <span>Upload Text Log</span>
+          </button>
+
+          <div className="search-input-box" style={{ width: 220 }}>
             <Search size={14} className="search-icon" />
             <input
               type="text"
               className="form-input"
-              placeholder="Search reports, tags, or supervisors..."
+              placeholder="Search reports, tags, supervisors..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               style={{ fontSize: '0.775rem', padding: '0.35rem 0.65rem 0.35rem 2.1rem' }}
             />
           </div>
 
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
-          >
-            <Calendar size={13} />
-            <span>Date</span>
-          </button>
+          {/* Interactive Discipline Filter Dropdown */}
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <Filter size={13} style={{ position: 'absolute', left: 8, pointerEvents: 'none', color: selectedDiscipline !== 'ALL' ? 'var(--brand-primary)' : 'var(--text-muted)' }} />
+            <select
+              value={selectedDiscipline}
+              onChange={e => setSelectedDiscipline(e.target.value)}
+              className="form-input"
+              style={{
+                padding: '0.3rem 0.65rem 0.3rem 1.65rem',
+                fontSize: '0.75rem',
+                height: 'auto',
+                cursor: 'pointer',
+                background: selectedDiscipline !== 'ALL' ? 'var(--brand-surface)' : 'var(--bg-surface)',
+                borderColor: selectedDiscipline !== 'ALL' ? 'var(--brand-primary)' : 'var(--border-default)',
+                color: selectedDiscipline !== 'ALL' ? 'var(--brand-primary)' : 'inherit',
+                fontWeight: selectedDiscipline !== 'ALL' ? 700 : 500,
+              }}
+              title="Filter by Discipline"
+            >
+              <option value="ALL">All Disciplines</option>
+              {uniqueDisciplines.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
 
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => {
-              const nextDisc = selectedDiscipline === 'ALL' ? 'Piping' : selectedDiscipline === 'Piping' ? 'Civil' : 'ALL';
-              setSelectedDiscipline(nextDisc);
-            }}
-            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
-          >
-            <Filter size={13} />
-            <span>Discipline{selectedDiscipline !== 'ALL' ? `: ${selectedDiscipline}` : ''}</span>
-          </button>
+          {/* Interactive Area Filter Dropdown */}
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <MapPin size={13} style={{ position: 'absolute', left: 8, pointerEvents: 'none', color: selectedArea !== 'ALL' ? 'var(--brand-primary)' : 'var(--text-muted)' }} />
+            <select
+              value={selectedArea}
+              onChange={e => setSelectedArea(e.target.value)}
+              className="form-input"
+              style={{
+                padding: '0.3rem 0.65rem 0.3rem 1.65rem',
+                fontSize: '0.75rem',
+                height: 'auto',
+                cursor: 'pointer',
+                background: selectedArea !== 'ALL' ? 'var(--brand-surface)' : 'var(--bg-surface)',
+                borderColor: selectedArea !== 'ALL' ? 'var(--brand-primary)' : 'var(--border-default)',
+                color: selectedArea !== 'ALL' ? 'var(--brand-primary)' : 'inherit',
+                fontWeight: selectedArea !== 'ALL' ? 700 : 500,
+              }}
+              title="Filter by Workfront Area"
+            >
+              <option value="ALL">All Areas</option>
+              {uniqueAreas.map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
 
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => {
-              const nextArea = selectedArea === 'ALL' ? 'Pump Bay' : selectedArea === 'Pump Bay' ? 'Filter Bay' : 'ALL';
-              setSelectedArea(nextArea);
-            }}
-            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
-          >
-            <MapPin size={13} />
-            <span>Area{selectedArea !== 'ALL' ? `: ${selectedArea}` : ''}</span>
-          </button>
+          {/* Interactive Date Filter Dropdown */}
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <Calendar size={13} style={{ position: 'absolute', left: 8, pointerEvents: 'none', color: selectedDate !== 'ALL' ? 'var(--brand-primary)' : 'var(--text-muted)' }} />
+            <select
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="form-input"
+              style={{
+                padding: '0.3rem 0.65rem 0.3rem 1.65rem',
+                fontSize: '0.75rem',
+                height: 'auto',
+                cursor: 'pointer',
+                background: selectedDate !== 'ALL' ? 'var(--brand-surface)' : 'var(--bg-surface)',
+                borderColor: selectedDate !== 'ALL' ? 'var(--brand-primary)' : 'var(--border-default)',
+                color: selectedDate !== 'ALL' ? 'var(--brand-primary)' : 'inherit',
+                fontWeight: selectedDate !== 'ALL' ? 700 : 500,
+              }}
+              title="Filter by Log Date"
+            >
+              <option value="ALL">All Dates</option>
+              {uniqueDates.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
 
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            style={{ padding: '0.35rem 0.5rem' }}
-          >
-            <MoreHorizontal size={14} />
-          </button>
+          {/* Three Dots Menu with Clear, Sort, and Export Actions */}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className={`btn btn-secondary btn-sm ${showFilterMenu ? 'active' : ''}`}
+              style={{ padding: '0.35rem 0.55rem' }}
+              onClick={() => setShowFilterMenu(!showFilterMenu)}
+              title="More filter and sorting options"
+            >
+              <MoreHorizontal size={14} />
+            </button>
+            {showFilterMenu && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 4px)',
+                  right: 0,
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-sm)',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                  padding: '0.4rem',
+                  zIndex: 150,
+                  minWidth: 210,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 3,
+                }}
+              >
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', padding: '0.2rem 0.5rem' }}>
+                  Filter & Sort Actions
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ justifyContent: 'flex-start', fontSize: '0.75rem', padding: '0.35rem 0.5rem' }}
+                  onClick={() => {
+                    setConfidenceSort(confidenceSort === 'high-first' ? 'default' : 'high-first');
+                    setShowFilterMenu(false);
+                    addToast({ type: 'info', title: 'Sorted by High Confidence', message: 'Displaying highest matching score first.' });
+                  }}
+                >
+                  <Sparkles size={13} style={{ color: 'var(--brand-primary)' }} />
+                  <span>{confidenceSort === 'high-first' ? '✓ High Confidence (Active)' : 'Sort: High Confidence'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ justifyContent: 'flex-start', fontSize: '0.75rem', padding: '0.35rem 0.5rem' }}
+                  onClick={() => {
+                    setConfidenceSort(confidenceSort === 'low-first' ? 'default' : 'low-first');
+                    setShowFilterMenu(false);
+                    addToast({ type: 'info', title: 'Sorted by Review Priority', message: 'Displaying ambiguous items first.' });
+                  }}
+                >
+                  <AlertTriangle size={13} style={{ color: '#f59e0b' }} />
+                  <span>{confidenceSort === 'low-first' ? '✓ Review First (Active)' : 'Sort: Needs Review'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ justifyContent: 'flex-start', fontSize: '0.75rem', padding: '0.35rem 0.5rem' }}
+                  onClick={() => {
+                    exportAlignmentCSV();
+                    setShowFilterMenu(false);
+                  }}
+                >
+                  <Download size={13} />
+                  <span>Export Filtered CSV</span>
+                </button>
+                <div style={{ height: 1, background: 'var(--border-subtle)', margin: '2px 0' }} />
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ justifyContent: 'flex-start', fontSize: '0.75rem', padding: '0.35rem 0.5rem', color: '#ef4444' }}
+                  onClick={() => {
+                    setSelectedDiscipline('ALL');
+                    setSelectedArea('ALL');
+                    setSelectedDate('ALL');
+                    setSelectedRowIds([]);
+                    setSearchQuery('');
+                    setActiveStatusTab('all');
+                    setConfidenceSort('default');
+                    setShowFilterMenu(false);
+                    addToast({ type: 'info', title: 'Filters Reset', message: 'All filters and sorting reset to default.' });
+                  }}
+                >
+                  <RotateCcw size={13} />
+                  <span>Reset All Filters</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Floating / Sticky Batch Actions Bar for Multi-Selected Reports */}
+      {selectedRowIds.length > 0 && (
+        <div
+          style={{
+            background: 'var(--brand-surface)',
+            border: '1px solid var(--brand-primary)',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.65rem 1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+            animation: 'fadeIn 0.15s ease-out',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <span
+              style={{
+                background: 'var(--brand-primary)',
+                color: '#ffffff',
+                fontSize: '0.725rem',
+                fontWeight: 800,
+                borderRadius: 12,
+                padding: '2px 8px',
+              }}
+            >
+              {selectedRowIds.length} Selected
+            </span>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Batch Operations Available
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={handleBulkApprove}
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, gap: 5 }}
+            >
+              <Check size={13} />
+              <span>Bulk Approve ({selectedRowIds.length})</span>
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleExportSelectedCSV}
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 600, gap: 5 }}
+            >
+              <Download size={13} />
+              <span>Export Selected ({selectedRowIds.length})</span>
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setSelectedRowIds([])}
+              style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 3. Split Layout: High-Density Industrial Table (Left) + Report Details Inspector (Right) */}
       <div id="demo-target-field-reality" className="field-reports-split-view">
@@ -354,7 +670,19 @@ export const SiteUpdatesView: React.FC = () => {
               <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr>
                   <th style={{ width: 36, paddingLeft: '1rem' }}>
-                    <input type="checkbox" style={{ cursor: 'pointer' }} />
+                    <input
+                      type="checkbox"
+                      style={{ cursor: 'pointer' }}
+                      checked={filteredUpdates.length > 0 && selectedRowIds.length === filteredUpdates.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedRowIds(filteredUpdates.map(u => u.id));
+                        } else {
+                          setSelectedRowIds([]);
+                        }
+                      }}
+                      title={selectedRowIds.length === filteredUpdates.length ? 'Deselect all visible' : 'Select all visible'}
+                    />
                   </th>
                   <th>Report ID</th>
                   <th>Source & Date</th>
@@ -398,7 +726,20 @@ export const SiteUpdatesView: React.FC = () => {
                       }}
                     >
                       <td style={{ paddingLeft: '1rem' }} onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={isSelected} onChange={() => setSelectedUpdateId(update.id)} style={{ cursor: 'pointer' }} />
+                        <input
+                          type="checkbox"
+                          checked={selectedRowIds.includes(update.id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setSelectedRowIds(prev =>
+                              prev.includes(update.id)
+                                ? prev.filter(id => id !== update.id)
+                                : [...prev, update.id]
+                            );
+                          }}
+                          title={`Select ${update.id}`}
+                          style={{ cursor: 'pointer' }}
+                        />
                       </td>
                       <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)', fontSize: '0.775rem' }}>
                         {update.id}
@@ -461,7 +802,7 @@ export const SiteUpdatesView: React.FC = () => {
                           {statusText}
                         </span>
                       </td>
-                      <td style={{ textAlign: 'right', paddingRight: '1rem' }} onClick={e => e.stopPropagation()}>
+                      <td style={{ textAlign: 'right', paddingRight: '1rem', position: 'relative' }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           <button
                             type="button"
@@ -476,13 +817,79 @@ export const SiteUpdatesView: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            className="btn btn-ghost btn-sm"
-                            style={{ padding: '2px 4px' }}
-                            title="More options"
+                            className={`btn btn-ghost btn-sm ${activeRowActionId === update.id ? 'active' : ''}`}
+                            style={{ padding: '2px 5px' }}
+                            title="More actions for this report"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveRowActionId(activeRowActionId === update.id ? null : update.id);
+                            }}
                           >
                             <MoreHorizontal size={13} />
                           </button>
                         </div>
+
+                        {activeRowActionId === update.id && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              right: '1rem',
+                              top: 'calc(100% - 4px)',
+                              background: 'var(--bg-surface)',
+                              border: '1px solid var(--border-default)',
+                              borderRadius: 'var(--radius-sm)',
+                              boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                              padding: '0.35rem',
+                              zIndex: 100,
+                              minWidth: 185,
+                              textAlign: 'left',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 2,
+                            }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ justifyContent: 'flex-start', fontSize: '0.725rem', padding: '0.3rem 0.5rem' }}
+                              onClick={() => {
+                                setSelectedUpdateId(update.id);
+                                setSelectedInspectorUpdateId(update.id);
+                                setActiveRowActionId(null);
+                              }}
+                            >
+                              <Sparkles size={12} style={{ color: 'var(--brand-primary)' }} />
+                              <span>Open in AI Inspector</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ justifyContent: 'flex-start', fontSize: '0.725rem', padding: '0.3rem 0.5rem' }}
+                              onClick={() => {
+                                setSelectedReviewUpdateId(update.id);
+                                setActiveTab('planner-review');
+                                setActiveRowActionId(null);
+                              }}
+                            >
+                              <CheckCircle2 size={12} style={{ color: '#10b981' }} />
+                              <span>Planner Alignment</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ justifyContent: 'flex-start', fontSize: '0.725rem', padding: '0.3rem 0.5rem' }}
+                              onClick={() => {
+                                navigator.clipboard?.writeText(update.rawText || update.extractedDescription);
+                                setActiveRowActionId(null);
+                                addToast({ type: 'success', title: 'Copied Report', message: `Copied text for ${update.id}.` });
+                              }}
+                            >
+                              <FileText size={12} />
+                              <span>Copy Text & Hash</span>
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

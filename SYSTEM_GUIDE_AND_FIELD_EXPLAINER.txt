@@ -1,5 +1,5 @@
 ================================================================================
-PROJECTPULSE (SIH-122) — COMPLETE SYSTEM GUIDE & FIELD EXPLAINER
+DATUM (SIH-122) — COMPLETE SYSTEM GUIDE & FIELD EXPLAINER
 ================================================================================
 A Plain-English Handbook on How the System Works, What Every Screen Shows,
 What Every Field & Metric Means, and How to Operate the Platform.
@@ -42,7 +42,7 @@ The site supervisor did NOT write "PIP-L6-012". They used words like "CW 24-inch
 Before this software was built, a human planner had to spend hours reading hundreds of
 such messy notes and manually finding which schedule line item it matched.
 
-HOW PROJECTPULSE AUTOMATES THIS:
+HOW DATUM AUTOMATES THIS:
 1. Multi-Source Ingestion: The system reads the schedule CSV, the supervisor's text notes,
    and the Excel tracking sheets.
 2. Intelligent NLP Matching Engine: For every supervisor update, it runs a 4-factor test:
@@ -72,7 +72,7 @@ HOW PROJECTPULSE AUTOMATES THIS:
 2.1 THE TOP NAVIGATION BAR (NAVBAR)
 --------------------------------------------------------------------------------
 Located at the very top of your screen:
-- "ProjectPulse [SIH 2026]": The platform brand.
+- "DATUM [SIH 2026]": The platform brand.
 - "Backend: SQLite Connected" (Pill): Shows the live status of the backend REST API
   and local SQLite database. If the backend is running, it pulses green. If offline, it
   gracefully switches to "Client Mode (Standalone)".
@@ -372,5 +372,5 @@ TUTORIAL 4: HOW TO EXPORT THE OFFICIAL COMPLIANCE REPORT
    matched activity ID, confidence score, and planner audit notes, ready for executive reporting!
 
 ================================================================================
-END OF USER GUIDE & FIELD EXPLAINER — PROJECTPULSE (SIH 2026)
+END OF USER GUIDE & FIELD EXPLAINER — DATUM (SIH 2026)
 ================================================================================

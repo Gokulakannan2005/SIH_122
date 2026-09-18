@@ -1,6 +1,6 @@
 @echo off
 echo ========================================================
-echo  SIH-122 ProjectPulse - Backend Server (Port 5000)
+echo  SIH-122 DATUM - Backend Server (Port 5000)
 echo ========================================================
 echo.
 echo Starting Express REST API + SQLite Database...

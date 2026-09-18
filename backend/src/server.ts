@@ -806,11 +806,56 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`========================================================`);
-  console.log(`🚀 SIH-122 ProjectPulse Backend REST API`);
-  console.log(`📡 URL: http://localhost:${port}`);
-  console.log(`🗄️  Database: SQLite Embedded (backend/database.sqlite)`);
-  console.log(`========================================================`);
-});
+// Intelligent server launcher with auto-port conflict resolution
+function startServer(initialPort: number) {
+  let targetPort = initialPort;
+  const maxAttempts = 20;
+  let attempts = 0;
+
+  function tryListen(p: number) {
+    const server = app.listen(p, () => {
+      const activeInfo = {
+        port: p,
+        url: `http://localhost:${p}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      try {
+        const portFile = path.resolve(__dirname, '../.active-port.json');
+        fs.writeFileSync(portFile, JSON.stringify(activeInfo, null, 2), 'utf8');
+      } catch (writeErr) {
+        // ignore
+      }
+
+      console.log(`========================================================`);
+      console.log(`🚀 SIH-122 DATUM Backend REST API`);
+      console.log(`📡 URL: http://localhost:${p}`);
+      if (p !== initialPort) {
+        console.log(`ℹ️  Note: Port ${initialPort} was in use; auto-shifted to port ${p}`);
+      }
+      console.log(`🗄️  Database: SQLite Embedded (backend/database.sqlite)`);
+      console.log(`========================================================`);
+    });
+
+    server.on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE') {
+        attempts++;
+        console.warn(`⚠️  Port ${p} is in use (another localhost project or process). Trying port ${p + 1}...`);
+        if (attempts < maxAttempts) {
+          tryListen(p + 1);
+        } else {
+          console.error(`❌ Could not find an open port after ${maxAttempts} attempts.`);
+          process.exit(1);
+        }
+      } else {
+        console.error('❌ Server startup error:', err);
+      }
+    });
+  }
+
+  tryListen(Number(targetPort));
+}
+
+startServer(Number(port));
+
 

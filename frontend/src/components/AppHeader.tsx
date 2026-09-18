@@ -20,7 +20,9 @@ import {
   Command,
   Info,
   FileText,
-  Database
+  Database,
+  Sparkles,
+  LayoutDashboard,
 } from 'lucide-react';
 
 interface NotificationItem {
@@ -87,6 +89,8 @@ export const AppHeader: React.FC = () => {
     addToast,
     setIsCommandPaletteOpen,
     startGuidedDemo,
+    presentationMode,
+    setPresentationMode,
   } = useProject();
 
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -150,6 +154,16 @@ export const AppHeader: React.FC = () => {
     });
   };
 
+  const handleUploadClick = () => {
+    setPresentationMode('standard');
+    setActiveTab('upload');
+    addToast({
+      type: 'info',
+      title: 'Data Ingestion Hub',
+      message: 'Upload Primavera P6 baseline schedules, daily supervisor logs, or progress sheets.',
+    });
+  };
+
   const getPageTitle = (tab: string) => {
     switch (tab) {
       case 'home': return 'Overview';
@@ -172,22 +186,26 @@ export const AppHeader: React.FC = () => {
       style={{
         background: 'var(--bg-surface)',
         borderBottom: '1px solid var(--border-subtle)',
-        padding: '0.55rem 1.5rem',
+        padding: '0.45rem 1rem',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: '1.25rem',
+        gap: '0.75rem',
         position: 'sticky',
         top: 0,
         zIndex: 100,
       }}
     >
-      {/* Left: Breadcrumbs & Page Context */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+      {/* Left: Breadcrumbs & Mode Switcher */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexShrink: 0 }}>
+        {/* Project Breadcrumb */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
           <button
             type="button"
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() => {
+              setPresentationMode('standard');
+              setActiveTab('dashboard');
+            }}
             style={{
               fontWeight: 600,
               color: 'var(--text-secondary)',
@@ -195,19 +213,111 @@ export const AppHeader: React.FC = () => {
               border: 'none',
               padding: 0,
               cursor: 'pointer',
-              textDecoration: 'none',
+              whiteSpace: 'nowrap',
             }}
             title="Go to Project Control Center"
           >
-            IOCL Refinery - P4
+            IOCL Refinery
           </button>
-          <ChevronRight size={13} style={{ color: 'var(--text-muted)' }} />
-          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{getPageTitle(activeTab)}</span>
+          <ChevronRight size={12} style={{ color: 'var(--text-muted)' }} />
+          <span
+            style={{
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              maxWidth: '120px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title={activeTab === 'upload' ? 'Data Ingestion' : presentationMode === 'sih' ? 'Pipeline' : getPageTitle(activeTab)}
+          >
+            {activeTab === 'upload' ? 'Data Ingestion' : presentationMode === 'sih' ? 'Pipeline' : getPageTitle(activeTab)}
+          </span>
+        </div>
+
+        {/* Mode Switcher: Workspace vs Pipeline */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 20,
+            padding: '2px',
+            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.15)',
+            flexShrink: 0,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setPresentationMode('standard');
+              if (activeTab === 'upload') setActiveTab('dashboard');
+              addToast({
+                type: 'info',
+                title: 'Operations Workspace Active',
+                message: 'Switched to complete DATUM engineering workspace.',
+              });
+            }}
+            style={{
+              border: 'none',
+              borderRadius: 18,
+              padding: '3px 8px',
+              fontSize: '0.68rem',
+              fontWeight: presentationMode === 'standard' && activeTab !== 'upload' ? 800 : 600,
+              background: presentationMode === 'standard' && activeTab !== 'upload' ? 'var(--bg-surface)' : 'transparent',
+              color: presentationMode === 'standard' && activeTab !== 'upload' ? 'var(--text-primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              boxShadow: presentationMode === 'standard' && activeTab !== 'upload' ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
+              transition: 'all 0.15s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              whiteSpace: 'nowrap',
+            }}
+            title="Switch to Operations Workspace"
+          >
+            <LayoutDashboard size={11} />
+            <span>Workspace</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setPresentationMode('sih');
+              setActiveTab('dashboard');
+              addToast({
+                type: 'info',
+                title: 'End-to-End Pipeline Active',
+                message: 'Switched to automated 12-stage schedule-linking pipeline.',
+              });
+            }}
+            style={{
+              border: 'none',
+              borderRadius: 18,
+              padding: '3px 8px',
+              fontSize: '0.68rem',
+              fontWeight: presentationMode === 'sih' && activeTab !== 'upload' ? 800 : 600,
+              background: presentationMode === 'sih' && activeTab !== 'upload' ? 'linear-gradient(135deg, #0284c7, #10b981)' : 'transparent',
+              color: presentationMode === 'sih' && activeTab !== 'upload' ? '#ffffff' : 'var(--text-muted)',
+              cursor: 'pointer',
+              boxShadow: presentationMode === 'sih' && activeTab !== 'upload' ? '0 2px 8px rgba(2, 132, 199, 0.4)' : 'none',
+              transition: 'all 0.15s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              whiteSpace: 'nowrap',
+            }}
+            title="Switch to End-to-End Pipeline"
+          >
+            <Sparkles size={11} />
+            <span>Pipeline</span>
+          </button>
         </div>
       </div>
 
-      {/* Center: Global Search & Quick Workspace Shortcuts */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flex: 1, maxWidth: '640px' }}>
+      {/* Center: Global Search Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '1 1 220px', minWidth: '180px', maxWidth: '340px' }}>
         <div
           onClick={() => setIsCommandPaletteOpen(true)}
           style={{
@@ -216,28 +326,33 @@ export const AppHeader: React.FC = () => {
             background: 'var(--bg-subtle)',
             border: '1px solid var(--border-default)',
             borderRadius: 'var(--radius-sm)',
-            padding: '0.35rem 0.65rem',
-            gap: '0.5rem',
-            flex: 1,
+            padding: '0 0.55rem',
+            height: 32,
+            gap: '0.45rem',
+            width: '100%',
             transition: 'all 0.15s ease',
             cursor: 'pointer',
+            overflow: 'hidden',
           }}
           title="Open Quick Search & Command Palette (Ctrl + K)"
         >
-          <Search size={14} style={{ color: 'var(--text-muted)' }} />
+          <Search size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
           <span
             style={{
-              fontSize: '0.8rem',
+              fontSize: '0.78rem',
               color: 'var(--text-muted)',
               flex: 1,
               userSelect: 'none',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}
           >
-            Search activities, reports, tags, or press <strong style={{ color: 'var(--text-secondary)' }}>Ctrl+K</strong>...
+            Search activities, WBS...
           </span>
           <span
             style={{
-              fontSize: '0.65rem',
+              fontSize: '0.62rem',
               fontWeight: 700,
               color: 'var(--text-muted)',
               background: 'var(--bg-surface)',
@@ -246,29 +361,28 @@ export const AppHeader: React.FC = () => {
               borderRadius: 3,
               fontFamily: 'var(--font-mono)',
               whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             Ctrl K
           </span>
         </div>
-
-        {/* Universal Quick Action: Upload / Ingest Data */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <button
-            type="button"
-            className={`btn btn-sm ${activeTab === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveTab('upload')}
-            title="Upload schedule baselines, daily supervisor logs, or excel progress files"
-            style={{ padding: '0.32rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, gap: 5 }}
-          >
-            <Database size={13} />
-            <span>Upload / Ingest Data</span>
-          </button>
-        </div>
       </div>
 
-      {/* Right Controls: Theme, Export, Notifications, User */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+      {/* Right Controls: Upload, Export, Theme, Notifications, User */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexShrink: 0 }}>
+        {/* Universal Quick Action: Upload / Ingest Data */}
+        <button
+          type="button"
+          className={`btn btn-sm ${activeTab === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={handleUploadClick}
+          title="Upload schedule baselines, daily supervisor logs, or excel progress files"
+          style={{ padding: '0.32rem 0.65rem', fontSize: '0.74rem', fontWeight: 700, gap: 5, whiteSpace: 'nowrap' }}
+        >
+          <Database size={13} />
+          <span>Upload Data</span>
+        </button>
+
         {/* Theme Switcher */}
         <button
           type="button"
@@ -286,7 +400,7 @@ export const AppHeader: React.FC = () => {
           className="btn btn-secondary btn-sm"
           onClick={exportAlignmentCSV}
           title="Export CSV alignment report"
-          style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', gap: 4 }}
+          style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', gap: 4, whiteSpace: 'nowrap' }}
         >
           <Download size={13} />
           <span>Export</span>

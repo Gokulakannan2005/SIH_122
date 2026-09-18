@@ -23,7 +23,7 @@ export function exportPrimaveraP6XER(
   activities: ScheduleActivity[],
   siteUpdates: SiteUpdate[],
   decisions: Record<string, PlannerDecision>,
-  projectName: string = 'DATUM-SIH122-EXPANSION'
+  projectName: string = 'DATUM-IOCL-EXPANSION'
 ): void {
   const nowStr = new Date().toISOString().slice(0, 10);
   const xerLines: string[] = [];

@@ -1,4 +1,4 @@
-# ProjectPulse (SIH-122) 🏗️
+# DATUM (SIH-122) 🏗️
 ### AI-Driven Linking of Daily Site Progress Updates to Project Schedule Activities
 
 **Smart India Hackathon (SIH) 2026 — Problem Statement 122**
@@ -7,11 +7,11 @@
 
 ## 📌 Executive Summary
 
-**ProjectPulse** is an industrial-grade project progress intelligence platform designed for mega infrastructure, EPC (Engineering, Procurement & Construction), oil & gas, and heavy manufacturing projects.
+**DATUM** is an industrial-grade project progress intelligence platform designed for mega infrastructure, EPC (Engineering, Procurement & Construction), oil & gas, and heavy manufacturing projects.
 
 In large-scale construction, master schedules (authored in **Oracle Primavera P6** or **Microsoft Project**) track thousands of discrete Work Breakdown Structure (WBS) deliverables down to Level 5 and Level 6. However, daily site progress arrives in fragmented, unstructured formats (free-text Daily Progress Reports, contractor Excel logs, and shift handover notes). 
 
-ProjectPulse automatically ingests unstructured site updates, applies explainable multi-factor matching against L5/L6 Primavera P6 schedule baselines, flags schedule variances & unplanned scope creep, and provides an ergonomic human-in-the-loop Planner Workbench with an immutable audit ledger.
+DATUM automatically ingests unstructured site updates, applies explainable multi-factor matching against L5/L6 Primavera P6 schedule baselines, flags schedule variances & unplanned scope creep, and provides an ergonomic human-in-the-loop Planner Workbench with an immutable audit ledger.
 
 ---
 
@@ -39,12 +39,12 @@ ProjectPulse automatically ingests unstructured site updates, applies explainabl
 
 ## 👥 User Personas & Accounts
 
-ProjectPulse includes built-in role switching for realistic organizational workflows:
+DATUM includes built-in role switching for realistic organizational workflows:
 
 | Role | Username | Permissions | Primary Responsibilities |
 | :--- | :--- | :--- | :--- |
-| **Lead Project Planner** | `planner@projectpulse.ai` | Full Access | Review AI matches, resolve ambiguous candidates, approve schedule linkages, export audit reports |
-| **Site Field Supervisor** | `supervisor@projectpulse.ai` | Field Reports & Ingestion | Submit raw DPR text, log daily installed quantities, upload field photos |
+| **Lead Project Planner** | `planner@datum.ai` | Full Access | Review AI matches, resolve ambiguous candidates, approve schedule linkages, export audit reports |
+| **Site Field Supervisor** | `supervisor@datum.ai` | Field Reports & Ingestion | Submit raw DPR text, log daily installed quantities, upload field photos |
 
 ---
 
@@ -154,4 +154,4 @@ To run the interactive presentation:
 ## 📄 License & Attribution
 
 Developed for **Smart India Hackathon (SIH) 2026** under Problem Statement **SIH-122**.  
-All rights reserved © 2026 Team ProjectPulse.
+All rights reserved © 2026 Team DATUM.

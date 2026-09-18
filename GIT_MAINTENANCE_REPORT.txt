@@ -1,8 +1,8 @@
 ================================================================================
-SIH-122 PROJECTPULSE - GIT MAINTENANCE & REPOSITORY AUDIT REPORT
+SIH-122 DATUM - GIT MAINTENANCE & REPOSITORY AUDIT REPORT
 ================================================================================
 PROJECT TITLE: AI-Driven Linking of Daily Site Progress Updates to Project Schedule Activities
-PLATFORM NAME: ProjectPulse (SIH-122 Industrial Schedule Linker)
+PLATFORM NAME: DATUM (SIH-122 Industrial Schedule Linker)
 REPOSITORY:    https://github.com/Gokulakannan2005/SIH_122.git
 PRIMARY BASELINE BRANCH: main
 ACTIVE WORKING BRANCH:   dev

@@ -3,10 +3,10 @@
  * Features:
  *  1. Hardware Microphone Stream via navigator.mediaDevices.getUserMedia (Works on Opera, Chrome, Edge, Safari, Firefox).
  *  2. Real-Time Web Audio API VU / Frequency Level Analyzer for responsive visual feedback.
- *  3. MediaRecorder Audio Capture: Records physical voice into audio blobs.
- *  4. Browser-side PCM WAV Encoder: Converts audio buffer to standard 16-bit WAV for accurate transcription.
- *  5. Direct Speech-to-Text API (/api/transcribe): Accurately transcribes the exact spoken words in English, Hindi, and Tamil.
- *  6. Dual Web Speech API fallback for Chrome/Edge with seamless server-side fallback for Opera/Firefox.
+ *  3. Direct Pure PCM Float32 WAV Encoder: Records physical voice samples directly into standard 16-bit PCM WAV.
+ *     Guarantees 100% compliance with Python speech_recognition without webm decoding issues.
+ *  4. Direct Speech-to-Text API (/api/transcribe): Resilient multi-port routing with auto-fallback to ports 5000, 5001, 5002, 5050.
+ *  5. Dual Web Speech API fallback for Chrome/Edge with seamless server-side fallback for Opera/Firefox.
  */
 
 export type SpeechLanguage = 'en-IN' | 'hi-IN' | 'ta-IN';
@@ -88,19 +88,22 @@ export const SAMPLE_VOICE_PRESETS: VoicePreset[] = [
 ];
 
 /**
- * Convert AudioBuffer to standard 16-bit PCM WAV Blob
+ * Direct Float32 PCM to Standard 16-bit Mono RIFF WAVE Encoder
  */
-export function audioBufferToWav(buffer: AudioBuffer): Blob {
-  const numChannels = 1;
-  const sampleRate = buffer.sampleRate;
-  const format = 1; // PCM
-  const bitDepth = 16;
+export function encodeFloat32PcmToWav(chunks: Float32Array[], sampleRate: number): Blob {
+  let totalLength = 0;
+  for (const chunk of chunks) {
+    totalLength += chunk.length;
+  }
 
-  const channelData = buffer.getChannelData(0);
-  const dataLength = channelData.length * (bitDepth / 8);
-  const bufferLength = 44 + dataLength;
-  const arrayBuffer = new ArrayBuffer(bufferLength);
-  const view = new DataView(arrayBuffer);
+  const numChannels = 1;
+  const bitDepth = 16;
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = totalLength * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
 
   function writeString(offset: number, str: string) {
     for (let i = 0; i < str.length; i++) {
@@ -110,35 +113,55 @@ export function audioBufferToWav(buffer: AudioBuffer): Blob {
 
   // RIFF chunk descriptor
   writeString(0, 'RIFF');
-  view.setUint32(4, 36 + dataLength, true);
+  view.setUint32(4, 36 + dataSize, true);
   writeString(8, 'WAVE');
 
   // fmt sub-chunk
   writeString(12, 'fmt ');
   view.setUint32(16, 16, true);
-  view.setUint16(20, format, true);
+  view.setUint16(20, 1, true); // PCM format
   view.setUint16(22, numChannels, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true);
-  view.setUint16(32, numChannels * (bitDepth / 8), true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
   view.setUint16(34, bitDepth, true);
 
   // data sub-chunk
   writeString(36, 'data');
-  view.setUint32(40, dataLength, true);
+  view.setUint32(40, dataSize, true);
 
-  // Write PCM samples
+  // Write PCM 16-bit samples
   let offset = 44;
-  for (let i = 0; i < channelData.length; i++, offset += 2) {
-    const s = Math.max(-1, Math.min(1, channelData[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  for (const chunk of chunks) {
+    for (let i = 0; i < chunk.length; i++) {
+      const s = Math.max(-1, Math.min(1, chunk[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      offset += 2;
+    }
   }
 
-  return new Blob([arrayBuffer], { type: 'audio/wav' });
+  return new Blob([buffer], { type: 'audio/wav' });
 }
 
 /**
- * Check backend Speech-to-Text engine readiness
+ * Candidate backend host ports for resilient routing
+ */
+const CANDIDATE_PORTS = [5000, 5001, 5002, 5050];
+let activeBackendPortUrl: string | null = null;
+
+function getCandidateEndpoints(path: string): string[] {
+  const endpoints = [path];
+  if (activeBackendPortUrl) {
+    endpoints.push(`${activeBackendPortUrl}${path}`);
+  }
+  for (const p of CANDIDATE_PORTS) {
+    endpoints.push(`http://localhost:${p}${path}`);
+  }
+  return Array.from(new Set(endpoints));
+}
+
+/**
+ * Check backend Speech-to-Text engine readiness across candidate ports
  */
 export async function checkSTTEngineStatus(): Promise<{
   success: boolean;
@@ -147,15 +170,21 @@ export async function checkSTTEngineStatus(): Promise<{
   srVersion?: string;
   error?: string;
 }> {
-  const endpoints = ['/api/transcribe/status', 'http://localhost:5000/api/transcribe/status'];
+  const endpoints = getCandidateEndpoints('/api/transcribe/status');
   for (const endpoint of endpoints) {
     try {
       const res = await fetch(endpoint, { method: 'GET', cache: 'no-store' });
       if (res.ok) {
-        return await res.json();
+        const data = await res.json();
+        // Remember working backend base
+        if (endpoint.startsWith('http://localhost:')) {
+          const match = endpoint.match(/^http:\/\/localhost:\d+/);
+          if (match) activeBackendPortUrl = match[0];
+        }
+        return data;
       }
     } catch {
-      // try next endpoint
+      // try next candidate
     }
   }
   return { success: false, status: 'offline', error: 'Backend transcription service is offline.' };
@@ -169,30 +198,11 @@ export async function transcribeAudioBlob(
   lang: SpeechLanguage = 'en-IN'
 ): Promise<{ success: boolean; text?: string; error?: string; language?: string; fallback?: boolean }> {
   try {
-    let wavBlob: Blob = blob;
-
-    // Convert audio buffer to standard 16-bit PCM WAV if needed
-    if (blob.type !== 'audio/wav') {
-      try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
-          const arrayBuffer = await blob.arrayBuffer();
-          const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-          wavBlob = audioBufferToWav(audioBuffer);
-          ctx.close();
-        }
-      } catch (decodeErr) {
-        console.warn('Audio decoding fallback to raw blob:', decodeErr);
-        wavBlob = blob;
-      }
-    }
-
     const formData = new FormData();
-    formData.append('audio', wavBlob, 'recording.wav');
+    formData.append('audio', blob, 'recording.wav');
     formData.append('language', lang);
 
-    const endpoints = ['/api/transcribe', 'http://localhost:5000/api/transcribe'];
+    const endpoints = getCandidateEndpoints('/api/transcribe');
     let lastError = '';
 
     for (const endpoint of endpoints) {
@@ -204,6 +214,10 @@ export async function transcribeAudioBlob(
 
         if (res.ok) {
           const data = await res.json();
+          if (endpoint.startsWith('http://localhost:')) {
+            const match = endpoint.match(/^http:\/\/localhost:\d+/);
+            if (match) activeBackendPortUrl = match[0];
+          }
           return data;
         } else {
           const errJson = await res.json().catch(() => null);
@@ -221,72 +235,83 @@ export async function transcribeAudioBlob(
 }
 
 class SpeechService {
-
   private recognition: any = null;
   private isListening = false;
   private mediaStream: MediaStream | null = null;
-  private mediaRecorder: MediaRecorder | null = null;
-  private recordedChunks: Blob[] = [];
-  private recordingStartTime = 0;
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
+  private processorNode: ScriptProcessorNode | null = null;
+  private pcmChunks: Float32Array[] = [];
   private animFrameId: number | null = null;
   private currentHandlers: SpeechRecognitionHandlers | null = null;
   private hasReceivedNativeTranscript = false;
   private currentLanguage: SpeechLanguage = 'en-IN';
+  private recordingStartTime = 0;
 
   /**
-   * Start hardware microphone, audio recorder, and speech recognition
+   * Start hardware microphone, direct PCM recorder, and speech recognition
    */
   public async start(
     language: SpeechLanguage = 'en-IN',
     handlers: SpeechRecognitionHandlers
   ): Promise<boolean> {
-    this.stop(); // Clean up any active session
+    await this.stop(); // Clean up any active session
 
     this.currentHandlers = handlers;
     this.currentLanguage = language;
     this.hasReceivedNativeTranscript = false;
-    this.recordedChunks = [];
-    const isOpera = isOperaBrowser();
+    this.pcmChunks = [];
     let micOk = false;
 
-    // 1. Request hardware microphone access (works on Opera, Chrome, Edge, Safari, Firefox)
+    // 1. Request hardware microphone access
     if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
-        this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        });
+
         handlers.onMicConnected?.(true);
         micOk = true;
-        this.startAudioAnalyzer(handlers.onAudioLevel);
 
-        // Start MediaRecorder to capture real audio bytes
-        try {
-          const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-            ? 'audio/webm;codecs=opus'
-            : MediaRecorder.isTypeSupported('audio/webm')
-            ? 'audio/webm'
-            : '';
+        // Initialize Web Audio API for analyzer and PCM recording
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          this.audioContext = new AudioCtx();
+          if (this.audioContext.state === 'suspended') {
+            await this.audioContext.resume();
+          }
 
-          this.mediaRecorder = mimeType
-            ? new MediaRecorder(this.mediaStream, { mimeType })
-            : new MediaRecorder(this.mediaStream);
+          const source = this.audioContext.createMediaStreamSource(this.mediaStream);
 
+          // Audio VU Analyzer
+          this.analyser = this.audioContext.createAnalyser();
+          this.analyser.fftSize = 256;
+          this.analyser.smoothingTimeConstant = 0.5;
+          source.connect(this.analyser);
+          this.startAudioAnalyzer(handlers.onAudioLevel);
+
+          // Direct Float32 PCM recording node
+          this.processorNode = this.audioContext.createScriptProcessor(4096, 1, 1);
           this.recordingStartTime = Date.now();
-          this.mediaRecorder.ondataavailable = e => {
-            if (e.data && e.data.size > 0) {
-              this.recordedChunks.push(e.data);
-            }
+
+          this.processorNode.onaudioprocess = (e) => {
+            if (!this.isListening) return;
+            const inputData = e.inputBuffer.getChannelData(0);
+            this.pcmChunks.push(new Float32Array(inputData));
           };
 
-          this.mediaRecorder.start(200); // 200ms slice
-        } catch (recErr) {
-          console.warn('MediaRecorder error:', recErr);
+          source.connect(this.processorNode);
+          this.processorNode.connect(this.audioContext.destination);
         }
       } catch (err: any) {
         handlers.onMicConnected?.(false);
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
           handlers.onError?.(
-            'Microphone access was denied in browser permissions. Please allow microphone access in Opera site settings.'
+            'Microphone access was denied. Please allow microphone access in your browser settings.'
           );
         } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
           handlers.onError?.('No hardware microphone found on this device.');
@@ -296,16 +321,19 @@ class SpeechService {
       }
     }
 
-    // 2. Initialize Web Speech API (active in Chrome/Edge; fallback for Opera)
+    this.isListening = micOk;
+    if (micOk) {
+      handlers.onStateChange?.('listening');
+    }
+
+    // 2. Initialize Web Speech API (for real-time streaming text in Chrome / Edge)
     const SpeechRecognitionClass =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognitionClass) {
-      this.isListening = micOk;
-      if (micOk) {
-        handlers.onStateChange?.('listening');
-      }
+      // Browser does not have native Web Speech API (e.g. Opera, Firefox)
+      // Will transcribe via backend PCM WAV on stop
       return micOk;
     }
 
@@ -315,9 +343,6 @@ class SpeechService {
       this.recognition.interimResults = true;
       this.recognition.lang = language;
       this.recognition.maxAlternatives = 1;
-
-      handlers.onStateChange?.('listening');
-      this.isListening = true;
 
       this.recognition.onresult = (event: any) => {
         this.hasReceivedNativeTranscript = true;
@@ -346,32 +371,22 @@ class SpeechService {
           handlers.onStateChange?.('error');
         }
 
-        let message = 'Voice capture notice.';
         if (err === 'not-allowed') {
-          message = 'Microphone permission was denied. Please allow microphone access in browser settings.';
-          handlers.onError?.(message);
+          handlers.onError?.('Microphone permission was denied.');
         } else if (err === 'audio-capture') {
-          message = 'No microphone device found on system.';
-          handlers.onError?.(message);
+          handlers.onError?.('No microphone device found on system.');
         }
       };
 
       this.recognition.onend = () => {
-        if (this.isListening) {
-          // Keep active if recording
-        }
+        // Recognition ended
       };
 
       this.recognition.start();
       return true;
     } catch (err: any) {
-      if (!micOk) {
-        this.isListening = false;
-        handlers.onStateChange?.('error');
-        handlers.onError?.(err?.message || 'Failed to initialize speech recognition.');
-        return false;
-      }
-      return true;
+      // Fall back to backend audio transcription
+      return micOk;
     }
   }
 
@@ -379,46 +394,31 @@ class SpeechService {
    * Real-time audio volume level analyzer using Web Audio API
    */
   private startAudioAnalyzer(onAudioLevel?: (level: number) => void): void {
-    if (!this.mediaStream || !onAudioLevel) return;
+    if (!this.analyser || !onAudioLevel) return;
 
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
+    const bufferLength = this.analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
 
-      this.audioContext = new AudioCtx();
-      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
-      this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 256;
-      this.analyser.smoothingTimeConstant = 0.5;
-      source.connect(this.analyser);
+    const tick = () => {
+      if (!this.analyser || !this.isListening) return;
+      this.analyser.getByteFrequencyData(dataArray);
 
-      const bufferLength = this.analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / bufferLength;
+      const level = Math.min(100, Math.round((average / 128) * 100));
+      onAudioLevel(level);
 
-      const tick = () => {
-        if (!this.analyser) return;
-        this.analyser.getByteFrequencyData(dataArray);
+      this.animFrameId = requestAnimationFrame(tick);
+    };
 
-        let sum = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          sum += dataArray[i];
-        }
-        const average = sum / bufferLength;
-        // Normalize to 0-100 scale
-        const level = Math.min(100, Math.round((average / 128) * 100));
-        onAudioLevel(level);
-
-        this.animFrameId = requestAnimationFrame(tick);
-      };
-
-      tick();
-    } catch (e) {
-      console.warn('Audio analyzer could not be initialized:', e);
-    }
+    tick();
   }
 
   /**
-   * Stop both recognition and media stream, and return recorded audio data
+   * Stop recognition, disconnect audio stream, and return recorded PCM WAV
    */
   public async stop(): Promise<RecordedAudioData | null> {
     if (this.animFrameId) {
@@ -426,63 +426,64 @@ class SpeechService {
       this.animFrameId = null;
     }
 
-    if (this.audioContext) {
-      try {
-        this.audioContext.close();
-      } catch (e) {
-        // ignore
-      }
-      this.audioContext = null;
-    }
+    const durationSec = Math.max(
+      0.5,
+      Number(((Date.now() - this.recordingStartTime) / 1000).toFixed(1))
+    );
 
     let recordedData: RecordedAudioData | null = null;
 
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+    // Disconnect processor
+    if (this.processorNode) {
       try {
-        const durationSec = Math.max(0.5, Number(((Date.now() - this.recordingStartTime) / 1000).toFixed(1)));
-        
-        // Wait for final chunk
-        await new Promise<void>(resolve => {
-          if (!this.mediaRecorder) return resolve();
-          this.mediaRecorder.onstop = () => resolve();
-          this.mediaRecorder.stop();
-        });
+        this.processorNode.disconnect();
+      } catch (e) {}
+      this.processorNode = null;
+    }
 
-        const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        recordedData = { blob, url, durationSec };
+    // Generate valid PCM 16-bit WAV blob from captured chunks
+    if (this.pcmChunks.length > 0 && this.audioContext) {
+      try {
+        const sampleRate = this.audioContext.sampleRate || 44100;
+        const wavBlob = encodeFloat32PcmToWav(this.pcmChunks, sampleRate);
+        const url = URL.createObjectURL(wavBlob);
+        recordedData = { blob: wavBlob, url, durationSec };
 
         if (this.currentHandlers?.onAudioRecorded) {
           this.currentHandlers.onAudioRecorded(recordedData);
         }
 
-        // If native browser STT didn't return text (e.g. in Opera / Firefox), transcribe via backend API
+        // If native browser STT didn't produce text (e.g. in Opera / Firefox / offline), transcribe via backend
         if (!this.hasReceivedNativeTranscript && durationSec >= 0.8) {
           this.currentHandlers?.onStateChange?.('transcribing');
-          const result = await transcribeAudioBlob(blob, this.currentLanguage);
+          const result = await transcribeAudioBlob(wavBlob, this.currentLanguage);
           if (result.success && result.text) {
             this.currentHandlers?.onFinalTranscript?.(result.text);
           } else if (result.error) {
             this.currentHandlers?.onError?.(result.error);
           }
         }
-      } catch (e) {
-        console.warn('Error stopping mediaRecorder:', e);
+      } catch (encodeErr) {
+        console.warn('WAV encoding error:', encodeErr);
       }
-      this.mediaRecorder = null;
+    }
+
+    if (this.audioContext) {
+      try {
+        this.audioContext.close();
+      } catch (e) {}
+      this.audioContext = null;
     }
 
     if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(track => track.stop());
+      this.mediaStream.getTracks().forEach((track) => track.stop());
       this.mediaStream = null;
     }
 
     if (this.recognition) {
       try {
         this.recognition.stop();
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
       this.recognition = null;
     }
 

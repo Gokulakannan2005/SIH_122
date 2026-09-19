@@ -299,7 +299,7 @@ app.post('/api/schedule/upload-version', upload.single('scheduleFile'), (req, re
       projectId: 'IOCL-P4-REFINERY',
       versionName: versionName || `${versionId} (Lead Planner Ingestion)`,
       uploadedAt: new Date().toISOString(),
-      uploadedBy: uploadedBy || 'Gokulakannan P. (Lead Planner)',
+      uploadedBy: uploadedBy || 'Lead Planning Engineer',
       fileType: file.originalname.endsWith('.xlsx') ? 'Primavera P6 XLSX' : 'Primavera P6 CSV',
       activitiesCount: parsedSchedule.length,
       isActive: false,
@@ -468,8 +468,8 @@ app.post('/api/planner/action', (req, res) => {
       }
     }
 
-    const activeUserId = userId || 'usr-planner-gokul';
-    const activeUserName = userName || 'Gokulakannan P.';
+    const activeUserId = userId || 'usr-planner-lead';
+    const activeUserName = userName || 'Lead Planning Engineer';
     const activeUserRole = userRole || 'Lead Planning Engineer';
     const evidenceHash = generateEvidenceChainHash(taskHash || 'TASK-UNPLANNED', updateId, activeUserId);
     const digitalSignature = `SIG-${(taskHash || 'UNPLN').substring(0, 6)}-${evidenceHash.substring(0, 6)}`;

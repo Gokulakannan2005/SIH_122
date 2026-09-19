@@ -2474,7 +2474,7 @@ HSE
           >
             <div>
               <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#f8fafc' }}>
-                SIH26122 Workflow Story Complete
+                DATUM End-to-End Workflow Story Complete
               </div>
               <div style={{ fontSize: '0.72rem', color: '#cbd5e1' }}>
                 DATUM has bridged unstructured field evidence to formal schedule baselines and preserved execution knowledge for future planning.
@@ -2495,7 +2495,7 @@ HSE
                 onClick={() => setShowCoverageModal(true)}
                 style={{ fontWeight: 800 }}
               >
-                View PS Compliance Matrix
+                View Capabilities Matrix
               </button>
             </div>
           </div>

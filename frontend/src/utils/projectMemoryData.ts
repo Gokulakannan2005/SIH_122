@@ -164,7 +164,7 @@ export function queryProjectMemory(
 }
 
 /**
- * Official SIH26122 problem statement coverage mapping to DATUM demonstration steps.
+ * Enterprise specification and capabilities coverage mapping to DATUM demonstration steps.
  */
 export const SIH_PS_COVERAGE_ITEMS: SihPsCoverageItem[] = [
   {

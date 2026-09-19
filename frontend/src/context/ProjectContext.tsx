@@ -275,7 +275,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       projectId: 'IOCL-P4-REFINERY',
       versionName: 'Rev-01 (Contract Award Baseline)',
       uploadedAt: '2026-08-01T09:00:00Z',
-      uploadedBy: 'Gokulakannan P. (Lead Planner)',
+      uploadedBy: 'Lead Planning Engineer',
       fileType: 'Primavera P6 XLSX',
       activitiesCount: 30,
       isActive: false,
@@ -286,7 +286,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       projectId: 'IOCL-P4-REFINERY',
       versionName: 'Rev-02 (Monsoon Revised Schedule)',
       uploadedAt: '2026-08-25T14:30:00Z',
-      uploadedBy: 'Gokulakannan P. (Lead Planner)',
+      uploadedBy: 'Lead Planning Engineer',
       fileType: 'Primavera P6 XLSX',
       activitiesCount: 34,
       isActive: false,
@@ -297,7 +297,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       projectId: 'IOCL-P4-REFINERY',
       versionName: 'Rev-03 (Active Approved Production Schedule)',
       uploadedAt: '2026-09-08T08:00:00Z',
-      uploadedBy: 'Gokulakannan P. (Lead Planner)',
+      uploadedBy: 'Lead Planning Engineer',
       fileType: 'Primavera P6 Export XLSX',
       activitiesCount: 34,
       isActive: true,
@@ -358,7 +358,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       targetRole: 'supervisor',
       type: 'update',
       title: 'Active Schedule Version: Rev-03',
-      message: 'Lead Planner Gokulakannan P. activated Rev-03. 4 activities assigned to your workfront were updated.',
+      message: 'Lead Planner activated Rev-03. 4 activities assigned to your workfront were updated.',
       timestamp: '2026-09-08T08:05:00Z',
       isRead: false,
       deepLinkTab: 'supervisor-entry',
@@ -1380,7 +1380,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           projectId: 'IOCL-P4-REFINERY',
           versionName: versionName || `${nextId} (Monsoon Update)`,
           uploadedAt: new Date().toISOString(),
-          uploadedBy: currentUser?.fullName || 'Gokulakannan P. (Lead Planner)',
+          uploadedBy: currentUser?.fullName || 'Lead Planning Engineer',
           fileType: file.name.endsWith('.xlsx') ? 'Primavera P6 XLSX' : 'Primavera P6 CSV',
           activitiesCount: parsed.length,
           isActive: false,
@@ -1467,15 +1467,27 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       // Standalone / Offline Pre-Seeded Accounts
       const defaultUsers: Record<string, UserAccount> = {
-        gokul: {
-          id: 'usr-planner-gokul',
-          username: 'gokul',
-          fullName: 'Gokulakannan P.',
-          email: 'gokul@datum.enterprise',
+        planner: {
+          id: 'usr-planner-lead',
+          username: 'planner',
+          fullName: 'Lead Planning Engineer',
+          email: 'planner@datum.enterprise',
           role: 'planner',
           department: 'Project Controls & Lead Planning',
-          employeeId: 'IOCL-EPCC-P4-001',
-          avatarLetter: 'G',
+          employeeId: 'EPCC-P4-PLN01',
+          avatarLetter: 'P',
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        },
+        admin: {
+          id: 'usr-planner-lead',
+          username: 'admin',
+          fullName: 'Lead Planning Engineer',
+          email: 'admin@datum.enterprise',
+          role: 'planner',
+          department: 'Project Controls & Lead Planning',
+          employeeId: 'EPCC-P4-ADM01',
+          avatarLetter: 'A',
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString(),
         },
@@ -1603,8 +1615,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!update || !match) return;
 
     const userContext = {
-      userId: currentUser?.id || 'usr-planner-gokul',
-      userName: currentUser?.fullName || 'Gokulakannan P.',
+      userId: currentUser?.id || 'usr-planner-lead',
+      userName: currentUser?.fullName || 'Lead Planning Engineer',
       userRole: currentUser?.role === 'supervisor' ? 'Site Supervisor' : 'Lead Planning Engineer',
     };
 

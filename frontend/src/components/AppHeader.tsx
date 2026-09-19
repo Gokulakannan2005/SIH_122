@@ -703,11 +703,11 @@ export const AppHeader: React.FC = () => {
                     flexShrink: 0,
                   }}
                 >
-                  {currentUser?.avatarLetter || (currentRole === 'admin' ? 'G' : 'R')}
+                  {currentUser?.avatarLetter || (currentRole === 'admin' ? 'P' : 'R')}
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: '0.775rem', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {currentUser?.fullName || (currentRole === 'admin' ? 'Gokulakannan P.' : 'Rajesh Kumar')}
+                    {currentUser?.fullName || (currentRole === 'admin' ? 'Lead Planning Engineer' : 'Rajesh Kumar')}
                   </div>
                   <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {currentUser?.department || (currentRole === 'admin' ? 'Project Controls Lead' : 'Field Supervisor')}

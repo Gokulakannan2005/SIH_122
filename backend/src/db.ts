@@ -316,15 +316,15 @@ export function initSchema() {
 export function seedUsers() {
   const users: UserAccount[] = [
     {
-      id: 'usr-planner-gokul',
-      username: 'gokul',
+      id: 'usr-planner-lead',
+      username: 'planner',
       passwordHash: crypto.createHash('sha256').update('password123').digest('hex'),
-      fullName: 'Gokulakannan P.',
-      email: 'gokul@datum.enterprise',
+      fullName: 'Lead Planning Engineer',
+      email: 'planner@datum.enterprise',
       role: 'planner',
       department: 'Project Controls & Lead Planning',
       employeeId: 'IOCL-EPCC-P4-001',
-      avatarLetter: 'G',
+      avatarLetter: 'P',
       createdAt: new Date().toISOString(),
     },
     {
@@ -709,8 +709,8 @@ export function savePlannerDecision(decision: PlannerDecision) {
     decision.actionType,
     decision.plannerNote || '',
     decision.updatedAt,
-    decision.userId || 'usr-planner-gokul',
-    decision.userName || 'Gokulakannan P.',
+    decision.userId || 'usr-planner-lead',
+    decision.userName || 'Lead Planning Engineer',
     decision.userRole || 'Lead Planner',
     decision.l5Code || '',
     decision.taskHash || '',
@@ -767,8 +767,8 @@ export function saveAuditLog(log: AuditLog) {
     log.originalCategory,
     log.finalActivityId || null,
     log.plannerNote || '',
-    log.userId || 'usr-planner-gokul',
-    log.userName || 'Gokulakannan P.',
+    log.userId || 'usr-planner-lead',
+    log.userName || 'Lead Planning Engineer',
     log.userRole || 'Lead Planner',
     log.l5Code || '',
     log.taskHash || '',
@@ -905,7 +905,7 @@ export function seedBenchmarkData() {
       const act = parsedSchedule.find(a => a.activityId === match.candidateActivityId);
       const l5Code = act ? generateL5Code(act.activityId, act.area, act.discipline, act.wbs) : '';
       const taskHash = act ? generateTaskHash(act.activityId, act.activityName, act.plannedStart, act.plannedFinish, act.discipline) : '';
-      const evidenceHash = generateEvidenceChainHash(taskHash, update.id, 'usr-planner-gokul');
+      const evidenceHash = generateEvidenceChainHash(taskHash, update.id, 'usr-planner-lead');
       const digitalSig = `SIG-${taskHash}-${evidenceHash.substring(0, 6)}`;
 
       savePlannerDecision({
@@ -915,8 +915,8 @@ export function seedBenchmarkData() {
         actionType: 'approve',
         plannerNote: `Auto-linked with high confidence score (${match.confidenceScore}%)`,
         updatedAt: new Date().toISOString(),
-        userId: 'usr-planner-gokul',
-        userName: 'Gokulakannan P.',
+        userId: 'usr-planner-lead',
+        userName: 'Lead Planning Engineer',
         userRole: 'Lead Planning Engineer',
         l5Code,
         taskHash,
@@ -935,8 +935,8 @@ export function seedBenchmarkData() {
         originalCategory: match.category,
         finalActivityId: match.candidateActivityId,
         plannerNote: 'System verified high-confidence OCR alignment with L5 task hash',
-        userId: 'usr-planner-gokul',
-        userName: 'Gokulakannan P.',
+        userId: 'usr-planner-lead',
+        userName: 'Lead Planning Engineer',
         userRole: 'Lead Planning Engineer',
         l5Code,
         taskHash,
@@ -959,7 +959,7 @@ export function seedBenchmarkData() {
       projectId: 'IOCL-P4-REFINERY',
       versionName: 'Rev-01 (Contract Award Baseline)',
       uploadedAt: '2026-08-01T09:00:00Z',
-      uploadedBy: 'Gokulakannan P. (Lead Planner)',
+      uploadedBy: 'Lead Planning Engineer',
       fileType: 'Primavera P6 XLSX',
       activitiesCount: 30,
       isActive: false,
@@ -975,7 +975,7 @@ export function seedBenchmarkData() {
       projectId: 'IOCL-P4-REFINERY',
       versionName: 'Rev-02 (Monsoon Revised Schedule)',
       uploadedAt: '2026-08-25T14:30:00Z',
-      uploadedBy: 'Gokulakannan P. (Lead Planner)',
+      uploadedBy: 'Lead Planning Engineer',
       fileType: 'Primavera P6 XLSX',
       activitiesCount: 34,
       isActive: false,
@@ -991,7 +991,7 @@ export function seedBenchmarkData() {
       projectId: 'IOCL-P4-REFINERY',
       versionName: 'Rev-03 (Active Approved Production Schedule)',
       uploadedAt: '2026-09-08T08:00:00Z',
-      uploadedBy: 'Gokulakannan P. (Lead Planner)',
+      uploadedBy: 'Lead Planning Engineer',
       fileType: 'Primavera P6 Export XLSX',
       activitiesCount: parsedSchedule.length,
       isActive: true,
@@ -1061,7 +1061,7 @@ export function seedBenchmarkData() {
       targetRole: 'supervisor',
       type: 'update',
       title: 'Active Schedule Version: Rev-03',
-      message: 'Lead Planner Gokulakannan P. activated Rev-03. 4 activities assigned to your workfront were updated.',
+      message: 'Lead Planner activated Rev-03. 4 activities assigned to your workfront were updated.',
       timestamp: '2026-09-08T08:05:00Z',
       isRead: false,
       deepLinkTab: 'supervisor-entry',

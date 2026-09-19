@@ -1,7 +1,7 @@
 {
-  "name": "sih-122-backend",
+  "name": "datum-backend",
   "version": "1.0.0",
-  "description": "DATUM SIH-122 REST API with Embedded SQLite Engine",
+  "description": "DATUM REST API with Embedded SQLite Engine",
   "type": "module",
   "main": "src/server.ts",
   "scripts": {

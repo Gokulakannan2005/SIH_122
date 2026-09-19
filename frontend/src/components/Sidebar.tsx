@@ -187,7 +187,7 @@ export const Sidebar: React.FC = () => {
             {presentationMode === 'sih' ? 'Pipeline View' : (isSupervisor ? 'Field Supervisor' : 'Lead Planning Eng')}
           </span>
           <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-            {presentationMode === 'sih' ? 'Core System' : (currentUser?.username || (isSupervisor ? 'rajesh' : 'gokul'))}
+            {presentationMode === 'sih' ? 'Core System' : (currentUser?.username || (isSupervisor ? 'rajesh' : 'planner'))}
           </span>
         </div>
       </div>

@@ -21,7 +21,7 @@ export const LoginView: React.FC = () => {
   const { login, loginAsGuest, backendStatus, backendMetrics } = useProject();
 
   const [activeMode, setActiveMode] = useState<'login' | 'register'>('login');
-  const [username, setUsername] = useState('gokul');
+  const [username, setUsername] = useState('planner');
   const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -126,7 +126,7 @@ export const LoginView: React.FC = () => {
                   className="login-clean-input"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  placeholder="e.g. gokul or rajesh"
+                  placeholder="e.g. planner or rajesh"
                   required
                 />
               </div>

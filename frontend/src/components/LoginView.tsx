@@ -17,8 +17,10 @@ import {
   EyeOff,
 } from 'lucide-react';
 
+import { AVAILABLE_PROJECTS } from '../types';
+
 export const LoginView: React.FC = () => {
-  const { login, loginAsGuest, backendStatus, backendMetrics } = useProject();
+  const { login, loginAsGuest, backendStatus, backendMetrics, currentProject, switchProject } = useProject();
 
   const [activeMode, setActiveMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('planner');
@@ -58,25 +60,57 @@ export const LoginView: React.FC = () => {
     <div className="login-clean-wrapper">
       <div className="login-clean-card">
         {/* Organization & Project Header */}
-        <div className="login-org-header">
-          <div className="login-org-badge">
-            <div className="login-org-icon">
-              <Layers size={20} />
+        <div className="login-org-header" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'stretch' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="login-org-badge">
+              <div className="login-org-icon">
+                <Layers size={20} />
+              </div>
+              <div>
+                <div className="login-org-title">DATUM • PROJECT CONTROLS</div>
+                <div className="login-org-sub" style={{ color: 'var(--brand-primary)', fontWeight: 800 }}>
+                  {currentProject.shortCode} • {currentProject.contractId}
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="login-org-title">DATUM • PROJECT CONTROLS</div>
-              <div className="login-org-sub">IOCL EPCC-4 REFINERY EXPANSION</div>
+
+            <div className="login-db-status-pill">
+              <span className={`db-live-dot ${backendStatus === 'connected' ? 'active' : 'offline'}`} />
+              <Database size={12} />
+              <span>
+                {backendStatus === 'connected'
+                  ? `SQLite Active (${backendMetrics?.scheduleActivities || 34} Activities)`
+                  : 'Local SQLite Embedded'}
+              </span>
             </div>
           </div>
 
-          <div className="login-db-status-pill">
-            <span className={`db-live-dot ${backendStatus === 'connected' ? 'active' : 'offline'}`} />
-            <Database size={12} />
-            <span>
-              {backendStatus === 'connected'
-                ? `SQLite Active (${backendMetrics?.scheduleActivities || 34} Activities)`
-                : 'Local SQLite Embedded'}
+          {/* Dynamic Project Context Switcher */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', padding: '0.45rem 0.65rem', borderRadius: 'var(--radius-sm)' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              TARGET PROJECT:
             </span>
+            <select
+              value={currentProject.id}
+              onChange={e => switchProject(e.target.value)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontSize: '0.775rem',
+                fontWeight: 700,
+                width: '100%',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+              title="Select Project Context for Session"
+            >
+              {AVAILABLE_PROJECTS.map(p => (
+                <option key={p.id} value={p.id} style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
+                  {p.name} ({p.status} - {p.location})
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

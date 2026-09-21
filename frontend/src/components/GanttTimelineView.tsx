@@ -239,14 +239,87 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({
   siteUpdates,
   onSelectActivity,
 }) => {
-  const { setActiveTab: navigateTab, navigateToSiteUpdatesWithFilter } = useProject();
+  const { setActiveTab: navigateTab, navigateToSiteUpdatesWithFilter, currentProject } = useProject();
   const [activeViewTab, setActiveViewTab] = useState<'digital-twin' | 'roadmap' | 'scurve'>('digital-twin');
   const [selectedZoneFilter, setSelectedZoneFilter] = useState<'all' | 'on-track' | 'critical-delay' | 'ahead'>('all');
 
+  const dynamicZones: WorkfrontZone[] = useMemo(() => {
+    if (!activities || activities.length === 0) return WORKFRONT_ZONES;
+
+    return activities.slice(0, 8).map((act, index) => {
+      const isDel = (act.varianceDays || 0) > 0 || act.status === 'Delayed';
+      const isComp = act.progress === 100 || act.status === 'Completed';
+      const isAhd = (act.varianceDays || 0) < 0;
+
+      const statusKey: WorkfrontZone['status'] = isDel
+        ? 'critical-delay'
+        : isComp
+        ? 'completed'
+        : isAhd
+        ? 'ahead'
+        : 'on-track';
+
+      const statusBadge = isDel
+        ? `✖ -${act.varianceDays || 2}d Delay`
+        : isComp
+        ? '✓ 100% Complete'
+        : isAhd
+        ? `▲ +${Math.abs(act.varianceDays || 1)}d Ahead`
+        : '● On Track';
+
+      const icons: WorkfrontZone['icon'][] = ['pump', 'piperack', 'filter', 'substation', 'tank', 'control'];
+      const icon = icons[index % icons.length];
+
+      return {
+        id: `wf-${act.activityId.toLowerCase()}`,
+        name: `${act.area || 'Zone'}: ${act.activityName}`,
+        areaCode: act.area || 'Field',
+        discipline: act.discipline,
+        progress: act.progress,
+        status: statusKey,
+        statusText: isDel
+          ? `Delayed by ${act.varianceDays || 2} days against baseline`
+          : isComp
+          ? 'Completed and verified by planner'
+          : `In progress, planned finish: ${act.plannedFinish}`,
+        statusBadge,
+        activeMilestone: act.activityName,
+        crew: `${act.discipline.slice(0, 4)} Crew-${index + 1}`,
+        manpower: act.progress === 100 ? 0 : 8 + ((index * 2) % 10),
+        lastUpdated: 'Live IST synced',
+        linkedPhotosCount: (index % 4) + 1,
+        activityId: act.activityId,
+        delayDays: act.varianceDays,
+        icon,
+      };
+    });
+  }, [activities]);
+
   const filteredZones = useMemo(() => {
-    if (selectedZoneFilter === 'all') return WORKFRONT_ZONES;
-    return WORKFRONT_ZONES.filter(z => z.status === selectedZoneFilter);
-  }, [selectedZoneFilter]);
+    if (selectedZoneFilter === 'all') return dynamicZones;
+    return dynamicZones.filter(z => z.status === selectedZoneFilter);
+  }, [selectedZoneFilter, dynamicZones]);
+
+  const dynamicMilestones = useMemo(() => {
+    if (!activities || activities.length === 0) return MILESTONE_PHASES;
+    return activities.slice(0, 5).map((act, idx) => {
+      const isDone = act.progress === 100 || act.status === 'Completed';
+      const isDel = (act.varianceDays || 0) > 0 || act.status === 'Delayed';
+      const status: ProjectMilestonePhase['status'] = isDone ? 'completed' : isDel ? 'in-review' : 'active';
+      return {
+        phaseNum: idx + 1,
+        name: act.activityName,
+        progress: act.progress,
+        status,
+        statusText: isDel ? `Delayed ${act.varianceDays || 2}d against baseline buffer` : isDone ? '100% verified complete' : `Scheduled finish: ${act.plannedFinish}`,
+        duration: `${act.plannedDurationDays || 14} Days`,
+        dateRange: `${act.plannedStart} → ${act.plannedFinish}`,
+        logsCount: 12 + idx * 3,
+        critical: isDel || idx === 1,
+        tasks: [act.activityId, `WBS: ${act.wbs}`, `Discipline: ${act.discipline}`],
+      };
+    });
+  }, [activities]);
 
   // EVM metrics
   const evmMetrics = useMemo(() => {
@@ -281,7 +354,7 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({
               4D Physical Digital Twin
             </span>
             <span className="mono-pill" style={{ fontSize: '0.725rem' }}>
-              IOCL Refinery • Phase 4
+              {currentProject?.name || 'Active Project'} • {currentProject?.code || 'P1'}
             </span>
           </div>
           <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
@@ -535,7 +608,7 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            {MILESTONE_PHASES.map((phase) => {
+            {dynamicMilestones.map((phase) => {
               const isDone = phase.status === 'completed';
               const isActive = phase.status === 'active';
               const isInReview = phase.status === 'in-review';

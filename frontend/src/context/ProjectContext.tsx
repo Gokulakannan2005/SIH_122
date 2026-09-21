@@ -22,6 +22,8 @@ import {
   FieldSubmissionInboxItem,
   SystemNotification,
   PresentationMode,
+  ProjectOption,
+  AVAILABLE_PROJECTS,
 } from '../types';
 import { parseScheduleCSV, parseDailyReportTXT, parsePipingProgressXLSX } from '../utils/parsers';
 import { processAllMatches } from '../utils/matchingEngine';
@@ -30,6 +32,8 @@ import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
 import { calculateImageFingerprint } from '../utils/ocrService';
 import { parseUTCDateMs } from '../utils/scheduleSimulator';
 import { GUIDED_DEMO_STEPS } from '../utils/guidedDemoData';
+import { getProjectDatasetBundle } from '../utils/projectDatasets';
+import { resolveRelativeISTDate, getNowIST } from '../utils/istTimeService';
 
 export type BackendConnectionStatus = 'connected' | 'offline' | 'checking';
 
@@ -49,6 +53,18 @@ interface ProjectContextType {
   auditLogs: AuditLog[];
   approvalHistory: ApprovalHistoryItem[];
   refreshApprovalHistory: () => Promise<void>;
+
+  // Project Switcher & Enterprise Authentication
+  currentProject: ProjectOption;
+  switchProject: (projectId: string) => void;
+
+  // Direct Task Progress Updates
+  updateTaskProgress: (
+    activityId: string,
+    progressPercent: number,
+    status?: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed',
+    note?: string
+  ) => void;
 
   // Schedule Versions & Version Control
   scheduleVersions: ScheduleVersion[];
@@ -254,6 +270,25 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [densityMode, setDensityMode] = useState<DensityMode>('comfortable');
   const [offlineMode, setOfflineMode] = useState<boolean>(false);
   const [offlineSyncQueue, setOfflineSyncQueue] = useState<OfflineSyncItem[]>([]);
+
+  // Active Project Context & Project Switcher
+  const [currentProjectId, setCurrentProjectId] = useState<string>(() => {
+    return localStorage.getItem('datum_current_project_id') || 'iocl-p4';
+  });
+
+  const currentProject = useMemo(() => {
+    return AVAILABLE_PROJECTS.find(p => p.id === currentProjectId) || AVAILABLE_PROJECTS[0];
+  }, [currentProjectId]);
+
+  // Manual / Field Task Progress Overrides for reliable real-time updates
+  const [manualTaskProgress, setManualTaskProgress] = useState<Record<string, { progressPercent: number; status: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed' }>>(() => {
+    try {
+      const saved = localStorage.getItem('datum_manual_task_progress');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
 
   // User Authentication & SQLite Identity State
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
@@ -555,11 +590,25 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     // 2. Fallback to client-side standalone mode
     setBackendStatus('offline');
-    await loadClientDemoData();
+    await loadClientDemoData(currentProjectId);
     setIsLoading(false);
   };
 
-  const loadClientDemoData = async () => {
+  const loadClientDemoData = async (projId?: string) => {
+    const targetProject = projId || currentProjectId || 'iocl-p4';
+    if (targetProject === 'ongc-delta' || targetProject === 'bpcl-kochi') {
+      const bundle = getProjectDatasetBundle(targetProject);
+      setSchedule(bundle.schedule);
+      setSiteUpdates(bundle.siteUpdates);
+      setMatchResults(bundle.matchResults);
+      setPlannerDecisions(bundle.plannerDecisions);
+      setAuditLogs(bundle.auditLogs);
+      setScheduleVersions(bundle.scheduleVersions);
+      setFieldSubmissions(bundle.fieldSubmissions);
+      setSystemNotifications(bundle.systemNotifications);
+      return;
+    }
+
     try {
       const [scheduleRes, txtRes, xlsxRes] = await Promise.all([
         fetch('/demo-data/schedule.csv'),
@@ -820,6 +869,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     eventStatus: 'Started' | 'Completed' | 'In Progress';
     quantity?: string;
     supervisor?: string;
+    targetActivityId?: string;
     imageFile?: string; // base64 / svg / url
     imageType?: 'completion' | 'issue' | 'progress';
     caption?: string;
@@ -860,12 +910,14 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
     }
 
+    const relativeTime = resolveRelativeISTDate(entry.rawText || entry.description);
+
     const newUpdate: SiteUpdate = {
       id: newId,
       sourceFile: 'field_mobile_entry',
       sourceType: 'supervisor_upload',
       discipline: entry.discipline,
-      reportDate: new Date().toISOString().split('T')[0],
+      reportDate: relativeTime.isoDate,
       rawText: entry.rawText || entry.description,
       extractedDescription: entry.description,
       eventStatus: entry.eventStatus,
@@ -902,6 +954,51 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setMatchResults(prev => ({ ...prev, [newId]: newMatch }));
     }
 
+    // Determine target activity id (either explicitly provided or via NLP candidate match)
+    const targetActivityId = entry.targetActivityId || newMatch?.candidateActivityId || null;
+
+    if (targetActivityId) {
+      const isComplete = entry.eventStatus === 'Completed' || entry.quantity === '100%';
+      let progressVal = 60;
+      if (isComplete) {
+        progressVal = 100;
+      } else if (entry.quantity && typeof entry.quantity === 'string' && entry.quantity.includes('%')) {
+        const parsed = parseInt(entry.quantity, 10);
+        if (!isNaN(parsed)) progressVal = parsed;
+      }
+
+      // Auto-link and approve the decision so it directly updates execution metrics
+      setPlannerDecisions(prev => ({
+        ...prev,
+        [newId]: {
+          updateId: newId,
+          linkedActivityId: targetActivityId,
+          status: 'approved',
+          actionType: 'approve',
+          plannerNote: `Field report logged by ${entry.supervisor || 'Site Supervisor'}`,
+          updatedAt: new Date().toISOString(),
+          userId: currentUser?.id || 'usr-supervisor-rajesh',
+          userName: entry.supervisor || currentUser?.fullName || 'Field Supervisor',
+          userRole: currentRole,
+        },
+      }));
+
+      // Directly update manualTaskProgress for immediate schedule reflection
+      setManualTaskProgress(prev => {
+        const updated = {
+          ...prev,
+          [targetActivityId]: {
+            progressPercent: progressVal,
+            status: isComplete ? ('Completed' as const) : ('In Progress' as const),
+          },
+        };
+        try {
+          localStorage.setItem('datum_manual_task_progress', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
+
     // Add Audit Log
     const newAuditLog: AuditLog = {
       id: `AUDIT-${Date.now()}`,
@@ -914,8 +1011,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         : 'Supervisor Ingested Progress Entry with Photo Proof',
       originalConfidence: newMatch ? newMatch.confidenceScore : 0,
       originalCategory: newMatch ? newMatch.category : 'review',
-      finalActivityId: newMatch ? newMatch.candidateActivityId : null,
-      plannerNote: `Submitted via Supervisor Field Portal ${entry.issueFlag ? `[ISSUE: ${entry.issueFlag}]` : ''} ${
+      finalActivityId: targetActivityId,
+      plannerNote: `Submitted via Field Portal ${entry.issueFlag ? `[ISSUE: ${entry.issueFlag}]` : ''} ${
         entry.confirmedTag ? `[CONFIRMED TAG: ${entry.confirmedTag}]` : ''
       }`,
       userRole: currentRole,
@@ -926,16 +1023,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Record in Field Submissions Inbox
     const newSubmission: FieldSubmissionInboxItem = {
       id: `SUB-${Date.now()}`,
-      projectId: 'IOCL-P4-REFINERY',
+      projectId: currentProject.contractId || 'IOCL-P4-REFINERY',
       submittedAt: new Date().toISOString(),
       submittedBy: entry.supervisor || currentUser?.fullName || 'Rajesh Kumar (Field Supervisor)',
       userId: currentUser?.id || 'usr-supervisor-rajesh',
       sourceType: entry.imageFile ? 'Field Photo OCR' : 'Daily Field Report',
       fileName: entry.filename || 'mobile_field_log.txt',
       extractedCount: 1,
-      autoMatchedCount: newMatch?.category === 'ready' ? 1 : 0,
-      reviewCount: newMatch?.category === 'review' || newMatch?.category === 'unplanned' ? 1 : 0,
-      status: newMatch?.category === 'ready' ? 'approved' : 'pending_review',
+      autoMatchedCount: targetActivityId ? 1 : 0,
+      reviewCount: targetActivityId ? 0 : 1,
+      status: targetActivityId ? 'approved' : 'pending_review',
       notes: entry.description,
     };
     setFieldSubmissions(prev => [newSubmission, ...prev]);
@@ -959,7 +1056,74 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     addToast({
       type: entry.issueFlag ? 'warning' : 'success',
       title: entry.issueFlag ? 'Report Logged with Blocker' : 'Field Report Ingested',
-      message: `Report ${newId} created (${entry.discipline} • ${entry.area}).${entry.confirmedTag ? ` Tag: ${entry.confirmedTag}.` : ''}`,
+      message: `Report ${newId} created (${entry.discipline} • ${entry.area}).${targetActivityId ? ` Linked to ${targetActivityId}.` : ''}`,
+    });
+  };
+
+  // Direct Task Progress Updates from field tick-box or manual entry
+  const updateTaskProgress = (
+    activityId: string,
+    progressPercent: number,
+    status?: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed',
+    note?: string
+  ) => {
+    const determinedStatus: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed' =
+      status || (progressPercent >= 100 ? 'Completed' : progressPercent > 0 ? 'In Progress' : 'Not Started');
+
+    setManualTaskProgress(prev => {
+      const updated = {
+        ...prev,
+        [activityId]: {
+          progressPercent,
+          status: determinedStatus,
+        },
+      };
+      try {
+        localStorage.setItem('datum_manual_task_progress', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    const audit: AuditLog = {
+      id: `AUDIT-PROG-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      updateId: `MANUAL-${activityId}`,
+      rawText: `Direct task progress set to ${progressPercent}% (${determinedStatus})`,
+      sourceFile: 'Field Task Controls',
+      action: `Progress Updated: ${activityId} → ${progressPercent}%`,
+      originalConfidence: 100,
+      originalCategory: 'ready',
+      finalActivityId: activityId,
+      plannerNote: note || `Progress updated by ${currentUser?.fullName || 'Field Supervisor'}`,
+      userRole: currentRole,
+    };
+    setAuditLogs(prev => [audit, ...prev]);
+
+    addToast({
+      type: determinedStatus === 'Completed' ? 'success' : 'info',
+      title: `Task Progress: ${activityId}`,
+      message: `Execution progress updated to ${progressPercent}% (${determinedStatus}).`,
+    });
+  };
+
+  // Switch project context and redirect back to login screen for re-authentication
+  const switchProject = (projectId: string) => {
+    setCurrentProjectId(projectId);
+    localStorage.setItem('datum_current_project_id', projectId);
+    const proj = AVAILABLE_PROJECTS.find(p => p.id === projectId) || AVAILABLE_PROJECTS[0];
+
+    // Load dataset for this project immediately
+    loadClientDemoData(projectId);
+    setManualTaskProgress({});
+    localStorage.removeItem('datum_manual_task_progress');
+
+    // Log out user session to return to login screen
+    logout();
+
+    addToast({
+      type: 'info',
+      title: `Project Selected: ${proj.shortCode}`,
+      message: `Loaded ${proj.name} baseline. Please authenticate to continue.`,
     });
   };
 
@@ -1235,6 +1399,19 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
 
+      // Check manual task progress overrides from direct user/supervisor updates
+      const manual = manualTaskProgress[act.activityId];
+      if (manual) {
+        progressPercent = manual.progressPercent;
+        status = manual.status;
+        if (manual.status === 'Completed' && !actualFinish) {
+          actualFinish = new Date().toISOString().split('T')[0];
+        }
+        if (manual.status !== 'Not Started' && !actualStart) {
+          actualStart = act.plannedStart;
+        }
+      }
+
       return {
         ...act,
         actualStart,
@@ -1245,7 +1422,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         criticalPath: (varianceDays > 0) || act.wbs.startsWith('2.1') || act.wbs.startsWith('1.1'),
       };
     });
-  }, [schedule, siteUpdates, plannerDecisions, matchResults]);
+  }, [schedule, siteUpdates, plannerDecisions, matchResults, manualTaskProgress]);
 
   const loadScenarioPreset = async (scenarioKey: string) => {
     setIsLoading(true);
@@ -1918,6 +2095,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         login,
         loginAsGuest,
         logout,
+        currentProject,
+        switchProject,
+        updateTaskProgress,
         activeTab,
         setActiveTab,
         presentationMode,

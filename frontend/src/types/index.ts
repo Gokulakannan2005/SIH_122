@@ -25,6 +25,75 @@ export interface UserAccount {
   lastLogin?: string;
 }
 
+export interface ProjectOption {
+  id: string;
+  name: string;
+  shortCode: string;
+  client: string;
+  contractId: string;
+  location: string;
+  progress: number;
+  progressDelta: string;
+  status: 'Active' | 'Staging' | 'Planning';
+  statusColor: string;
+  workfronts: string;
+}
+
+export const AVAILABLE_PROJECTS: ProjectOption[] = [
+  {
+    id: 'iocl-p4',
+    name: 'IOCL Refinery Expansion - P4',
+    shortCode: 'IOCL-P4',
+    client: 'Indian Oil Corporation Ltd',
+    contractId: 'IOCL-EPCC-2024-P4',
+    location: 'Mathura Refinery, UP',
+    progress: 68,
+    progressDelta: '+12% this week',
+    status: 'Active',
+    statusColor: 'var(--status-ready-fg)',
+    workfronts: '18 / 24 active',
+  },
+  {
+    id: 'ongc-delta',
+    name: 'ONGC Deepwater Platform Delta',
+    shortCode: 'ONGC-D9',
+    client: 'Oil & Natural Gas Corp',
+    contractId: 'ONGC-OFFSHORE-2025-D9',
+    location: 'KG Basin Offshore, AP',
+    progress: 42,
+    progressDelta: '+5% this week',
+    status: 'Staging',
+    statusColor: '#3b82f6',
+    workfronts: '11 / 16 active',
+  },
+  {
+    id: 'bpcl-kochi',
+    name: 'BPCL Kochi Clean Fuel Extension',
+    shortCode: 'BPCL-CK4',
+    client: 'Bharat Petroleum Corp Ltd',
+    contractId: 'BPCL-KOCHI-CK4-2025',
+    location: 'Kochi Refinery, Kerala',
+    progress: 58,
+    progressDelta: '+8% this week',
+    status: 'Active',
+    statusColor: 'var(--status-ready-fg)',
+    workfronts: '14 / 18 active',
+  },
+  {
+    id: 'lnt-metro-3',
+    name: 'L&T Metro Underground Line 3',
+    shortCode: 'METRO-L3',
+    client: 'Chennai Metro Rail Ltd',
+    contractId: 'CMRL-UG-PKG3-2025',
+    location: 'Chennai Metro Corridor 3',
+    progress: 19,
+    progressDelta: '+3% this week',
+    status: 'Planning',
+    statusColor: '#f59e0b',
+    workfronts: '6 / 12 active',
+  },
+];
+
 export interface ScheduleVersion {
   versionId: string; // 'Rev-01', 'Rev-02', 'Rev-03'
   projectId: string;

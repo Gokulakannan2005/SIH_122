@@ -25,63 +25,7 @@ import {
   ShieldCheck,
   HardHat,
 } from 'lucide-react';
-import { NavigationTab } from '../types';
-
-interface ProjectOption {
-  id: string;
-  name: string;
-  shortCode: string;
-  client: string;
-  contractId: string;
-  location: string;
-  progress: number;
-  progressDelta: string;
-  status: 'Active' | 'Staging' | 'Planning';
-  statusColor: string;
-  workfronts: string;
-}
-
-const AVAILABLE_PROJECTS: ProjectOption[] = [
-  {
-    id: 'iocl-p4',
-    name: 'IOCL Refinery Expansion - P4',
-    shortCode: 'IOCL-P4',
-    client: 'Indian Oil Corporation Ltd',
-    contractId: 'IOCL-EPCC-2024-P4',
-    location: 'Mathura Refinery, UP',
-    progress: 68,
-    progressDelta: '+12% this week',
-    status: 'Active',
-    statusColor: 'var(--status-ready-fg)',
-    workfronts: '18 / 24 active',
-  },
-  {
-    id: 'ongc-delta',
-    name: 'ONGC Deepwater Platform Delta',
-    shortCode: 'ONGC-D9',
-    client: 'Oil & Natural Gas Corp',
-    contractId: 'ONGC-OFFSHORE-2025-D9',
-    location: 'KG Basin Offshore, AP',
-    progress: 42,
-    progressDelta: '+5% this week',
-    status: 'Staging',
-    statusColor: '#3b82f6',
-    workfronts: '11 / 16 active',
-  },
-  {
-    id: 'lnt-metro-3',
-    name: 'L&T Metro Underground Line 3',
-    shortCode: 'METRO-L3',
-    client: 'Chennai Metro Rail Ltd',
-    contractId: 'CMRL-UG-PKG3-2025',
-    location: 'Chennai Metro Corridor 3',
-    progress: 19,
-    progressDelta: '+3% this week',
-    status: 'Planning',
-    statusColor: '#f59e0b',
-    workfronts: '6 / 12 active',
-  },
-];
+import { NavigationTab, ProjectOption, AVAILABLE_PROJECTS } from '../types';
 
 export const Sidebar: React.FC = () => {
   const {
@@ -89,6 +33,8 @@ export const Sidebar: React.FC = () => {
     setActiveTab,
     currentRole,
     currentUser,
+    currentProject,
+    switchProject,
     startGuidedDemo,
     isGuidedDemoActive,
     addToast,
@@ -104,10 +50,7 @@ export const Sidebar: React.FC = () => {
   });
 
   const [showProjectSwitcher, setShowProjectSwitcher] = useState(false);
-  const [activeProjectId, setActiveProjectId] = useState('iocl-p4');
   const projectSwitcherRef = useRef<HTMLDivElement>(null);
-
-  const currentProject = AVAILABLE_PROJECTS.find(p => p.id === activeProjectId) || AVAILABLE_PROJECTS[0];
 
   // Close project switcher when clicking outside
   useEffect(() => {
@@ -129,13 +72,8 @@ export const Sidebar: React.FC = () => {
   };
 
   const handleSelectProject = (project: ProjectOption) => {
-    setActiveProjectId(project.id);
     setShowProjectSwitcher(false);
-    addToast({
-      type: 'success',
-      title: `Workspace Switched: ${project.shortCode}`,
-      message: `Switched project context to ${project.name} (${project.contractId}).`,
-    });
+    switchProject(project.id);
   };
 
   return (
@@ -256,87 +194,149 @@ export const Sidebar: React.FC = () => {
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {/* 1. Dashboard */}
+              {/* Home Navigation */}
+              <button
+                type="button"
+                className={`sidebar-nav-pill ${activeTab === 'home' ? 'active' : ''}`}
+                onClick={() => handleTabClick('home')}
+                title="Home & Role Hub"
+              >
+                <Home size={15} />
+                <span>Home</span>
+              </button>
+
+              {/* Dashboard */}
               <button
                 type="button"
                 className={`sidebar-nav-pill ${activeTab === 'dashboard' ? 'active' : ''}`}
                 onClick={() => handleTabClick('dashboard')}
-                title="Overview & Executive Control Center"
+                title="Executive Control Center"
               >
                 <LayoutDashboard size={15} />
-                <span>1. Dashboard</span>
+                <span>Dashboard</span>
               </button>
 
-            {/* 2. Daily Field Log & Upload */}
-            <button
-              type="button"
-              className={`sidebar-nav-pill ${activeTab === 'supervisor-entry' ? 'active' : ''}`}
-              onClick={() => handleTabClick('supervisor-entry')}
-              title="Supervisor daily task execution, voice dictation, photo OCR, and text log upload"
-            >
-              <HardHat size={15} />
-              <span>2. Daily Field Log & Upload</span>
-              <span className="sidebar-badge live">Log Entry</span>
-            </button>
+              {isSupervisor ? (
+                <>
+                  {/* Supervisor Item 1: Daily Field Log & Upload */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'supervisor-entry' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('supervisor-entry')}
+                    title="Supervisor daily task execution, voice dictation, photo OCR, and text log upload"
+                  >
+                    <HardHat size={15} />
+                    <span>Daily Field Log & Upload</span>
+                    <span className="sidebar-badge live">Log Entry</span>
+                  </button>
 
-            {/* 3. Tasks & Master Schedule (WBS) */}
-            <button
-              type="button"
-              className={`sidebar-nav-pill ${activeTab === 'schedule-activities' ? 'active' : ''}`}
-              onClick={() => handleTabClick('schedule-activities')}
-              title="WBS Master Schedule Tasks, 4D Critical Path Gantt, and Planned vs Actual progress"
-            >
-              <CheckSquare size={15} />
-              <span>3. Tasks & Schedule (WBS)</span>
-              <span className="sidebar-badge" style={{ background: 'var(--brand-surface)', color: 'var(--brand-primary)', fontWeight: 700 }}>Tasks</span>
-            </button>
+                  {/* Supervisor Item 2: Tasks & Master Schedule (WBS) */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'schedule-activities' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('schedule-activities')}
+                    title="Assigned Schedule Tasks and Planned vs Actual progress"
+                  >
+                    <CheckSquare size={15} />
+                    <span>Tasks & Schedule</span>
+                    <span className="sidebar-badge" style={{ background: 'var(--brand-surface)', color: 'var(--brand-primary)', fontWeight: 700 }}>Tasks</span>
+                  </button>
 
-            {/* 4. Field Reports & AI Inspector */}
-            <button
-              type="button"
-              className={`sidebar-nav-pill ${activeTab === 'site-updates' ? 'active' : ''}`}
-              onClick={() => handleTabClick('site-updates')}
-              title="Uploaded text logs, field reports, and explainable AI matching inspector"
-            >
-              <FileText size={15} />
-              <span>4. Field Reports & Inspector</span>
-              <span className="sidebar-badge live">AI Match</span>
-            </button>
+                  {/* Supervisor Item 3: Field Reports & Logs */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'site-updates' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('site-updates')}
+                    title="Submitted site reports and logs"
+                  >
+                    <FileText size={15} />
+                    <span>Field Reports & Logs</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Planner Item 1: Tasks & Schedule (WBS) */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'schedule-activities' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('schedule-activities')}
+                    title="WBS Master Schedule Tasks, 4D Critical Path Gantt, and Planned vs Actual progress"
+                  >
+                    <CheckSquare size={15} />
+                    <span>Tasks & Schedule (WBS)</span>
+                    <span className="sidebar-badge" style={{ background: 'var(--brand-surface)', color: 'var(--brand-primary)', fontWeight: 700 }}>Tasks</span>
+                  </button>
 
-            {/* 5. Review Queue */}
-            <button
-              type="button"
-              className={`sidebar-nav-pill ${activeTab === 'planner-review' ? 'active' : ''}`}
-              onClick={() => handleTabClick('planner-review')}
-              title="Human-in-the-loop review workbench for ambiguous updates"
-            >
-              <FileCheck2 size={15} />
-              <span>5. Review Queue</span>
-              <span className="sidebar-badge amber">Approvals</span>
-            </button>
+                  {/* Planner Item 2: Review Queue */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'planner-review' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('planner-review')}
+                    title="Human-in-the-loop review workbench for ambiguous updates"
+                  >
+                    <FileCheck2 size={15} />
+                    <span>Review Queue</span>
+                    <span className="sidebar-badge amber">Approvals</span>
+                  </button>
 
-            {/* 6. Direct File Ingestion */}
-            <button
-              type="button"
-              className={`sidebar-nav-pill ${activeTab === 'upload' ? 'active' : ''}`}
-              onClick={() => handleTabClick('upload')}
-              title="Direct upload center for P6 baselines, daily_report.txt, and excel progress files"
-            >
-              <UploadCloud size={15} />
-              <span>6. Data Ingestion & Uploads</span>
-              <span className="sidebar-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontWeight: 700 }}>Upload</span>
-            </button>
+                  {/* Planner Item 3: Field Reports & AI Inspector */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'site-updates' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('site-updates')}
+                    title="Uploaded text logs, field reports, and explainable AI matching inspector"
+                  >
+                    <FileText size={15} />
+                    <span>Field Reports & Inspector</span>
+                    <span className="sidebar-badge live">AI Match</span>
+                  </button>
 
-              {/* 7. Audit Trail */}
-              <button
-                type="button"
-                className={`sidebar-nav-pill ${activeTab === 'audit-trail' ? 'active' : ''}`}
-                onClick={() => handleTabClick('audit-trail')}
-                title="Complete chronological decision provenance and audit log"
-              >
-                <ShieldCheck size={15} />
-                <span>7. Audit Trail</span>
-              </button>
+                  {/* Planner Item 4: Daily Field Log & Upload */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'supervisor-entry' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('supervisor-entry')}
+                    title="Supervisor daily task execution and quick logging"
+                  >
+                    <HardHat size={15} />
+                    <span>Daily Field Log</span>
+                  </button>
+
+                  {/* Planner Item 5: Direct File Ingestion */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'upload' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('upload')}
+                    title="Direct upload center for P6 baselines, daily_report.txt, and excel progress files"
+                  >
+                    <UploadCloud size={15} />
+                    <span>Schedule Ingestion</span>
+                    <span className="sidebar-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontWeight: 700 }}>Upload</span>
+                  </button>
+
+                  {/* Planner Item 6: Delay Simulator */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'copilot' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('copilot')}
+                    title="Predictive Schedule Delay Simulation & Critical Path Impact"
+                  >
+                    <Sliders size={15} />
+                    <span>Delay Simulator</span>
+                  </button>
+
+                  {/* Planner Item 7: Audit Trail */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'audit-trail' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('audit-trail')}
+                    title="Complete chronological decision provenance and audit log"
+                  >
+                    <ShieldCheck size={15} />
+                    <span>Audit Trail</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -401,7 +401,7 @@ export const Sidebar: React.FC = () => {
             {/* Project List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: '240px', overflowY: 'auto' }}>
               {AVAILABLE_PROJECTS.map((proj) => {
-                const isSelected = proj.id === activeProjectId;
+                const isSelected = proj.id === currentProject.id;
                 return (
                   <button
                     key={proj.id}

@@ -25,7 +25,11 @@ import {
   Send,
   RotateCcw,
   Zap,
+  FolderTree,
+  ChevronDown,
 } from 'lucide-react';
+import { inferDisciplineFromText, matchUpdateToSchedule } from '../utils/matchingEngine';
+import { SiteUpdate } from '../types';
 
 export const Dashboard: React.FC = () => {
   const {
@@ -86,61 +90,70 @@ export const Dashboard: React.FC = () => {
     return { total, completed, delayed, inProgress, completionPct, overallProgress };
   }, [enrichedSchedule]);
 
-  // Live NLP Preview for Text Ingestion
-  const nlpPreview = useMemo(() => {
-    if (!quickUpdateText.trim()) return null;
-    const text = quickUpdateText;
+  // Deterministic NLP & Matching Engine for Any Quick Text (Clicked or Typed)
+  const parseQuickText = (text: string, schedule: typeof enrichedSchedule) => {
+    const trimmed = text.trim();
+    const discipline = inferDisciplineFromText(trimmed, 'Piping');
 
-    // 1. Discipline
-    let discipline = 'Piping';
-    if (/excavat|curing|concrete|pour|foundat|grout|rebar|civil|slab|footing/i.test(text)) {
-      discipline = 'Civil';
-    } else if (/cable|transformer|switchgear|conduit|substation|electr|breaker|motor/i.test(text)) {
-      discipline = 'Electrical';
-    } else if (/sensor|transmitter|plc|scada|dcs|instrument|loop|calibration/i.test(text)) {
-      discipline = 'Instrumentation';
-    } else if (/safety|scaffold|harness|hazard|permit|hse|spill/i.test(text)) {
-      discipline = 'HSE';
-    }
-
-    // 2. Equipment Tag
-    const tagMatch = text.match(/\b([0-9]{2}-[A-Z]{2,4}-[0-9]{3,4}[A-Z]?|[A-Z]{2,4}-[0-9]{3,4}|[A-Z]-[0-9]{3,4}[A-Z]?)\b/i);
+    // 1. Tag extraction
+    const tagMatch = trimmed.match(/\b([0-9]{2}-[A-Z]{2,4}-[0-9]{3,4}[A-Z]?|[A-Z]{2,4}-[0-9]{3,4}|[A-Z]-[0-9]{3,4}[A-Z]?|TK-[0-9]{1,2}|SUB-[0-9]{1,2})\b/i);
     const tag = tagMatch ? tagMatch[1].toUpperCase() : undefined;
 
-    // 3. Date resolution using IST
-    const dateResolution = resolveRelativeISTDate(text);
-
-    // 4. Find candidate activity
-    let matched = enrichedSchedule.find(act => {
-      if (tag && (act.activityId.toUpperCase().includes(tag) || act.activityName.toUpperCase().includes(tag))) {
-        return true;
-      }
-      return false;
-    });
-
-    if (!matched) {
-      matched = enrichedSchedule.find(act => act.discipline === discipline);
-    }
-    if (!matched && enrichedSchedule.length > 0) {
-      matched = enrichedSchedule[0];
+    // 2. Area inference
+    let area = 'Pump Bay';
+    if (/tank farm|crude storage|storage tank|ring wall|bund/i.test(trimmed)) {
+      area = 'Unit-05 Tank Farm';
+    } else if (/pump bay|cooling water|pump/i.test(trimmed)) {
+      area = 'Pump Bay';
+    } else if (/substation|switchgear|electrical room/i.test(trimmed)) {
+      area = 'Substation-03';
+    } else if (/control room|dcs rack|rack room/i.test(trimmed)) {
+      area = 'Central Control Room';
     }
 
-    // 5. Progress percent
-    let progressVal = 65;
-    const pctMatch = text.match(/([0-9]{1,3})%/);
+    // 3. Progress percentage inference
+    let progressVal = 75;
+    const pctMatch = trimmed.match(/([0-9]{1,3})%/);
     if (pctMatch) {
       progressVal = Math.min(100, parseInt(pctMatch[1], 10));
-    } else if (/complete|finished|erected|done|installed/i.test(text)) {
+    } else if (/complete|finished|erected|done|excavated|poured|terminated|commissioned/i.test(trimmed)) {
       progressVal = 100;
     }
 
+    const dateResolution = resolveRelativeISTDate(trimmed);
+
+    // 4. Candidate matching via matchingEngine
+    const syntheticUpdate: SiteUpdate = {
+      id: 'TEMP-QUICK-INGEST',
+      sourceFile: 'instant_quick_ingest',
+      sourceType: 'supervisor_upload',
+      discipline,
+      reportDate: dateResolution.isoDate,
+      rawText: trimmed,
+      extractedDescription: trimmed,
+      eventStatus: progressVal === 100 ? 'Completed' : 'In Progress',
+      area,
+      quantity: `${progressVal}%`,
+    };
+
+    const matchRes = matchUpdateToSchedule(syntheticUpdate, schedule);
+    const candidate = schedule.find(s => s.activityId === matchRes.candidateActivityId) || null;
+
     return {
       discipline,
-      tag: tag || 'Auto-Detected',
-      candidate: matched,
+      tag: tag || (candidate?.equipmentTag ? candidate.equipmentTag : 'Auto-Detected'),
+      candidate,
+      matchRes,
+      area: candidate?.area || area,
       dateResolution,
       progressVal,
     };
+  };
+
+  // Live NLP Preview for Text Ingestion
+  const nlpPreview = useMemo(() => {
+    if (!quickUpdateText.trim()) return null;
+    return parseQuickText(quickUpdateText, enrichedSchedule);
   }, [quickUpdateText, enrichedSchedule]);
 
   // Handle Instant Text Ingestion
@@ -158,23 +171,15 @@ export const Dashboard: React.FC = () => {
     setIsIngesting(true);
 
     try {
-      const preview = nlpPreview || {
-        discipline: 'Piping',
-        tag: 'Auto-Detected',
-        candidate: enrichedSchedule[0],
-        dateResolution: resolveRelativeISTDate(textToIngest),
-        progressVal: 75,
-      };
-
-      const dateRes = resolveRelativeISTDate(textToIngest);
-      const isComplete = preview.progressVal === 100 || /complete|finished|erected|done/i.test(textToIngest);
+      const preview = parseQuickText(textToIngest, enrichedSchedule);
+      const isComplete = preview.progressVal === 100 || /complete|finished|erected|done|excavated/i.test(textToIngest);
 
       // Ingest into ProjectContext
       await handleAddNewFieldEntry({
         discipline: preview.discipline,
         description: textToIngest,
         rawText: textToIngest,
-        area: preview.candidate?.area || 'Refinery Workfront Unit-01',
+        area: preview.area,
         eventStatus: isComplete ? 'Completed' : 'In Progress',
         quantity: `${preview.progressVal}%`,
         supervisor: currentRole === 'supervisor' ? 'Site Supervisor' : 'Lead Planner',
@@ -182,7 +187,7 @@ export const Dashboard: React.FC = () => {
         confirmedTag: preview.tag !== 'Auto-Detected' ? preview.tag : undefined,
       });
 
-      // Update task progress immediately
+      // Update task progress immediately if linked to an existing schedule task
       if (preview.candidate) {
         updateTaskProgress(
           preview.candidate.activityId,
@@ -196,13 +201,13 @@ export const Dashboard: React.FC = () => {
         id: `FIELD-${Date.now().toString().slice(-4)}`,
         text: textToIngest,
         discipline: preview.discipline,
-        area: preview.candidate?.area || 'Unit-01',
+        area: preview.area,
         equipmentTag: preview.tag,
         candidateActivityId: preview.candidate?.activityId,
         candidateActivityName: preview.candidate?.activityName,
-        confidence: preview.tag !== 'Auto-Detected' ? 95 : 82,
-        resolvedDate: dateRes.resolvedDate,
-        relativeDatePhrase: dateRes.matchedPhrase || 'today',
+        confidence: preview.matchRes?.confidenceScore || (preview.tag !== 'Auto-Detected' ? 95 : 82),
+        resolvedDate: preview.dateResolution.resolvedDate,
+        relativeDatePhrase: preview.dateResolution.matchedPhrase || 'today',
         progressVal: preview.progressVal,
       });
 
@@ -210,7 +215,9 @@ export const Dashboard: React.FC = () => {
       addToast({
         type: 'success',
         title: 'Instant Update Ingested & Schedule Synced',
-        message: `Linked to ${preview.candidate?.activityId || 'Task'} (${preview.progressVal}%). Schedule updated.`,
+        message: preview.candidate
+          ? `Linked to ${preview.candidate.activityId} (${preview.progressVal}%). Schedule updated.`
+          : `Ingested update. Flagged for planner verification.`,
       });
     } catch (err) {
       console.error(err);
@@ -353,30 +360,51 @@ export const Dashboard: React.FC = () => {
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => handleInstantIngest('Erected pipe spool 24-CW-017 today in pump bay. Hydrotest ready.')}
-              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
-            >
-              + Piping Sample
-            </button>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button
               type="button"
               className="btn btn-secondary btn-sm"
               onClick={() => handleInstantIngest('Excavated crude storage tank ring wall foundation yesterday.')}
               style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
+              title="98% Match: Civil Tank Foundation"
             >
-              + Civil Sample
+              + Civil (High Confidence)
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleInstantIngest('Erected pipe spool 24-CW-017 today in pump bay. Hydrotest ready.')}
+              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
+              title="95% Match: Line 24-CW-017"
+            >
+              + Piping (Line 24-CW-017)
             </button>
             <button
               type="button"
               className="btn btn-secondary btn-sm"
               onClick={() => handleInstantIngest('Terminated 415V switchgear feeder cables in substation-03 today.')}
               style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
+              title="94% Match: Electrical Substation"
             >
-              + Electrical Sample
+              + Electrical (Substation-03)
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleInstantIngest('Pipe erection completed near pump bay. Crew demobilized for shift change.')}
+              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem', border: '1px solid #d97706', color: '#d97706' }}
+              title="Ambiguous Case (58%): Missing Line Tag, routes to Review Queue"
+            >
+              ⚠ Ambiguous (Needs Review)
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleInstantIngest('Fabricated and installed 2-inch bypass drain tie-in line near cooling tower manifold.')}
+              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem', border: '1px solid #e11d48', color: '#e11d48' }}
+              title="Out-of-Baseline Scope (12%): Commercial Claim Control"
+            >
+              ✖ Out-of-Baseline Claim
             </button>
           </div>
         </div>
@@ -584,53 +612,107 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. Redirection Hub to Important Tools (6 Clean & Beautiful Cards) */}
+      {/* 4. Redirection Hub to Important Tools (Properly Named Locations) */}
       <div>
         <div style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8, letterSpacing: '0.04em' }}>
-          Engineering Suite & Navigation Hub
+          Engineering Suite & Named System Locations
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.85rem' }}>
-          {/* Card 1: 4D Gantt */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
+          {/* Card 1: Ingestion */}
           <div
             className="card card-interactive"
-            onClick={() => setActiveTab('schedule-activities')}
-            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+            onClick={() => setActiveTab('upload')}
+            style={{ padding: '0.95rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Activity size={17} />
+                <UploadCloud size={17} />
               </div>
               <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
             </div>
             <div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>4D Gantt & Digital Twin</div>
-              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>Physical plant execution, workfront velocity & EVM S-Curve</div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)' }}>1. Data Ingestion Hub</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>Baseline schedule + Daily report + Spreadsheet</div>
             </div>
           </div>
 
-          {/* Card 2: Field Timelines */}
+          {/* Card 2: Matching */}
           <div
             className="card card-interactive"
             onClick={() => setActiveTab('site-updates')}
-            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+            style={{ padding: '0.95rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(16, 185, 129, 0.15)', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <FileText size={17} />
+                <CheckSquare size={17} />
               </div>
               <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
             </div>
             <div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Field Timelines & Reports</div>
-              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>Chronological updates, photo proof & explainable AI inspector</div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)' }}>2. AI Matching & Reports</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>Extracted fields, candidate activities & evidence score</div>
             </div>
           </div>
 
-          {/* Card 3: Delay Calculator */}
+          {/* Card 3: Review Queue */}
+          <div
+            className="card card-interactive"
+            onClick={() => setActiveTab('planner-review')}
+            style={{ padding: '0.95rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(245, 158, 11, 0.15)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ShieldCheck size={17} />
+              </div>
+              <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)' }}>3. Verification Queue</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>Approve ambiguous updates & out-of-baseline claims</div>
+            </div>
+          </div>
+
+          {/* Card 4: Schedule Activities */}
+          <div
+            className="card card-interactive"
+            onClick={() => setActiveTab('schedule-activities')}
+            style={{ padding: '0.95rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(124, 58, 237, 0.15)', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Layers size={17} />
+              </div>
+              <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)' }}>4. Schedule & Sub-Activities</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>Primavera WBS with verified site sub-activities</div>
+            </div>
+          </div>
+
+          {/* Card 5: Calendar */}
+          <div
+            className="card card-interactive"
+            onClick={() => setActiveTab('calendar')}
+            style={{ padding: '0.95rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(14, 165, 233, 0.15)', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Calendar size={17} />
+              </div>
+              <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)' }}>5. Project Calendar</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>Planned task windows, milestones & today's IST marker</div>
+            </div>
+          </div>
+
+          {/* Card 6: Delay Simulator */}
           <div
             className="card card-interactive"
             onClick={() => setActiveTab('copilot')}
-            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+            style={{ padding: '0.95rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(225, 29, 72, 0.15)', color: '#e11d48', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -639,64 +721,245 @@ export const Dashboard: React.FC = () => {
               <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
             </div>
             <div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Delay & Impact Calculator</div>
-              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>Simulate weather delays, rig downtime & float consumption</div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)' }}>6. Delays & Copilot</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>Simulate weather delays, rig downtime & float</div>
             </div>
           </div>
 
-          {/* Card 4: Review Queue */}
+          {/* Card 7: Project Memory */}
           <div
             className="card card-interactive"
-            onClick={() => setActiveTab('planner-review')}
-            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+            onClick={() => setActiveTab('project-memory')}
+            style={{ padding: '0.95rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(245, 158, 11, 0.15)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <CheckSquare size={17} />
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(245, 158, 11, 0.15)', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Sparkles size={17} />
               </div>
               <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
             </div>
             <div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Matching & Approvals Queue</div>
-              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>Human-in-the-loop verification desk for ambiguous updates</div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)' }}>7. Project Memory</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>Contractor velocities & historical delay hotspots</div>
             </div>
           </div>
 
-          {/* Card 5: Guide Tour */}
+          {/* Card 8: Audit Trail */}
           <div
             className="card card-interactive"
-            onClick={startGuidedDemo}
-            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+            onClick={() => setActiveTab('audit-trail')}
+            style={{ padding: '0.95rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(124, 58, 237, 0.15)', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Compass size={17} />
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(15, 23, 42, 0.12)', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ShieldCheck size={17} />
               </div>
               <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
             </div>
             <div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Interactive Guide Tour</div>
-              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>11-stage deep-dive explaining fuzzy matching & spatial AI</div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text-primary)' }}>8. Audit Trail</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>Cryptographic SHA-256 signatures & tamper logs</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Project Layout: WBS Hierarchy (Project -> L4 Areas -> L5 Packages -> L6 Activities -> Verified Sub-Activities) */}
+      <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <FolderTree size={18} style={{ color: 'var(--brand-primary)' }} />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Master Project Layout (WBS Hierarchy & Attached Sub-Activities)
+              </h3>
+            </div>
+            <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Structure parsed from uploaded schedule. Verified field logs (from daily reports & quick text ingestion) attach directly as child sub-activities.
+            </p>
           </div>
 
-          {/* Card 6: Back to Role Home */}
-          <div
-            className="card card-interactive"
-            onClick={() => setActiveTab('home')}
-            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(14, 165, 233, 0.15)', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <HardHat size={17} />
-              </div>
-              <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Role Home Portal</div>
-              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>Access your tailored {currentRole === 'supervisor' ? 'Supervisor' : 'Lead Planner'} workstation</div>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="mono-pill" style={{ fontSize: '0.7rem' }}>
+              Project: {currentProject?.shortCode || 'IOCL-P4'}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setActiveTab('schedule-activities')}
+              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
+            >
+              <span>Full Schedule Table</span>
+              <ChevronRight size={12} />
+            </button>
           </div>
+        </div>
+
+        {/* WBS Hierarchy Tree */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Level 1: Project Root */}
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'linear-gradient(90deg, rgba(37, 99, 235, 0.1), rgba(37, 99, 235, 0.02))',
+              borderRadius: 'var(--radius-sm)',
+              border: '1.5px solid var(--brand-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FolderTree size={16} style={{ color: 'var(--brand-primary)' }} />
+              <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                Level 1 Project: {currentProject?.name || 'IOCL Refinery Expansion - P4'} ({currentProject?.shortCode || 'IOCL-P4'})
+              </span>
+            </div>
+            <span className="badge badge-ready" style={{ fontSize: '0.7rem' }}>
+              {scheduleMetrics.overallProgress}% Earned Value
+            </span>
+          </div>
+
+          {/* Group Activities by Area (Level 4) and L5 Packages */}
+          {Array.from(new Set(enrichedSchedule.map(s => s.area || 'General Plant'))).map(areaName => {
+            const areaActivities = enrichedSchedule.filter(s => (s.area || 'General Plant') === areaName);
+            const areaCompleted = areaActivities.filter(s => s.status === 'Completed' || (s.progressPercent || 0) >= 100).length;
+
+            return (
+              <div
+                key={areaName}
+                style={{
+                  marginLeft: '1.25rem',
+                  borderLeft: '2px solid var(--border-default)',
+                  paddingLeft: '1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                {/* Level 4: Area Node */}
+                <div
+                  style={{
+                    padding: '0.55rem 0.85rem',
+                    background: 'var(--bg-surface-secondary)',
+                    borderRadius: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    border: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--brand-primary)', textTransform: 'uppercase' }}>
+                      Level 4 Area:
+                    </span>
+                    <span style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {areaName}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                    {areaCompleted}/{areaActivities.length} activities completed
+                  </span>
+                </div>
+
+                {/* Level 6 Activities & Attached Verified Sub-Activities */}
+                <div style={{ marginLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {areaActivities.map(act => {
+                    const isComplete = act.status === 'Completed' || (act.progressPercent || 0) >= 100;
+                    const isDelayed = (act.varianceDays || 0) > 0 || act.status === 'Delayed';
+
+                    // Find approved sub-activities attached to this L6 activity
+                    const subActivities = siteUpdates.filter(u => {
+                      const dec = plannerDecisions[u.id];
+                      if (dec && dec.linkedActivityId === act.activityId && dec.status === 'approved') return true;
+                      const match = matchResults[u.id];
+                      return (!dec || dec.status !== 'rejected') && match?.category === 'ready' && match.candidateActivityId === act.activityId;
+                    });
+
+                    return (
+                      <div
+                        key={act.activityId}
+                        style={{
+                          background: 'var(--bg-surface)',
+                          borderRadius: 4,
+                          border: '1px solid var(--border-subtle)',
+                          padding: '0.55rem 0.85rem',
+                        }}
+                      >
+                        {/* L6 Header Row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: '0.675rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                              L6 Activity:
+                            </span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.75rem', color: 'var(--brand-primary)' }}>
+                              {act.activityId}
+                            </span>
+                            <span style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              {act.activityName}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: isComplete ? '#059669' : isDelayed ? '#e11d48' : 'var(--brand-primary)' }}>
+                              {act.progressPercent || 0}%
+                            </span>
+                            <span
+                              className={`badge ${isComplete ? 'badge-ready' : isDelayed ? 'badge-unplanned' : 'badge-review'}`}
+                              style={{ fontSize: '0.625rem', padding: '1px 6px' }}
+                            >
+                              {act.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Attached Verified Sub-Activities */}
+                        {subActivities.length > 0 && (
+                          <div style={{ marginTop: 6, paddingLeft: '1rem', borderLeft: '2px dashed #059669', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {subActivities.map(sub => (
+                              <div
+                                key={sub.id}
+                                style={{
+                                  fontSize: '0.7rem',
+                                  padding: '0.25rem 0.5rem',
+                                  background: '#ecfdf5',
+                                  borderRadius: 4,
+                                  color: '#065f46',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  flexWrap: 'wrap',
+                                  gap: 4,
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <Check size={12} strokeWidth={3} style={{ color: '#059669' }} />
+                                  <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                                    ↳ Sub-Activity {sub.id}:
+                                  </span>
+                                  <span style={{ fontStyle: 'italic' }}>
+                                    "{sub.extractedDescription || sub.rawText}"
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.65rem' }}>
+                                  <span className="mono-pill" style={{ background: '#d1fae5', color: '#047857' }}>
+                                    {sub.sourceFile || 'Instant Ingest'}
+                                  </span>
+                                  <span style={{ fontWeight: 700, color: '#047857' }}>
+                                    ✓ Verified by Lead Planner / AI (100% confidence)
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

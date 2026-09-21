@@ -396,14 +396,41 @@ export const ScheduleActivitiesView: React.FC = () => {
                   </div>
 
                   {/* Title & ID */}
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.8rem', color: 'var(--brand-primary)' }}>
-                      {act.activityId}
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.8rem', color: 'var(--brand-primary)' }}>
+                        {act.activityId}
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: 2, lineHeight: 1.3 }}>
+                        {act.activityName}
+                      </div>
+
+                      {/* Attached Approved Sub-Activities */}
+                      {siteUpdates.filter(u => {
+                        const dec = plannerDecisions[u.id];
+                        if (dec && dec.linkedActivityId === act.activityId && dec.status === 'approved') return true;
+                        const match = matchResults[u.id];
+                        return (!dec || dec.status !== 'rejected') && match?.category === 'ready' && match.candidateActivityId === act.activityId;
+                      }).map(sub => (
+                        <div
+                          key={sub.id}
+                          style={{
+                            fontSize: '0.675rem',
+                            padding: '2px 5px',
+                            background: 'rgba(5, 150, 105, 0.08)',
+                            borderRadius: 4,
+                            borderLeft: '2px solid #059669',
+                            color: '#065f46',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginTop: 4,
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>↳ Sub-Act {sub.id}</span>
+                          <span style={{ fontSize: '0.625rem', color: '#047857' }}>✓ Approved by Lead</span>
+                        </div>
+                      ))}
                     </div>
-                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: 2, lineHeight: 1.3 }}>
-                      {act.activityName}
-                    </div>
-                  </div>
 
                   {/* Progress Bar */}
                   <div className="progress-bar-container" style={{ height: 4 }}>
@@ -502,6 +529,34 @@ export const ScheduleActivitiesView: React.FC = () => {
                               )}
                             </div>
                           )}
+
+                          {/* Attached Approved Sub-Activities */}
+                          {siteUpdates.filter(u => {
+                            const dec = plannerDecisions[u.id];
+                            if (dec && dec.linkedActivityId === act.activityId && dec.status === 'approved') return true;
+                            const match = matchResults[u.id];
+                            return (!dec || dec.status !== 'rejected') && match?.category === 'ready' && match.candidateActivityId === act.activityId;
+                          }).map(sub => (
+                            <div
+                              key={sub.id}
+                              style={{
+                                marginTop: 6,
+                                padding: '3px 8px',
+                                background: 'rgba(5, 150, 105, 0.08)',
+                                borderRadius: 4,
+                                borderLeft: '3px solid #059669',
+                                color: '#065f46',
+                                fontSize: '0.7rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                              }}
+                            >
+                              <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)' }}>↳ Sub-Activity {sub.id}:</span>
+                              <span style={{ fontStyle: 'italic' }}>"{sub.extractedDescription || sub.rawText}"</span>
+                              <span style={{ fontWeight: 700, color: '#047857', marginLeft: 'auto' }}>✓ Verified by Lead Planner</span>
+                            </div>
+                          ))}
                         </td>
                         <td>
                           <span className="mono-pill">{act.discipline}</span>

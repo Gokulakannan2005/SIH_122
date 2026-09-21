@@ -68,6 +68,7 @@ export const Sidebar: React.FC = () => {
   }, [showProjectSwitcher]);
 
   const handleTabClick = (tab: NavigationTab) => {
+    setPresentationMode('standard');
     setActiveTab(tab);
   };
 
@@ -261,63 +262,63 @@ export const Sidebar: React.FC = () => {
                 </>
               ) : (
                 <>
-                  {/* Planner Item 1: Tasks & Schedule (WBS) */}
-                  <button
-                    type="button"
-                    className={`sidebar-nav-pill ${activeTab === 'schedule-activities' ? 'active' : ''}`}
-                    onClick={() => handleTabClick('schedule-activities')}
-                    title="WBS Master Schedule Tasks, 4D Critical Path Gantt, and Planned vs Actual progress"
-                  >
-                    <CheckSquare size={15} />
-                    <span>Tasks & Schedule (WBS)</span>
-                    <span className="sidebar-badge" style={{ background: 'var(--brand-surface)', color: 'var(--brand-primary)', fontWeight: 700 }}>Tasks</span>
-                  </button>
-
-                  {/* Planner Item 2: Review Queue */}
-                  <button
-                    type="button"
-                    className={`sidebar-nav-pill ${activeTab === 'planner-review' ? 'active' : ''}`}
-                    onClick={() => handleTabClick('planner-review')}
-                    title="Human-in-the-loop review workbench for ambiguous updates"
-                  >
-                    <FileCheck2 size={15} />
-                    <span>Review Queue</span>
-                    <span className="sidebar-badge amber">Approvals</span>
-                  </button>
-
-                  {/* Planner Item 3: Field Reports & AI Inspector */}
-                  <button
-                    type="button"
-                    className={`sidebar-nav-pill ${activeTab === 'site-updates' ? 'active' : ''}`}
-                    onClick={() => handleTabClick('site-updates')}
-                    title="Uploaded text logs, field reports, and explainable AI matching inspector"
-                  >
-                    <FileText size={15} />
-                    <span>Field Reports & Inspector</span>
-                    <span className="sidebar-badge live">AI Match</span>
-                  </button>
-
-                  {/* Planner Item 4: Daily Field Log & Upload */}
-                  <button
-                    type="button"
-                    className={`sidebar-nav-pill ${activeTab === 'supervisor-entry' ? 'active' : ''}`}
-                    onClick={() => handleTabClick('supervisor-entry')}
-                    title="Supervisor daily task execution and quick logging"
-                  >
-                    <HardHat size={15} />
-                    <span>Daily Field Log</span>
-                  </button>
-
-                  {/* Planner Item 5: Direct File Ingestion */}
+                  {/* Planner Item 1: Direct File Ingestion */}
                   <button
                     type="button"
                     className={`sidebar-nav-pill ${activeTab === 'upload' ? 'active' : ''}`}
                     onClick={() => handleTabClick('upload')}
-                    title="Direct upload center for P6 baselines, daily_report.txt, and excel progress files"
+                    title="Baseline schedule, daily_report.txt, and contractor excel progress"
                   >
                     <UploadCloud size={15} />
-                    <span>Schedule Ingestion</span>
+                    <span>1. Data Ingestion Hub</span>
                     <span className="sidebar-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontWeight: 700 }}>Upload</span>
+                  </button>
+
+                  {/* Planner Item 2: Field Reports & AI Inspector */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'site-updates' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('site-updates')}
+                    title="Extracted fields, candidate activities & evidence score"
+                  >
+                    <FileText size={15} />
+                    <span>2. Matching & Evidence</span>
+                    <span className="sidebar-badge live">AI Match</span>
+                  </button>
+
+                  {/* Planner Item 3: Review Queue */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'planner-review' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('planner-review')}
+                    title="Human verification for ambiguous updates & out-of-baseline claims"
+                  >
+                    <FileCheck2 size={15} />
+                    <span>3. Verification Queue</span>
+                    <span className="sidebar-badge amber">Approvals</span>
+                  </button>
+
+                  {/* Planner Item 4: Tasks & Schedule (WBS) */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'schedule-activities' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('schedule-activities')}
+                    title="Master Primavera Schedule Activities & Verified Site Sub-Activities"
+                  >
+                    <CheckSquare size={15} />
+                    <span>4. Activities & Sub-Acts</span>
+                    <span className="sidebar-badge" style={{ background: 'var(--brand-surface)', color: 'var(--brand-primary)', fontWeight: 700 }}>WBS</span>
+                  </button>
+
+                  {/* Planner Item 5: Project Calendar */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'calendar' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('calendar')}
+                    title="Project Schedule Master Calendar with planned windows and milestones"
+                  >
+                    <Calendar size={15} />
+                    <span>5. Project Calendar</span>
                   </button>
 
                   {/* Planner Item 6: Delay Simulator */}
@@ -325,21 +326,43 @@ export const Sidebar: React.FC = () => {
                     type="button"
                     className={`sidebar-nav-pill ${activeTab === 'copilot' ? 'active' : ''}`}
                     onClick={() => handleTabClick('copilot')}
-                    title="Predictive Schedule Delay Simulation & Critical Path Impact"
+                    title="Predictive Schedule Delay Simulation & Critical Path Float"
                   >
                     <Sliders size={15} />
-                    <span>Delay Simulator</span>
+                    <span>6. Delays & Copilot</span>
                   </button>
 
-                  {/* Planner Item 7: Audit Trail */}
+                  {/* Planner Item 7: Project Memory */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'project-memory' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('project-memory')}
+                    title="Historical contractor velocity, delay patterns & lessons learned"
+                  >
+                    <Sparkles size={15} />
+                    <span>7. Project Memory</span>
+                  </button>
+
+                  {/* Planner Item 8: Audit Trail */}
                   <button
                     type="button"
                     className={`sidebar-nav-pill ${activeTab === 'audit-trail' ? 'active' : ''}`}
                     onClick={() => handleTabClick('audit-trail')}
-                    title="Complete chronological decision provenance and audit log"
+                    title="Complete cryptographic SHA-256 decision provenance"
                   >
                     <ShieldCheck size={15} />
-                    <span>Audit Trail</span>
+                    <span>8. Audit Trail</span>
+                  </button>
+
+                  {/* Planner Item 9: Field Mobile Entry */}
+                  <button
+                    type="button"
+                    className={`sidebar-nav-pill ${activeTab === 'supervisor-entry' ? 'active' : ''}`}
+                    onClick={() => handleTabClick('supervisor-entry')}
+                    title="Field supervisor mobile entry test"
+                  >
+                    <HardHat size={15} />
+                    <span>Site Mobile Log</span>
                   </button>
                 </>
               )}

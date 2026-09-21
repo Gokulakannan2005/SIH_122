@@ -23,6 +23,8 @@ import { LoginView } from './components/LoginView';
 import { AuditTrailView } from './components/AuditTrailView';
 import { GuidedDemoWalkthroughView } from './components/GuidedDemoWalkthroughView';
 import { SihPresentationContainer } from './components/presentation/SihPresentationContainer';
+import { ProjectCalendarView } from './components/ProjectCalendarView';
+import { ProjectMemoryView } from './components/ProjectMemoryView';
 import { GUIDED_DEMO_STEPS } from './utils/guidedDemoData';
 
 const AppContent: React.FC = () => {
@@ -83,22 +85,17 @@ const AppContent: React.FC = () => {
             <AppHeader />
 
             <div className="page-body">
-              {activeTab === 'upload' ? (
-                <UploadDemoView />
-              ) : presentationMode === 'sih' ? (
-                <SihPresentationContainer />
-              ) : (
-                <>
-                  {activeTab === 'home' && <HomeIntroductionView />}
-                  {activeTab === 'dashboard' && <Dashboard />}
-                  {activeTab === 'site-updates' && <SiteUpdatesView />}
-                  {activeTab === 'schedule-activities' && <ScheduleActivitiesView />}
-                  {activeTab === 'planner-review' && <PlannerReviewView />}
-                  {activeTab === 'audit-trail' && <AuditTrailView />}
-                  {activeTab === 'supervisor-entry' && <SupervisorEntryView />}
-                  {activeTab === 'copilot' && <CopilotView />}
-                </>
-              )}
+              {activeTab === 'upload' && <UploadDemoView />}
+              {activeTab === 'home' && (presentationMode === 'sih' ? <SihPresentationContainer /> : <HomeIntroductionView />)}
+              {activeTab === 'dashboard' && <Dashboard />}
+              {activeTab === 'site-updates' && <SiteUpdatesView />}
+              {activeTab === 'schedule-activities' && <ScheduleActivitiesView />}
+              {activeTab === 'planner-review' && <PlannerReviewView />}
+              {activeTab === 'calendar' && <ProjectCalendarView />}
+              {activeTab === 'copilot' && <CopilotView />}
+              {activeTab === 'project-memory' && <ProjectMemoryView />}
+              {activeTab === 'audit-trail' && <AuditTrailView />}
+              {activeTab === 'supervisor-entry' && <SupervisorEntryView />}
             </div>
           </div>
         </>

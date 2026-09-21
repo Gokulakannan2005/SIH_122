@@ -83,19 +83,25 @@ export const Sidebar: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <div
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 6,
-              background: isSupervisor ? '#0284c7' : '#047857',
-              color: '#ffffff',
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: '#ffffff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: isSupervisor ? '0 2px 6px rgba(2, 132, 199, 0.2)' : '0 2px 6px rgba(4, 120, 87, 0.2)',
+              padding: '3px',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              boxShadow: isSupervisor ? '0 2px 8px rgba(2, 132, 199, 0.25)' : '0 2px 8px rgba(4, 120, 87, 0.25)',
+              overflow: 'hidden',
               flexShrink: 0,
             }}
           >
-            <Layers size={17} />
+            <img
+              src="/datum_logo.png"
+              alt="DATUM"
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '0.04em', lineHeight: 1.1 }}>

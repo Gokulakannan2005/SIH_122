@@ -84,18 +84,24 @@ export const StartupExperience: React.FC<StartupExperienceProps> = ({ onComplete
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 8,
-              background: '#1d4ed8',
+              width: 48,
+              height: 48,
+              borderRadius: 10,
+              background: '#ffffff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#ffffff',
-              boxShadow: '0 4px 16px rgba(29, 78, 216, 0.4)',
+              padding: 4,
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.35)',
+              overflow: 'hidden',
+              flexShrink: 0,
             }}
           >
-            <Layers size={24} />
+            <img
+              src="/datum_logo.png"
+              alt="DATUM"
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span

@@ -265,15 +265,17 @@ export const SihPresentationContainer: React.FC = () => {
               width: 42,
               height: 42,
               borderRadius: 8,
-              background: 'linear-gradient(135deg, #0284c7, #0f766e)',
+              background: '#ffffff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#ffffff',
+              padding: 3,
               boxShadow: '0 2px 10px rgba(2, 132, 199, 0.3)',
+              overflow: 'hidden',
+              flexShrink: 0,
             }}
           >
-            <Layers size={22} />
+            <img src="/datum_logo.png" alt="DATUM" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>

@@ -14,6 +14,7 @@ import {
   AuditLog,
 } from '../types';
 import { SAMPLE_EVIDENCE_IMAGES } from './sampleImages';
+import { matchUpdateToSchedule } from './matchingEngine';
 
 export interface ProjectDatasetBundle {
   schedule: ScheduleActivity[];
@@ -60,6 +61,22 @@ const IOCL_SCHEDULE: ScheduleActivity[] = [
     taskHash: 'C4D5E6F7',
     progressPercent: 100,
     status: 'Completed',
+    varianceDays: 0,
+  },
+  {
+    activityId: 'CIV-L6-004',
+    wbs: '1.2.1',
+    activityName: 'Excavate Crude Storage Tank Ring Wall Foundation',
+    discipline: 'Civil',
+    plannedStart: '2026-09-02',
+    plannedFinish: '2026-09-08',
+    area: 'Unit-05 Tank Farm',
+    aliases: ['tank foundation excavation', 'crude storage ring wall', 'tank pad excavation', 'tk-01 foundation'],
+    rawAliases: 'tank foundation excavation, crude storage ring wall, tank pad',
+    l5Code: 'IOCL.P4.U05.CIV.L5.004',
+    taskHash: 'F1E2D3C4',
+    progressPercent: 65,
+    status: 'In Progress',
     varianceDays: 0,
   },
   {
@@ -296,6 +313,44 @@ const IOCL_SITE_UPDATES: SiteUpdate[] = [
         confirmedBy: 'supervisor',
       },
     ],
+  },
+  {
+    id: 'TXT-PARAGRAPH-04',
+    sourceFile: 'daily_report.txt',
+    sourceType: 'supervisor_upload',
+    reportDate: '2026-09-06',
+    extractedDescription: 'Pipe spool erection completed in pump bay area. Awaiting torque check.',
+    rawText: 'Spool erection finished in pump bay area today. Flange bolts fitted, torqueing pending.',
+    discipline: 'Piping',
+    area: 'Unit-01 Pump Bay',
+    eventStatus: 'In Progress',
+    supervisor: 'Rajesh Kumar',
+  },
+  {
+    id: 'TXT-PARAGRAPH-05',
+    sourceFile: 'daily_report.txt',
+    sourceType: 'supervisor_upload',
+    reportDate: '2026-09-07',
+    extractedDescription: 'Fabricated and installed small-bore 2-inch drain line tie-in near pump base',
+    rawText: 'A small-bore 2-inch drain line was fabricated and installed near pump foundation as a temporary bypass. No P6 activity tag.',
+    discipline: 'Piping',
+    area: 'Unit-01 Pump Bay',
+    eventStatus: 'Completed',
+    supervisor: 'Rajesh Kumar',
+    isExplicitUnplanned: true,
+  },
+  {
+    id: 'TXT-PARAGRAPH-06',
+    sourceFile: 'daily_report.txt',
+    sourceType: 'supervisor_upload',
+    reportDate: '2026-09-06',
+    extractedDescription: 'Excavated crude storage tank ring wall foundation yesterday',
+    rawText: 'Excavated crude storage tank ring wall foundation yesterday. Soil compaction test passed.',
+    discipline: 'Civil',
+    area: 'Unit-05 Tank Farm',
+    eventStatus: 'Completed',
+    supervisor: 'K. Verma',
+    confirmedTag: 'TK-01',
   },
 ];
 
@@ -614,56 +669,28 @@ export function getProjectDatasetBundle(projectId: string): ProjectDatasetBundle
     contractCode = 'BPCL-KOCHI-CK4';
   }
 
-  // Pre-generate deterministic match results & planner decisions
+  // Pre-generate deterministic match results using actual matching engine
   const matchResults: Record<string, MatchResult> = {};
   const plannerDecisions: Record<string, PlannerDecision> = {};
   const auditLogs: AuditLog[] = [];
 
   siteUpdates.forEach(update => {
-    let candidateActivity = schedule.find(act => {
-      const tag = update.confirmedTag?.toUpperCase();
-      if (tag && (act.activityId.toUpperCase().includes(tag) || act.activityName.toUpperCase().includes(tag))) {
-        return true;
-      }
-      return act.discipline === update.discipline && act.area === update.area;
-    });
+    const match = matchUpdateToSchedule(update, schedule);
+    matchResults[update.id] = match;
 
-    if (!candidateActivity) {
-      candidateActivity = schedule.find(act => act.discipline === update.discipline) || schedule[0];
-    }
+    if (match.category === 'ready' && match.candidateActivityId) {
+      const candidateActivity = schedule.find(act => act.activityId === match.candidateActivityId);
 
-    const confidence = update.confirmedTag ? 94 : 78;
-    const category = confidence >= 85 ? 'ready' : 'review';
-
-    matchResults[update.id] = {
-      updateId: update.id,
-      candidateActivityId: candidateActivity.activityId,
-      confidenceScore: confidence,
-      category,
-      matchReasons: [
-        `Discipline match: ${update.discipline}`,
-        `Spatial area match: ${update.area}`,
-        ...(update.confirmedTag ? [`Confirmed equipment tag: ${update.confirmedTag}`] : []),
-      ],
-      scoreBreakdown: {
-        keywordScore: update.confirmedTag ? 45 : 30,
-        disciplineScore: 20,
-        areaScore: 15,
-        fuzzyScore: 14,
-      },
-    };
-
-    if (category === 'ready') {
       plannerDecisions[update.id] = {
         updateId: update.id,
-        linkedActivityId: candidateActivity.activityId,
+        linkedActivityId: match.candidateActivityId,
         status: 'approved',
         actionType: 'approve',
         plannerNote: `Auto-verified against ${contractCode} schedule baseline`,
         updatedAt: '2026-09-08T08:00:00Z',
-        l5Code: candidateActivity.l5Code,
-        taskHash: candidateActivity.taskHash,
-        digitalSignature: `SIG-${(candidateActivity.taskHash || 'BASE').substring(0, 6)}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        l5Code: candidateActivity?.l5Code || 'IOCL.P4.L5.001',
+        taskHash: candidateActivity?.taskHash || 'A1B2C3D4',
+        digitalSignature: `SIG-${(candidateActivity?.taskHash || 'BASE').substring(0, 6)}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       };
 
       auditLogs.push({
@@ -672,12 +699,30 @@ export function getProjectDatasetBundle(projectId: string): ProjectDatasetBundle
         updateId: update.id,
         rawText: update.rawText,
         sourceFile: update.sourceFile,
-        action: 'Baseline Execution Alignment Verified',
-        originalConfidence: confidence,
-        originalCategory: category,
-        finalActivityId: candidateActivity.activityId,
-        plannerNote: `Classified for active project ${contractCode}`,
-        userRole: 'admin',
+        action: `Auto-verified & aligned to baseline task ${match.candidateActivityId} with ${match.confidenceScore}% confidence`,
+        decisionStatus: 'approved',
+        previousActivityId: null,
+        newActivityId: match.candidateActivityId,
+        userName: 'DATUM AI Engine',
+        userRole: 'Deterministic Matching Core',
+        l5Code: candidateActivity?.l5Code,
+        taskHash: candidateActivity?.taskHash,
+        digitalSignature: `SIG-DATUM-AUTO-${update.id}`,
+      });
+    } else if (match.category === 'unplanned') {
+      auditLogs.push({
+        id: `AUDIT-UNP-${update.id}`,
+        timestamp: '2026-09-07T16:45:00Z',
+        updateId: update.id,
+        rawText: update.rawText,
+        sourceFile: update.sourceFile,
+        action: `Flagged as Out-of-Baseline Work: No matching activity in master schedule (${match.matchReasons[0] || 'Unplanned scope'})`,
+        decisionStatus: 'unplanned',
+        previousActivityId: null,
+        newActivityId: null,
+        userName: 'DATUM AI Engine',
+        userRole: 'Scope Deviation Monitor',
+        digitalSignature: `SIG-DATUM-FLAG-${update.id}`,
       });
     }
   });

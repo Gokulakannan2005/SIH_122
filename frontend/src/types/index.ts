@@ -1,4 +1,4 @@
-export type NavigationTab = 'home' | 'dashboard' | 'site-updates' | 'schedule-activities' | 'planner-review' | 'upload' | 'supervisor-entry' | 'copilot' | 'audit-trail';
+export type NavigationTab = 'home' | 'dashboard' | 'site-updates' | 'schedule-activities' | 'planner-review' | 'upload' | 'supervisor-entry' | 'copilot' | 'audit-trail' | 'calendar' | 'project-memory';
 
 export type AppSystemMode = 'enterprise' | 'executive';
 

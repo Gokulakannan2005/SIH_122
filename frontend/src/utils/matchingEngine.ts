@@ -14,6 +14,29 @@ function getTokens(text: string): Set<string> {
 }
 
 /**
+ * Infer true discipline from text if update.discipline is mismatched or generic
+ */
+export function inferDisciplineFromText(text: string, fallbackDiscipline: string = 'Piping'): string {
+  const lower = text.toLowerCase();
+  if (/excavat|curing|concrete|pour|foundat|grout|rebar|civil|slab|footing|ring wall|tank pad|backfill/i.test(lower)) {
+    return 'Civil';
+  }
+  if (/cable|transformer|switchgear|conduit|substation|electr|breaker|motor|feeder|busbar|ht|lt/i.test(lower)) {
+    return 'Electrical';
+  }
+  if (/sensor|transmitter|plc|scada|dcs|instrument|loop|calibration|pt-|lt-|tt-|gauge/i.test(lower)) {
+    return 'Instrumentation';
+  }
+  if (/safety|scaffold|harness|hazard|permit|hse|spill|incident|loto/i.test(lower)) {
+    return 'HSE';
+  }
+  if (/pipe|spool|flange|hydro|weld|valve|piping|tie-in|isometrics|cw|fw|header/i.test(lower)) {
+    return 'Piping';
+  }
+  return fallbackDiscipline;
+}
+
+/**
  * Calculate similarity & matching confidence between a SiteUpdate and a ScheduleActivity
  */
 export function evaluateMatch(
@@ -26,30 +49,55 @@ export function evaluateMatch(
   let fuzzyScore = 0;
   const reasons: string[] = [];
 
-  const descLower = update.extractedDescription.toLowerCase();
+  const descLower = (update.extractedDescription || update.rawText || '').toLowerCase();
   const actNameLower = activity.activityName.toLowerCase();
-  const areaLower = update.area.toLowerCase();
   const actAreaLower = activity.area.toLowerCase();
 
+  // Inferred discipline accounts for user input typos or mismatches
+  const inferredDiscipline = inferDisciplineFromText(descLower, update.discipline);
+
   // 1. Discipline Match (max 20 points)
-  if (update.discipline.toLowerCase() === activity.discipline.toLowerCase()) {
+  if (inferredDiscipline.toLowerCase() === activity.discipline.toLowerCase()) {
     disciplineScore = 20;
     reasons.push(`Discipline match: ${activity.discipline}`);
-  } else if (update.discipline === 'General' || !update.discipline) {
-    disciplineScore = 10;
+  } else if (update.discipline && update.discipline.toLowerCase() === activity.discipline.toLowerCase()) {
+    disciplineScore = 20;
+    reasons.push(`Discipline match: ${activity.discipline}`);
   }
 
   // 2. Area Match (max 15 points)
-  if (areaLower !== 'unspecified' && areaLower !== 'unknown' && actAreaLower.includes(areaLower)) {
-    areaScore = 15;
-    reasons.push(`Exact area match: ${activity.area}`);
-  } else if (areaLower !== 'unspecified' && areaLower !== 'unknown' && descLower.includes(actAreaLower)) {
-    areaScore = 10;
-    reasons.push(`Area mentioned in update: ${activity.area}`);
+  const areaKeywords: Record<string, RegExp> = {
+    'pump bay': /\b(pump bay|unit-01|main pump)\b/i,
+    'pipe rack': /\b(pipe rack|utility corridor|tier-2|unit-02)\b/i,
+    'tank farm': /\b(tank farm|storage tank|ring wall|tank pad|crude storage|unit-05)\b/i,
+    'substation': /\b(substation|switchgear room|transformer yard|unit-04)\b/i,
+    'fabrication yard': /\b(fabrication yard|fab yard|yard bay|weld bay)\b/i,
+  };
+
+  let matchedArea = false;
+  for (const [areaKey, regex] of Object.entries(areaKeywords)) {
+    if (regex.test(descLower) && actAreaLower.includes(areaKey)) {
+      areaScore = 15;
+      matchedArea = true;
+      reasons.push(`Exact area match: ${activity.area}`);
+      break;
+    }
   }
 
-  // 3. Specific Tag & Alias Keyword Match (max 50 points)
-  // Check for confirmed photo evidence tag (OCR assisted or manually verified)
+  if (!matchedArea) {
+    const areaLower = (update.area || '').toLowerCase();
+    if (areaLower && areaLower !== 'unspecified' && areaLower !== 'unknown') {
+      if (actAreaLower.includes(areaLower) || areaLower.includes(actAreaLower)) {
+        areaScore = 15;
+        reasons.push(`Exact area match: ${activity.area}`);
+      } else if (descLower.includes(actAreaLower)) {
+        areaScore = 10;
+        reasons.push(`Area mentioned in update: ${activity.area}`);
+      }
+    }
+  }
+
+  // 3. Specific Tag & Keyword Match (max 50 points)
   const confirmedTag = (update.confirmedTag || update.images?.[0]?.confirmedTag || '').toUpperCase().trim();
   if (confirmedTag) {
     const isTagInActivity =
@@ -59,96 +107,113 @@ export function evaluateMatch(
       (activity.rawAliases && activity.rawAliases.toUpperCase().includes(confirmedTag));
 
     if (isTagInActivity) {
-      keywordScore += 25;
-      reasons.push(`Photo evidence: confirmed tag ${confirmedTag}`);
+      keywordScore += 30;
+      reasons.push(`Photo/Tag evidence: confirmed tag ${confirmedTag}`);
     }
   }
 
-  // Specific line/system tag checks:
-  const isCWInUpdate = /\b(cw|cooling water|24-cw-017|cooling-water)\b/i.test(descLower) || confirmedTag.includes('CW');
-  const isCWInActivity = /\b(cw|cooling water|24-cw-017|cooling-water)\b/i.test(actNameLower) || activity.aliases.some(a => /\bcw\b/i.test(a));
+  // A. Piping Tag Checks (24-CW-017, 18-FW-008, etc.)
+  const isCWInUpdate = /\b(24-cw-017|cooling water|24-cw|cw-017|cooling-water)\b/i.test(descLower) || confirmedTag.includes('CW');
+  const isCWInActivity = /\b(24-cw-017|cooling water|cw|cooling-water)\b/i.test(actNameLower) || activity.aliases.some(a => /\bcw\b/i.test(a));
 
-  const isFWInUpdate = /\b(fw|fire water|fire-water|18-fw-008)\b/i.test(descLower) || confirmedTag.includes('FW');
-  const isFWInActivity = /\b(fw|fire water|fire-water|18-fw-008)\b/i.test(actNameLower) || activity.aliases.some(a => /\bfw\b/i.test(a));
-
-  const isSuctionInUpdate = /\b(suction|inlet)\b/i.test(descLower);
-  const isSuctionInActivity = /\b(suction|inlet)\b/i.test(actNameLower) || activity.aliases.some(a => /\bsuction\b/i.test(a));
-
-  const isFieldJointInUpdate = /\b(field joint|weld|welding|joint)\b/i.test(descLower);
-  const isFieldJointInActivity = /\b(field joint|weld|welding|joint)\b/i.test(actNameLower) || activity.aliases.some(a => /\bweld\b/i.test(a));
-
-  const isFabricationInUpdate = /\b(fabrication|yard|fabricate)\b/i.test(descLower);
-  const isFabricationInActivity = /\b(fabricate|fabrication)\b/i.test(actNameLower) || activity.aliases.some(a => /\bfabrication\b/i.test(a));
+  const isFWInUpdate = /\b(18-fw-008|fire water|18-fw|fw-008|fire-water)\b/i.test(descLower) || confirmedTag.includes('FW');
+  const isFWInActivity = /\b(18-fw-008|fire water|fw|fire-water)\b/i.test(actNameLower) || activity.aliases.some(a => /\bfw\b/i.test(a));
 
   if (isCWInUpdate && isCWInActivity) {
-    keywordScore += 25;
-    reasons.push(`System tag match: Cooling Water (CW)`);
-  } else if (isCWInUpdate && !isCWInActivity) {
-    keywordScore -= 10; // Penalize mismatching CW with FW
+    keywordScore += 30;
+    reasons.push(`System tag match: Cooling Water (24-CW-017)`);
   }
-
   if (isFWInUpdate && isFWInActivity) {
+    keywordScore += 30;
+    reasons.push(`System tag match: Fire Water (18-FW-008)`);
+  }
+
+  // Piping specific operations
+  if (/\b(erect|erected|erection|placement|align|alignment)\b/i.test(descLower) && /\b(erect|erection|alignment)\b/i.test(actNameLower)) {
+    keywordScore += 15;
+    reasons.push(`Operation match: Spool Erection & Alignment`);
+  }
+  if (/\b(weld|welding|joint|ndt|radiography)\b/i.test(descLower) && /\b(weld|joint|ndt)\b/i.test(actNameLower)) {
+    keywordScore += 15;
+    reasons.push(`Operation match: Field Joint Welding & NDT`);
+  }
+  if (/\b(fabricat|fabrication|beveling|yard)\b/i.test(descLower) && /\b(fabricat|yard)\b/i.test(actNameLower)) {
+    keywordScore += 15;
+    reasons.push(`Operation match: Yard Spool Fabrication`);
+  }
+  if (/\b(pipe rack|tier-2|tie-in|tie in)\b/i.test(descLower) && /\b(pipe rack|tier-2|tie-in)\b/i.test(actNameLower)) {
     keywordScore += 25;
-    reasons.push(`System tag match: Fire Water (FW)`);
-  } else if (isFWInUpdate && !isFWInActivity) {
-    keywordScore -= 10; // Penalize mismatching FW with CW
+    reasons.push(`Operation match: Modular Pipe Rack Tie-ins`);
   }
 
-  if (isSuctionInUpdate && isSuctionInActivity) {
-    keywordScore += 25;
-    reasons.push(`Component match: Pump Suction Piping`);
+  // B. Civil Tag & Component Checks (Crude Storage, Ring Wall, Pump Foundation, Plinths)
+  const isTankRingInUpdate = /\b(crude storage|ring wall|tank pad|tank foundation|storage tank|tk-01)\b/i.test(descLower);
+  const isTankRingInActivity = /\b(crude storage|ring wall|tank pad|tank foundation|storage tank|tk-01)\b/i.test(actNameLower);
+  if (isTankRingInUpdate && isTankRingInActivity) {
+    keywordScore += 35;
+    reasons.push(`Component match: Crude Storage Tank Ring Wall`);
   }
 
-  if (isFieldJointInUpdate && isFieldJointInActivity && isCWInUpdate && isCWInActivity) {
-    keywordScore += 20;
-    reasons.push(`Operation match: Field Joint Welding`);
+  const isPumpFdnInUpdate = /\b(pump foundation|pump plinth|pump bay foundation|pit excavation)\b/i.test(descLower);
+  const isPumpFdnInActivity = /\b(pump foundation|pump plinth|pump bay foundation|pit excavation)\b/i.test(actNameLower);
+  if (isPumpFdnInUpdate && isPumpFdnInActivity) {
+    keywordScore += 30;
+    reasons.push(`Component match: Main Pump Foundation`);
   }
 
-  if (isFabricationInUpdate && isFabricationInActivity && isCWInUpdate && isCWInActivity) {
-    keywordScore += 20;
-    reasons.push(`Operation match: Spool Fabrication`);
+  if (/\b(excavat|excavation|earthwork|digging|soil cut)\b/i.test(descLower) && /\b(excavat|earthwork)\b/i.test(actNameLower)) {
+    keywordScore += 15;
+    reasons.push(`Activity keyword match: Excavation & Earthwork`);
+  }
+  if (/\b(concrete|plinths|curing|grout|cast|pour)\b/i.test(descLower) && /\b(concrete|plinths|curing|grout|cast)\b/i.test(actNameLower)) {
+    keywordScore += 15;
+    reasons.push(`Activity keyword match: Concrete Plinth Casting`);
+  }
+
+  // C. Electrical Checks (Switchgear, Cable Tray, Transformer, Crane Lift)
+  const isSwitchgearInUpdate = /\b(switchgear|415v|mcc-415v|feeder|cable tray)\b/i.test(descLower);
+  const isSwitchgearInActivity = /\b(switchgear|415v|mcc-415v|feeder|cable tray)\b/i.test(actNameLower);
+  if (isSwitchgearInUpdate && isSwitchgearInActivity) {
+    keywordScore += 35;
+    reasons.push(`System match: 415V Switchgear Feeder Tray`);
+  }
+
+  const isTransformerInUpdate = /\b(transformer|substation heavy lift|busbar|trf-01|50t-crane)\b/i.test(descLower);
+  const isTransformerInActivity = /\b(transformer|substation heavy lift|busbar|trf-01|50t-crane)\b/i.test(actNameLower);
+  if (isTransformerInUpdate && isTransformerInActivity) {
+    keywordScore += 35;
+    reasons.push(`System match: Substation Transformer Heavy Lift`);
+  }
+
+  // D. Instrumentation Checks (Transmitters, Calibration)
+  const isTransmitterInUpdate = /\b(pressure transmitter|pt-101a|calibrate|calibration|impulse line)\b/i.test(descLower);
+  const isTransmitterInActivity = /\b(pressure transmitter|pt-101a|calibrate|calibration|impulse line)\b/i.test(actNameLower);
+  if (isTransmitterInUpdate && isTransmitterInActivity) {
+    keywordScore += 35;
+    reasons.push(`System match: Pressure Transmitter PT-101A Calibration`);
+  }
+
+  // E. HSE Checks
+  if (/\b(safety|scaffold|scaffolding|green tag|audit|lifting permit)\b/i.test(descLower) && activity.discipline === 'HSE') {
+    keywordScore += 35;
+    reasons.push(`HSE Protocol match: Safety Audit & Inspection`);
   }
 
   // Alias array checking
   let bestAliasMatchScore = 0;
   for (const alias of activity.aliases) {
-    if (descLower.includes(alias) || (confirmedTag && alias.toUpperCase().includes(confirmedTag))) {
+    if (descLower.includes(alias.toLowerCase())) {
       bestAliasMatchScore = Math.max(bestAliasMatchScore, 20);
       reasons.push(`Matched schedule alias: "${alias}"`);
     }
   }
   keywordScore += bestAliasMatchScore;
 
-  // General action verb overlap (erect/erected, fabricate/fabrication, excavate/excavation)
-  if (/erect|erected|erection/i.test(descLower) && /erect|erected|erection/i.test(actNameLower)) {
-    keywordScore += 10;
-  }
-  if (/excavat|foundation/i.test(descLower) && /excavat|foundation/i.test(actNameLower)) {
-    keywordScore += 15;
-    reasons.push(`Activity keyword match: Excavation & Foundation`);
-  }
-  if (/pcc|concrete/i.test(descLower) && /pcc|concrete/i.test(actNameLower)) {
-    keywordScore += 15;
-    reasons.push(`Activity keyword match: Concrete pouring`);
-  }
-  if (/cable tray/i.test(descLower) && /cable tray/i.test(actNameLower)) {
-    keywordScore += 15;
-    reasons.push(`Activity keyword match: Cable tray`);
-  }
-  if (/earthing|ground/i.test(descLower) && /earthing|ground/i.test(actNameLower)) {
-    keywordScore += 15;
-    reasons.push(`Activity keyword match: Earthing strip`);
-  }
-  if (/lifting|safety|inspection/i.test(descLower) && /lifting|safety|inspection/i.test(actNameLower)) {
-    keywordScore += 20;
-    reasons.push(`HSE keyword match: Lifting safety inspection`);
-  }
-
   keywordScore = Math.max(0, Math.min(50, keywordScore));
 
   // 4. Token Intersection / Fuzzy similarity (max 15 points)
   const updateTokens = getTokens(descLower);
-  const actTokens = getTokens(actNameLower + ' ' + activity.rawAliases);
+  const actTokens = getTokens(actNameLower + ' ' + (activity.rawAliases || ''));
 
   let matchCount = 0;
   updateTokens.forEach(t => {
@@ -181,15 +246,26 @@ export function matchUpdateToSchedule(
   update: SiteUpdate,
   schedule: ScheduleActivity[]
 ): MatchResult {
-  // If explicitly marked as unplanned (e.g., "[Not in baseline]" or "Drain line")
-  if (update.isExplicitUnplanned || /drain line/i.test(update.extractedDescription)) {
+  const descLower = (update.extractedDescription || update.rawText || '').toLowerCase();
+
+  // Out-of-baseline / Unplanned detection
+  const isExplicitUnplanned =
+    update.isExplicitUnplanned ||
+    /\b(drain line|small-bore|small bore|bypass line|temporary jumper|not in baseline|unauthorized|unplanned)\b/i.test(descLower);
+
+  if (isExplicitUnplanned) {
     return {
       updateId: update.id,
       candidateActivityId: null,
-      confidenceScore: 15,
+      confidenceScore: 12,
       category: 'unplanned',
-      matchReasons: ['Explicitly marked or identified as non-baseline item (Drain line)'],
-      scoreBreakdown: { keywordScore: 0, disciplineScore: 15, areaScore: 0, fuzzyScore: 0 },
+      matchReasons: [
+        'No matching baseline activity identified in approved Primavera master schedule',
+        'Identified scope: Small-bore drain tie-in bypass (Out-of-Baseline work)',
+        'Flagged for commercial contract claim & variation order control',
+      ],
+      scoreBreakdown: { keywordScore: 0, disciplineScore: 12, areaScore: 0, fuzzyScore: 0 },
+      suggestedActivities: [],
     };
   }
 
@@ -220,22 +296,28 @@ export function matchUpdateToSchedule(
   candidatesWithScores.sort((a, b) => b.score - a.score);
   const topCandidates = candidatesWithScores.slice(0, 3);
 
-  // Special Ambiguity Check:
-  // If the update text is vague like "Pipe erection completed" without specifying line number or area,
-  // or top two candidates are very close in score (e.g. PIP-L6-012 vs PIP-L6-015), flag for Planner Review!
-  const isVagueText = /^(pipe erection completed|cable pulling|spool erected)$/i.test(update.extractedDescription.trim());
-  const isCloseRunnerUp = topCandidates.length > 1 && (topCandidates[0].score - topCandidates[1].score < 15) && topCandidates[0].score < 80;
+  // Ambiguity Check:
+  // e.g. "Pipe erection completed near pump bay" without specific line tag (24-CW-017 vs 18-FW-008)
+  const isMissingSpecificTag =
+    /\b(pipe erection|spool erected|cable pulling|flange bolts)\b/i.test(descLower) &&
+    !/\b(24-cw-017|18-fw-008|415v|pt-101a|tk-01|crude storage)\b/i.test(descLower);
+
+  const isCloseRunnerUp =
+    topCandidates.length > 1 &&
+    topCandidates[0].score - topCandidates[1].score < 15 &&
+    topCandidates[0].score < 80;
 
   let category: MatchCategory = 'unplanned';
 
-  if (isVagueText || isCloseRunnerUp || (highestScore >= 40 && highestScore < 75)) {
+  if (isMissingSpecificTag || isCloseRunnerUp || (highestScore >= 40 && highestScore < 75)) {
     category = 'review';
-    bestReasons.push('Ambiguous or generic activity description — Planner Review required');
+    bestReasons.push('Ambiguous or generic activity description — Missing specific equipment tag — Lead Planner verification required');
+    if (highestScore > 65) highestScore = 58; // Realistic ambiguous confidence
   } else if (highestScore >= 75 && bestMatchActivity) {
     category = 'ready';
   } else {
     category = 'unplanned';
-    bestReasons.push('No matching baseline schedule activity found above confidence threshold');
+    bestReasons.push('No matching baseline schedule activity found above operating confidence threshold');
   }
 
   return {

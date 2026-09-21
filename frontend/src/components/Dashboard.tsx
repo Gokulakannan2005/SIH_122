@@ -1,31 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useProject } from '../context/ProjectContext';
+import { useLiveISTClock, resolveRelativeISTDate } from '../utils/istTimeService';
 import {
   CheckCircle2,
   AlertTriangle,
-  Flame,
   Clock,
   ArrowRight,
   ShieldCheck,
   Layers,
-  TrendingDown,
-  Info,
   Calendar,
   ExternalLink,
   ChevronRight,
-  HelpCircle,
   FileText,
-  Filter,
   Search,
   HardHat,
   Sparkles,
   Camera,
   Activity,
-  BarChart3,
   Check,
-  XCircle,
-  AlertCircle,
   Compass,
+  CheckSquare,
+  UploadCloud,
+  Sliders,
+  Send,
+  RotateCcw,
+  Zap,
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
@@ -34,1621 +33,897 @@ export const Dashboard: React.FC = () => {
     siteUpdates,
     matchResults,
     plannerDecisions,
-    auditLogs,
     setActiveTab,
     startGuidedDemo,
     setSelectedScheduleActivityId,
-    setSelectedInspectorUpdateId,
-    setSelectedAuditUpdateId,
-    navigateToSiteUpdatesWithFilter,
-    navigateToPlannerReviewWithFilter,
     handleAddNewFieldEntry,
     addToast,
+    updateTaskProgress,
+    currentProject,
+    currentRole,
   } = useProject();
 
+  const istClock = useLiveISTClock();
+
+  // Instant Text Ingestion Studio State
   const [quickUpdateText, setQuickUpdateText] = useState<string>('');
+  const [isIngesting, setIsIngesting] = useState<boolean>(false);
+  const [ingestedResult, setIngestedResult] = useState<{
+    id: string;
+    text: string;
+    discipline: string;
+    area: string;
+    equipmentTag?: string;
+    candidateActivityId?: string;
+    candidateActivityName?: string;
+    confidence: number;
+    resolvedDate: string;
+    relativeDatePhrase: string;
+    progressVal: number;
+  } | null>(null);
 
-  const [activeDashboardTab, setActiveDashboardTab] = useState<'today-tasks' | 'classification-hub' | 'schedule-variance'>('today-tasks');
-  const [selectedDisciplineFilter, setSelectedDisciplineFilter] = useState<string>('ALL');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
+  // Today's Tasks Filters
   const [taskSearchQuery, setTaskSearchQuery] = useState<string>('');
+  const [selectedDisciplineFilter, setSelectedDisciplineFilter] = useState<string>('ALL');
 
-  // 1. Calculations for KPIs
-  const totalSiteUpdates = siteUpdates.length;
+  // Key Baseline & Schedule Metrics
+  const scheduleMetrics = useMemo(() => {
+    const total = enrichedSchedule.length;
+    const completed = enrichedSchedule.filter(
+      s => s.status === 'Completed' || (typeof s.progressPercent === 'number' && s.progressPercent >= 100)
+    ).length;
+    const delayed = enrichedSchedule.filter(
+      s => (s.varianceDays || 0) > 0 || s.status === 'Delayed'
+    ).length;
+    const inProgress = enrichedSchedule.filter(
+      s => (s.progressPercent || 0) > 0 && (s.progressPercent || 0) < 100
+    ).length;
+    const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const overallProgress = total > 0
+      ? Math.round(enrichedSchedule.reduce((acc, act) => acc + (act.progressPercent || 0), 0) / total)
+      : 0;
 
-  // Auto-linked or Approved
-  const linkedCount = siteUpdates.filter(u => {
-    const dec = plannerDecisions[u.id];
-    if (dec && dec.linkedActivityId && dec.status === 'approved') return true;
-    const match = matchResults[u.id];
-    return match?.category === 'ready' && (!dec || dec.status === 'approved');
-  }).length;
+    return { total, completed, delayed, inProgress, completionPct, overallProgress };
+  }, [enrichedSchedule]);
 
-  // Pending Planner Review
-  const pendingReviewUpdates = siteUpdates.filter(u => {
-    const dec = plannerDecisions[u.id];
-    if (dec && dec.status === 'approved') return false;
-    const match = matchResults[u.id];
-    return match && (match.category === 'review' || match.category === 'unplanned');
-  });
-  const pendingReviewCount = pendingReviewUpdates.length;
+  // Live NLP Preview for Text Ingestion
+  const nlpPreview = useMemo(() => {
+    if (!quickUpdateText.trim()) return null;
+    const text = quickUpdateText;
 
-  // Unplanned count
-  const unplannedCount = siteUpdates.filter(u => {
-    const dec = plannerDecisions[u.id];
-    if (dec?.status === 'unplanned') return true;
-    return matchResults[u.id]?.category === 'unplanned';
-  }).length;
+    // 1. Discipline
+    let discipline = 'Piping';
+    if (/excavat|curing|concrete|pour|foundat|grout|rebar|civil|slab|footing/i.test(text)) {
+      discipline = 'Civil';
+    } else if (/cable|transformer|switchgear|conduit|substation|electr|breaker|motor/i.test(text)) {
+      discipline = 'Electrical';
+    } else if (/sensor|transmitter|plc|scada|dcs|instrument|loop|calibration/i.test(text)) {
+      discipline = 'Instrumentation';
+    } else if (/safety|scaffold|harness|hazard|permit|hse|spill/i.test(text)) {
+      discipline = 'HSE';
+    }
 
-  // Delayed / Critical variance activities
-  const delayedActivities = enrichedSchedule.filter(a => (a.varianceDays || 0) > 0 || a.status === 'Delayed');
-  const delayedCount = delayedActivities.length;
+    // 2. Equipment Tag
+    const tagMatch = text.match(/\b([0-9]{2}-[A-Z]{2,4}-[0-9]{3,4}[A-Z]?|[A-Z]{2,4}-[0-9]{3,4}|[A-Z]-[0-9]{3,4}[A-Z]?)\b/i);
+    const tag = tagMatch ? tagMatch[1].toUpperCase() : undefined;
 
-  // Discipline breakdown
-  const disciplines = ['Civil', 'Piping', 'Electrical', 'Instrumentation', 'HSE'];
-  const disciplineStats = disciplines.map(disc => {
-    const discActivities = enrichedSchedule.filter(s => s.discipline === disc);
-    const total = discActivities.length;
-    const completed = discActivities.filter(s => s.status === 'Completed').length;
-    const inProgress = discActivities.filter(s => s.status === 'In Progress').length;
-    const delayed = discActivities.filter(s => (s.varianceDays || 0) > 0).length;
-    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    // 3. Date resolution using IST
+    const dateResolution = resolveRelativeISTDate(text);
 
-    return {
-      discipline: disc,
-      total,
-      completed,
-      inProgress,
-      delayed,
-      pct,
-    };
-  });
-
-  // Today's Assigned Tasks Data (derived from enriched schedule activities)
-  const todayTasks = enrichedSchedule.map(act => {
-    // Find linked site updates for this activity
-    const linkedUpdates = siteUpdates.filter(u => {
-      const dec = plannerDecisions[u.id];
-      if (dec && dec.linkedActivityId === act.activityId && dec.status === 'approved') return true;
-      const match = matchResults[u.id];
-      return match?.candidateActivityId === act.activityId;
+    // 4. Find candidate activity
+    let matched = enrichedSchedule.find(act => {
+      if (tag && (act.activityId.toUpperCase().includes(tag) || act.activityName.toUpperCase().includes(tag))) {
+        return true;
+      }
+      return false;
     });
 
-    const hasBlocker = linkedUpdates.some(u => u.issueFlag || u.issueSeverity === 'critical');
-    const hasPhotoProof = linkedUpdates.some(u => (u.images?.length || 0) > 0);
-    const blockerText = linkedUpdates.find(u => u.issueFlag)?.issueFlag;
-    const confirmedTag = linkedUpdates.find(u => u.confirmedTag)?.confirmedTag;
+    if (!matched) {
+      matched = enrichedSchedule.find(act => act.discipline === discipline);
+    }
+    if (!matched && enrichedSchedule.length > 0) {
+      matched = enrichedSchedule[0];
+    }
 
-    // Crew lead assignment mapping
-    let crew = 'L&T Infrastructure Team Alpha';
-    if (act.discipline === 'Piping') crew = 'Punj Lloyd Piping Crew 4';
-    if (act.discipline === 'Electrical') crew = 'Siemens Power & Drive Team';
-    if (act.discipline === 'Instrumentation') crew = 'Yokogawa Controls Crew';
-    if (act.discipline === 'HSE') crew = 'IOCL Safety & Audit Cell';
+    // 5. Progress percent
+    let progressVal = 65;
+    const pctMatch = text.match(/([0-9]{1,3})%/);
+    if (pctMatch) {
+      progressVal = Math.min(100, parseInt(pctMatch[1], 10));
+    } else if (/complete|finished|erected|done|installed/i.test(text)) {
+      progressVal = 100;
+    }
 
     return {
-      activity: act,
-      linkedUpdates,
-      hasBlocker,
-      blockerText,
-      hasPhotoProof,
-      confirmedTag,
-      crew,
-      targetToday: act.status === 'Completed' ? 100 : act.status === 'In Progress' ? 75 : 30,
-      actualProgress: act.progressPercent || 0,
+      discipline,
+      tag: tag || 'Auto-Detected',
+      candidate: matched,
+      dateResolution,
+      progressVal,
     };
-  });
+  }, [quickUpdateText, enrichedSchedule]);
+
+  // Handle Instant Text Ingestion
+  const handleInstantIngest = async (textOverride?: string) => {
+    const textToIngest = (textOverride || quickUpdateText).trim();
+    if (!textToIngest) {
+      addToast({
+        type: 'warning',
+        title: 'Input Required',
+        message: 'Please enter a site execution update to analyze and ingest.',
+      });
+      return;
+    }
+
+    setIsIngesting(true);
+
+    try {
+      const preview = nlpPreview || {
+        discipline: 'Piping',
+        tag: 'Auto-Detected',
+        candidate: enrichedSchedule[0],
+        dateResolution: resolveRelativeISTDate(textToIngest),
+        progressVal: 75,
+      };
+
+      const dateRes = resolveRelativeISTDate(textToIngest);
+      const isComplete = preview.progressVal === 100 || /complete|finished|erected|done/i.test(textToIngest);
+
+      // Ingest into ProjectContext
+      await handleAddNewFieldEntry({
+        discipline: preview.discipline,
+        description: textToIngest,
+        rawText: textToIngest,
+        area: preview.candidate?.area || 'Refinery Workfront Unit-01',
+        eventStatus: isComplete ? 'Completed' : 'In Progress',
+        quantity: `${preview.progressVal}%`,
+        supervisor: currentRole === 'supervisor' ? 'Site Supervisor' : 'Lead Planner',
+        targetActivityId: preview.candidate?.activityId,
+        confirmedTag: preview.tag !== 'Auto-Detected' ? preview.tag : undefined,
+      });
+
+      // Update task progress immediately
+      if (preview.candidate) {
+        updateTaskProgress(
+          preview.candidate.activityId,
+          preview.progressVal,
+          isComplete ? 'Completed' : 'In Progress',
+          `Instant Ingestion: "${textToIngest.slice(0, 45)}..."`
+        );
+      }
+
+      setIngestedResult({
+        id: `FIELD-${Date.now().toString().slice(-4)}`,
+        text: textToIngest,
+        discipline: preview.discipline,
+        area: preview.candidate?.area || 'Unit-01',
+        equipmentTag: preview.tag,
+        candidateActivityId: preview.candidate?.activityId,
+        candidateActivityName: preview.candidate?.activityName,
+        confidence: preview.tag !== 'Auto-Detected' ? 95 : 82,
+        resolvedDate: dateRes.resolvedDate,
+        relativeDatePhrase: dateRes.matchedPhrase || 'today',
+        progressVal: preview.progressVal,
+      });
+
+      setQuickUpdateText('');
+      addToast({
+        type: 'success',
+        title: 'Instant Update Ingested & Schedule Synced',
+        message: `Linked to ${preview.candidate?.activityId || 'Task'} (${preview.progressVal}%). Schedule updated.`,
+      });
+    } catch (err) {
+      console.error(err);
+      addToast({
+        type: 'error',
+        title: 'Ingestion Error',
+        message: 'Could not process the text entry. Please try again.',
+      });
+    } finally {
+      setIsIngesting(false);
+    }
+  };
 
   // Filtered Today's Tasks
-  const filteredTodayTasks = todayTasks.filter(item => {
-    if (selectedDisciplineFilter !== 'ALL' && item.activity.discipline !== selectedDisciplineFilter) return false;
-    if (selectedStatusFilter === 'Completed' && item.activity.status !== 'Completed') return false;
-    if (selectedStatusFilter === 'In Progress' && item.activity.status !== 'In Progress') return false;
-    if (selectedStatusFilter === 'Blocked' && !item.hasBlocker && item.activity.status !== 'Delayed') return false;
-    if (taskSearchQuery) {
-      const q = taskSearchQuery.toLowerCase();
-      return (
-        item.activity.activityId.toLowerCase().includes(q) ||
-        item.activity.activityName.toLowerCase().includes(q) ||
-        item.activity.discipline.toLowerCase().includes(q) ||
-        item.activity.area.toLowerCase().includes(q) ||
-        item.crew.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
+  const filteredTasks = useMemo(() => {
+    return enrichedSchedule.filter(task => {
+      if (selectedDisciplineFilter !== 'ALL' && task.discipline !== selectedDisciplineFilter) {
+        return false;
+      }
+      if (taskSearchQuery.trim()) {
+        const q = taskSearchQuery.toLowerCase();
+        const matches =
+          task.activityId.toLowerCase().includes(q) ||
+          task.activityName.toLowerCase().includes(q) ||
+          task.discipline.toLowerCase().includes(q) ||
+          task.area.toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+      return true;
+    });
+  }, [enrichedSchedule, selectedDisciplineFilter, taskSearchQuery]);
+
+  // Discipline list for filter pills
+  const disciplines = useMemo(() => {
+    const set = new Set<string>();
+    enrichedSchedule.forEach(t => t.discipline && set.add(t.discipline));
+    return Array.from(set).sort();
+  }, [enrichedSchedule]);
+
+  // Handle Task Completion Toggle
+  const handleToggleTask = (task: typeof enrichedSchedule[0]) => {
+    const isComplete = task.status === 'Completed' || (task.progressPercent || 0) >= 100;
+    const newProgress = isComplete ? 0 : 100;
+    const newStatus = isComplete ? ('In Progress' as const) : ('Completed' as const);
+
+    updateTaskProgress(
+      task.activityId,
+      newProgress,
+      newStatus,
+      `Toggled from Dashboard Task Checklist (${newStatus})`
+    );
+
+    addToast({
+      type: 'success',
+      title: isComplete ? `Task Re-opened: ${task.activityId}` : `Task Completed: ${task.activityId}`,
+      message: `"${task.activityName}" progress updated to ${newProgress}%.`,
+    });
+  };
 
   return (
-    <div id="demo-target-project-intelligence" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Prominent Guided Demo Launch Card for SIH Presentation */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
+      {/* 1. Executive Clean Header Strip */}
       <div
         className="card"
         style={{
-          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(16, 185, 129, 0.14))',
-          border: '1.5px solid rgba(59, 130, 246, 0.45)',
-          padding: '1.25rem 1.5rem',
-          boxShadow: '0 8px 24px rgba(37, 99, 235, 0.15)',
+          padding: '1.15rem 1.4rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '1rem',
+          background: 'var(--bg-surface)',
+          borderBottom: '2px solid var(--border-subtle)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-          <div style={{ flex: 1, minWidth: '280px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-              <Compass size={20} style={{ color: '#60a5fa' }} />
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-                DATUM Guided Walkthrough Demo
-              </h2>
-              <span className="badge badge-primary">Enterprise Controls</span>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+            <span className="brand-badge" style={{ fontSize: '0.675rem' }}>
+              EXECUTIVE OPERATIONS DASHBOARD
+            </span>
+            <span className="mono-pill" style={{ fontSize: '0.7rem' }}>
+              {currentProject?.name || 'Active Project'} • {currentProject?.code || 'P1'}
+            </span>
+          </div>
+          <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+            Enterprise Planning & Field Telemetry
+          </h2>
+        </div>
+
+        {/* Live IST Clock & Shift Status */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            background: 'var(--bg-surface-secondary)',
+            padding: '0.5rem 0.9rem',
+            borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--border-default)',
+          }}
+        >
+          <Clock size={16} style={{ color: 'var(--brand-primary)' }} />
+          <div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+              Indian Standard Time (IST)
             </div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45 }}>
-              Launch the complete 11-step interactive tour: from unstructured site reports → AI hybrid matching → human review → schedule intelligence → immutable audit trail.
+            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+              {istClock.formattedIST} • <span style={{ color: '#059669' }}>{istClock.shiftName}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. MAIN FEATURE: Instant Text Ingestion Studio */}
+      <div
+        className="card"
+        style={{
+          padding: '1.35rem 1.5rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(16, 185, 129, 0.03))',
+          border: '1.5px solid var(--brand-primary)',
+          boxShadow: '0 4px 20px rgba(37, 99, 235, 0.08)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <Zap size={16} style={{ color: 'var(--brand-primary)' }} />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Instant Text Quick Ingestion Studio
+              </h3>
+              <span className="badge badge-ready" style={{ fontSize: '0.65rem' }}>
+                Main Ingestion Engine
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+              Type natural site progress in plain English. DATUM resolves relative dates ("today", "yesterday"), detects equipment tags, and updates Primavera schedule actuals instantly without page reloads.
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <button
-              type="button"
-              className="btn btn-primary btn-lg pulse-glow"
-              onClick={startGuidedDemo}
-              style={{ padding: '0.75rem 1.75rem', fontSize: '0.95rem', fontWeight: 800, gap: '0.5rem' }}
-            >
-              <Sparkles size={18} />
-              <span>Start Guided Demo</span>
-              <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Analyze Field Update Action Bar */}
-      <div className="card" style={{ padding: '1rem 1.25rem', background: 'var(--bg-surface)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <FileText size={16} style={{ color: 'var(--brand-primary)' }} />
-            <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-              Instant Field Update Ingestion & Match
-            </span>
-          </div>
-          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-            Type any site update to test AI Hybrid Match against 34 schedule activities
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <input
-            type="text"
-            className="form-control"
-            placeholder="e.g. Cooling water pipe section near Pump Bay was erected today. Alignment in progress..."
-            value={quickUpdateText}
-            onChange={e => setQuickUpdateText(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && quickUpdateText.trim()) {
-                setActiveTab('site-updates');
-              }
-            }}
-            style={{ flex: 1, fontSize: '0.85rem' }}
-          />
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              if (quickUpdateText.trim()) {
-                setActiveTab('site-updates');
-              } else {
-                setActiveTab('site-updates');
-              }
-            }}
-            style={{ fontWeight: 700, whiteSpace: 'nowrap' }}
-          >
-            <Sparkles size={15} />
-            <span>Analyze Update</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 1. Industrial Hero Banner matching Reference Screen 1 */}
-      <div className="dashboard-hero-banner">
-        <div className="dashboard-hero-content">
-          <span className="dashboard-hero-subtitle">PROJECT CONTROL CENTER</span>
-          <h1 className="dashboard-hero-title">IOCL Refinery Expansion - P4</h1>
-          <p className="dashboard-hero-desc">
-            Live project intelligence from field reality to schedule execution.
-          </p>
-        </div>
-
-        <div className="dashboard-hero-visual">
-          <div className="dashboard-hero-tagline">
-            Turning Field Reality into Project Intelligence.
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Horizontal 6-Metric KPI Strip (Step 1 Spotlight Target) */}
-      <div id="demo-target-project-context" className="dashboard-kpi-strip">
-        {/* KPI 1: Overall Progress */}
-        <div
-          className="kpi-strip-card clickable"
-          onClick={() => setActiveTab('schedule-activities')}
-          title="Click to view 4D Schedule Progress"
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="kpi-strip-icon" style={{ background: '#ecfdf5', color: '#059669' }}>
-            <Activity size={18} />
-          </div>
-          <div className="kpi-strip-content">
-            <span className="kpi-strip-label">Overall Progress</span>
-            <span className="kpi-strip-value">68%</span>
-            <span className="kpi-strip-sub" style={{ color: '#059669' }}>
-              +12% this week
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 2: Critical Activities */}
-        <div
-          className="kpi-strip-card clickable"
-          onClick={() => setActiveTab('schedule-activities')}
-          title="Click to inspect Critical Path items"
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="kpi-strip-icon" style={{ background: '#fff1f2', color: '#e11d48' }}>
-            <AlertTriangle size={18} />
-          </div>
-          <div className="kpi-strip-content">
-            <span className="kpi-strip-label">Critical Activities</span>
-            <span className="kpi-strip-value">5</span>
-            <span className="kpi-strip-sub" style={{ color: '#e11d48' }}>
-              At risk
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 3: Unresolved Reports */}
-        <div
-          className="kpi-strip-card clickable"
-          onClick={() => navigateToPlannerReviewWithFilter('review')}
-          title="Click to open Planner Review Queue"
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="kpi-strip-icon" style={{ background: '#fffbeb', color: '#d97706' }}>
-            <Clock size={18} />
-          </div>
-          <div className="kpi-strip-content">
-            <span className="kpi-strip-label">Unresolved Reports</span>
-            <span className="kpi-strip-value">{pendingReviewCount || 8}</span>
-            <span className="kpi-strip-sub" style={{ color: '#d97706' }}>
-              Needs review
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 4: Verified & Linked */}
-        <div
-          className="kpi-strip-card clickable"
-          onClick={() => navigateToSiteUpdatesWithFilter({ status: 'approved' })}
-          title="Click to view verified field updates"
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="kpi-strip-icon" style={{ background: '#ecfdf5', color: '#059669' }}>
-            <ShieldCheck size={18} />
-          </div>
-          <div className="kpi-strip-content">
-            <span className="kpi-strip-label">Verified & Linked</span>
-            <span className="kpi-strip-value">{linkedCount || 142}</span>
-            <span className="kpi-strip-sub" style={{ color: '#059669' }}>
-              +18 this week
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 5: Schedule Variance */}
-        <div
-          className="kpi-strip-card clickable"
-          onClick={() => setActiveTab('copilot')}
-          title="Click to simulate Delay Scenarios"
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="kpi-strip-icon" style={{ background: '#f5f3ff', color: '#7c3aed' }}>
-            <Calendar size={18} />
-          </div>
-          <div className="kpi-strip-content">
-            <span className="kpi-strip-label">Schedule Variance</span>
-            <span className="kpi-strip-value">+3 days</span>
-            <span className="kpi-strip-sub" style={{ color: '#7c3aed' }}>
-              Behind baseline
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 6: Upcoming Milestone */}
-        <div
-          className="kpi-strip-card clickable"
-          onClick={() => setActiveTab('schedule-activities')}
-          title="Click to view Milestone Schedule"
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="kpi-strip-icon" style={{ background: '#eff6ff', color: '#2563eb' }}>
-            <Calendar size={18} />
-          </div>
-          <div className="kpi-strip-content">
-            <span className="kpi-strip-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Upcoming Milestone</span>
-              <Info size={11} style={{ color: 'var(--text-muted)' }} />
-            </span>
-            <span className="kpi-strip-value" style={{ fontSize: '0.95rem', fontWeight: 800, marginTop: 3 }}>
-              Pump Bay Completion
-            </span>
-            <span className="kpi-strip-sub" style={{ color: 'var(--text-muted)' }}>
-              Sep 15, 2026
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Main 3-Column Industrial Workspace Grid */}
-      <div className="dashboard-main-grid">
-        {/* Column 1: Executive Workfront Execution Matrix */}
-        <div className="card" style={{ padding: '1.15rem 1.25rem', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <div>
-              <h3 style={{ fontSize: '0.925rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Layers size={16} style={{ color: 'var(--brand-primary)' }} />
-                Live Workfront Velocity Matrix
-              </h3>
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0, marginTop: 2 }}>
-                Physical plant zones reconciled from daily supervisor logs
-              </p>
-            </div>
+          <div style={{ display: 'flex', gap: 6 }}>
             <button
               type="button"
               className="btn btn-secondary btn-sm"
-              onClick={() => setActiveTab('schedule-activities')}
-              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem', gap: 4 }}
+              onClick={() => handleInstantIngest('Erected pipe spool 24-CW-017 today in pump bay. Hydrotest ready.')}
+              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
             >
-              <span>4D Twin Map</span>
-              <ChevronRight size={12} />
+              + Piping Sample
             </button>
-          </div>
-
-          {/* Workfront Rows */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-            {/* Workfront 1: Pump Bay */}
-            <div
-              onClick={() => setActiveTab('schedule-activities')}
-              style={{
-                background: 'var(--bg-subtle)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '0.65rem 0.75rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Unit-01: Pump Bay
-                  </span>
-                  <span className="mono-pill" style={{ fontSize: '0.6rem', padding: '1px 5px', background: 'var(--bg-surface)' }}>
-                    Piping & Civil
-                  </span>
-                </div>
-                <span className="badge badge-ready" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
-                  ● On Schedule
-                </span>
-              </div>
-
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
-                CW Spool Fabrication & Erection (24-CW-017) • 14 Workers Active
-              </div>
-
-              {/* Progress Bar */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ flex: 1, height: 6, background: 'var(--border-subtle)', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ width: '72%', height: '100%', background: 'linear-gradient(90deg, #059669, #10b981)', borderRadius: 3 }} />
-                </div>
-                <span style={{ fontSize: '0.725rem', fontWeight: 800, color: '#059669', minWidth: 32, textAlign: 'right' }}>
-                  72%
-                </span>
-              </div>
-            </div>
-
-            {/* Workfront 2: Filter Bay */}
-            <div
-              onClick={() => setActiveTab('schedule-activities')}
-              style={{
-                background: 'var(--bg-subtle)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '0.65rem 0.75rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Unit-03: Filter Bay
-                  </span>
-                  <span className="mono-pill" style={{ fontSize: '0.6rem', padding: '1px 5px', background: 'var(--bg-surface)' }}>
-                    Civil Foundation
-                  </span>
-                </div>
-                <span className="badge badge-ready" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
-                  ● Steady Progress
-                </span>
-              </div>
-
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
-                Foundation curing & Pump baseplate grout • 8 Workers Active
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ flex: 1, height: 6, background: 'var(--border-subtle)', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ width: '54%', height: '100%', background: 'linear-gradient(90deg, #2563eb, #3b82f6)', borderRadius: 3 }} />
-                </div>
-                <span style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-secondary)', minWidth: 32, textAlign: 'right' }}>
-                  54%
-                </span>
-              </div>
-            </div>
-
-            {/* Workfront 3: Electrical Substation (Critical Risk) */}
-            <div
-              onClick={() => setActiveTab('copilot')}
-              style={{
-                background: 'rgba(244, 63, 94, 0.04)',
-                border: '1px solid rgba(244, 63, 94, 0.3)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '0.65rem 0.75rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              title="Critical delay detected! Click to simulate schedule impact in Copilot"
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: '0.775rem', fontWeight: 800, color: '#f43f5e' }}>
-                    Unit-04: Substation
-                  </span>
-                  <span className="mono-pill" style={{ fontSize: '0.6rem', padding: '1px 5px', background: 'var(--bg-surface)', borderColor: 'rgba(244, 63, 94, 0.3)' }}>
-                    Electrical & Heavy Lift
-                  </span>
-                </div>
-                <span className="badge badge-unplanned" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
-                  ⚠️ -4.2d Critical Slip
-                </span>
-              </div>
-
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
-                Transformer Bay Crane Hydraulic Downtime • Needs Planner Intervention
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ flex: 1, height: 6, background: 'var(--border-subtle)', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ width: '36%', height: '100%', background: 'linear-gradient(90deg, #e11d48, #f43f5e)', borderRadius: 3 }} />
-                </div>
-                <span style={{ fontSize: '0.725rem', fontWeight: 800, color: '#f43f5e', minWidth: 32, textAlign: 'right' }}>
-                  36%
-                </span>
-              </div>
-            </div>
-
-            {/* Workfront 4: Utility Corridor */}
-            <div
-              onClick={() => setActiveTab('schedule-activities')}
-              style={{
-                background: 'var(--bg-subtle)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '0.65rem 0.75rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Unit-02: Utility Corridor
-                  </span>
-                  <span className="mono-pill" style={{ fontSize: '0.6rem', padding: '1px 5px', background: 'var(--bg-surface)' }}>
-                    Pipe Rack Modular
-                  </span>
-                </div>
-                <span className="badge badge-ready" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
-                  ▲ +3d Ahead
-                </span>
-              </div>
-
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
-                Pipe rack module alignment & tie-ins complete • 12 Workers
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ flex: 1, height: 6, background: 'var(--border-subtle)', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ width: '81%', height: '100%', background: 'linear-gradient(90deg, #059669, #10b981)', borderRadius: 3 }} />
-                </div>
-                <span style={{ fontSize: '0.725rem', fontWeight: 800, color: '#059669', minWidth: 32, textAlign: 'right' }}>
-                  81%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 'auto', paddingTop: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-            <span><strong>18 / 24</strong> Active Workfronts</span>
-            <span style={{ color: 'var(--brand-primary)', fontWeight: 600 }}>Click any zone for 4D Digital Twin →</span>
-          </div>
-        </div>
-
-        {/* Column 2: Recent Field Activity */}
-        <div className="card" style={{ padding: '1.15rem 1.25rem', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
-            <h3 style={{ fontSize: '0.925rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-              Recent Field Activity
-            </h3>
             <button
               type="button"
-              onClick={() => setActiveTab('site-updates')}
-              style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--brand-primary)', cursor: 'pointer' }}
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleInstantIngest('Excavated crude storage tank ring wall foundation yesterday.')}
+              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
             >
-              View All →
+              + Civil Sample
             </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
-            {/* Activity 1 */}
-            <div className="activity-stream-item">
-              <div style={{ color: '#059669', marginTop: 2 }}>
-                <CheckCircle2 size={16} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                  <span className="mono-pill" style={{ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontSize: '0.65rem' }}>
-                    Piping
-                  </span>
-                  <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>2 hours ago</span>
-                  <span className="badge badge-ready" style={{ marginLeft: 'auto', fontSize: '0.65rem', padding: '1px 6px' }}>
-                    Verified
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
-                  CW spool fabrication completed in yard
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--brand-primary)', fontWeight: 600, marginTop: 2 }}>
-                  Linked to PIP-L6-011
-                </div>
-              </div>
-            </div>
-
-            {/* Activity 2 */}
-            <div className="activity-stream-item">
-              <div style={{ color: '#d97706', marginTop: 2 }}>
-                <Clock size={16} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                  <span className="mono-pill" style={{ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontSize: '0.65rem' }}>
-                    Piping
-                  </span>
-                  <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>5 hours ago</span>
-                  <span className="badge badge-review" style={{ marginLeft: 'auto', fontSize: '0.65rem', padding: '1px 6px' }}>
-                    Needs Review
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
-                  24 inch CW spool erected near pump bay
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--brand-primary)', fontWeight: 600, marginTop: 2 }}>
-                  Linked to PIP-L6-012
-                </div>
-              </div>
-            </div>
-
-            {/* Activity 3 */}
-            <div className="activity-stream-item">
-              <div style={{ color: '#059669', marginTop: 2 }}>
-                <CheckCircle2 size={16} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                  <span className="mono-pill" style={{ background: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe', fontSize: '0.65rem' }}>
-                    Civil
-                  </span>
-                  <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>1 day ago</span>
-                  <span className="badge badge-ready" style={{ marginLeft: 'auto', fontSize: '0.65rem', padding: '1px 6px' }}>
-                    Verified
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
-                  Pump foundation excavation completed
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--brand-primary)', fontWeight: 600, marginTop: 2 }}>
-                  Linked to CIV-L6-001
-                </div>
-              </div>
-            </div>
-
-            {/* Activity 4 */}
-            <div className="activity-stream-item">
-              <div style={{ color: '#e11d48', marginTop: 2 }}>
-                <AlertTriangle size={16} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                  <span className="mono-pill" style={{ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontSize: '0.65rem' }}>
-                    Piping
-                  </span>
-                  <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>1 day ago</span>
-                  <span className="badge badge-unplanned" style={{ marginLeft: 'auto', fontSize: '0.65rem', padding: '1px 6px' }}>
-                    Unplanned
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
-                  Drain line installed near pump
-                </div>
-                <div style={{ fontSize: '0.7rem', color: '#e11d48', fontWeight: 600, marginTop: 2 }}>
-                  Unplanned Scope
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Column 3: Risk & Delay Indicators */}
-        <div className="card" style={{ padding: '1.15rem 1.25rem', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
-            <h3 style={{ fontSize: '0.925rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-              Risk & Delay Indicators
-            </h3>
             <button
               type="button"
-              onClick={() => setActiveTab('copilot')}
-              style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--brand-primary)', cursor: 'pointer' }}
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleInstantIngest('Terminated 415V switchgear feeder cables in substation-03 today.')}
+              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
             >
-              View Analysis →
+              + Electrical Sample
             </button>
           </div>
+        </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', flex: 1 }}>
-            {/* Risk 1 */}
-            <div
-              className="risk-indicator-item"
-              onClick={() => setActiveTab('copilot')}
-              title="Click to simulate schedule risk"
-            >
-              <div style={{ color: '#d97706', marginTop: 1 }}>
-                <AlertTriangle size={17} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Potential Delay Detected
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.25 }}>
-                  Pump Foundation Curing<br />
-                  <span style={{ color: '#d97706' }}>May impact 3 downstream activities</span>
-                </div>
-              </div>
-              <ChevronRight size={14} style={{ color: 'var(--text-muted)', marginTop: 2 }} />
-            </div>
+        {/* Ingestion Input Row */}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <textarea
+              className="form-textarea"
+              rows={2}
+              placeholder="e.g. Completed 85% welding on line 24-CW-017 yesterday with 14 pipe fitters in Unit-01..."
+              value={quickUpdateText}
+              onChange={e => setQuickUpdateText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  handleInstantIngest();
+                }
+              }}
+              style={{
+                width: '100%',
+                resize: 'none',
+                fontSize: '0.85rem',
+                fontFamily: 'inherit',
+                padding: '0.65rem 0.85rem',
+                borderColor: nlpPreview ? 'var(--brand-primary)' : undefined,
+              }}
+            />
 
-            {/* Risk 2 */}
-            <div
-              className="risk-indicator-item"
-              onClick={() => navigateToPlannerReviewWithFilter('review')}
-              title="Click to review pending updates"
-            >
-              <div style={{ color: '#2563eb', marginTop: 1 }}>
-                <FileText size={17} />
+            {/* Live Parsing Preview Pill */}
+            {nlpPreview && (
+              <div
+                style={{
+                  marginTop: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: '0.725rem',
+                  color: 'var(--text-secondary)',
+                  background: 'var(--bg-surface)',
+                  padding: '0.35rem 0.65rem',
+                  borderRadius: 4,
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                <span>Discipline: <strong style={{ color: 'var(--brand-primary)' }}>{nlpPreview.discipline}</strong></span>
+                <span>Tag: <strong style={{ color: 'var(--brand-primary)' }}>{nlpPreview.tag}</strong></span>
+                <span>Target: <strong>{nlpPreview.candidate?.activityId || 'Auto'}</strong></span>
+                <span>Date: <strong style={{ color: '#059669' }}>{nlpPreview.dateResolution.resolvedDate} ({nlpPreview.dateResolution.matchedPhrase})</strong></span>
+                <span>Progress: <strong style={{ color: '#059669' }}>{nlpPreview.progressVal}%</strong></span>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Unverified Field Updates
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.25 }}>
-                  8 reports pending review<br />
-                  <span style={{ color: '#2563eb' }}>Requires planner attention</span>
-                </div>
-              </div>
-              <ChevronRight size={14} style={{ color: 'var(--text-muted)', marginTop: 2 }} />
-            </div>
-
-            {/* Risk 3 */}
-            <div
-              className="risk-indicator-item"
-              onClick={() => setActiveTab('copilot')}
-              title="Click to inspect critical path slippage"
-            >
-              <div style={{ color: '#e11d48', marginTop: 1 }}>
-                <TrendingDown size={17} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Critical Path Impact
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.25 }}>
-                  <strong style={{ color: '#e11d48' }}>+3 days</strong> potential impact<br />
-                  Based on current field inputs
-                </div>
-              </div>
-              <ChevronRight size={14} style={{ color: 'var(--text-muted)', marginTop: 2 }} />
-            </div>
-
-            {/* Risk 4 */}
-            <div
-              className="risk-indicator-item"
-              onClick={() => setActiveTab('schedule-activities')}
-              title="Click to view crew allocation"
-            >
-              <div style={{ color: '#7c3aed', marginTop: 1 }}>
-                <HardHat size={17} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Resource Constraint
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.25 }}>
-                  Piping crew over-allocated<br />
-                  Filter Bay area
-                </div>
-              </div>
-              <ChevronRight size={14} style={{ color: 'var(--text-muted)', marginTop: 2 }} />
-            </div>
+            )}
           </div>
-        </div>
-      </div>
-
-
-      {/* Main Section Tab Navigation: Today's Tasks, Classification Hub, Schedule Health */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderBottom: '1px solid var(--border-default)',
-          paddingBottom: '0.25rem',
-          flexWrap: 'wrap',
-          gap: '0.75rem',
-        }}
-      >
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button
-            type="button"
-            onClick={() => setActiveDashboardTab('today-tasks')}
-            style={{
-              padding: '0.55rem 1.15rem',
-              fontSize: '0.875rem',
-              fontWeight: activeDashboardTab === 'today-tasks' ? 700 : 500,
-              color: activeDashboardTab === 'today-tasks' ? 'var(--brand-primary)' : 'var(--text-secondary)',
-              background: activeDashboardTab === 'today-tasks' ? 'var(--brand-surface)' : 'transparent',
-              border: `1px solid ${activeDashboardTab === 'today-tasks' ? 'var(--brand-primary)' : 'transparent'}`,
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <Calendar size={16} />
-            <span>Today&apos;s Assigned Tasks & Execution Status</span>
-            <span
-              style={{
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                padding: '1px 6px',
-                borderRadius: '10px',
-                background: activeDashboardTab === 'today-tasks' ? 'var(--brand-primary)' : 'var(--bg-surface-secondary)',
-                color: activeDashboardTab === 'today-tasks' ? '#ffffff' : 'var(--text-muted)',
-              }}
-            >
-              {todayTasks.length}
-            </span>
-          </button>
 
           <button
             type="button"
-            onClick={() => setActiveDashboardTab('classification-hub')}
+            className="btn btn-primary"
+            onClick={() => handleInstantIngest()}
+            disabled={isIngesting || !quickUpdateText.trim()}
             style={{
-              padding: '0.55rem 1.15rem',
-              fontSize: '0.875rem',
-              fontWeight: activeDashboardTab === 'classification-hub' ? 700 : 500,
-              color: activeDashboardTab === 'classification-hub' ? 'var(--brand-primary)' : 'var(--text-secondary)',
-              background: activeDashboardTab === 'classification-hub' ? 'var(--brand-surface)' : 'transparent',
-              border: `1px solid ${activeDashboardTab === 'classification-hub' ? 'var(--brand-primary)' : 'transparent'}`,
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
+              padding: '0.75rem 1.4rem',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              height: 60,
               display: 'flex',
               alignItems: 'center',
-              gap: '0.5rem',
-              transition: 'all 0.15s ease',
+              gap: 6,
+              flexShrink: 0,
             }}
           >
-            <Sparkles size={16} />
-            <span>Daily Reports Filed & Classification Hub</span>
-            <span
-              style={{
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                padding: '1px 6px',
-                borderRadius: '10px',
-                background: activeDashboardTab === 'classification-hub' ? 'var(--brand-primary)' : 'var(--bg-surface-secondary)',
-                color: activeDashboardTab === 'classification-hub' ? '#ffffff' : 'var(--text-muted)',
-              }}
-            >
-              {totalSiteUpdates}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveDashboardTab('schedule-variance')}
-            style={{
-              padding: '0.55rem 1.15rem',
-              fontSize: '0.875rem',
-              fontWeight: activeDashboardTab === 'schedule-variance' ? 700 : 500,
-              color: activeDashboardTab === 'schedule-variance' ? 'var(--brand-primary)' : 'var(--text-secondary)',
-              background: activeDashboardTab === 'schedule-variance' ? 'var(--brand-surface)' : 'transparent',
-              border: `1px solid ${activeDashboardTab === 'schedule-variance' ? 'var(--brand-primary)' : 'transparent'}`,
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <BarChart3 size={16} />
-            <span>Discipline Health & Schedule Variance</span>
+            {isIngesting ? (
+              <span>Ingesting...</span>
+            ) : (
+              <>
+                <Send size={15} />
+                <span>Ingest & Sync</span>
+              </>
+            )}
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-            Active Shift: Sep 8, 2026 (08:00 - 18:00 IST)
-          </span>
-        </div>
-      </div>
-
-      {/* =========================================================================
-          TAB 1: TODAY'S ASSIGNED TASKS & EXECUTION STATUS
-          ========================================================================= */}
-      {activeDashboardTab === 'today-tasks' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {/* Controls & Filter Bar */}
+        {/* Instant Ingestion Success Result Banner (stays right in place!) */}
+        {ingestedResult && (
           <div
-            className="card"
             style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              borderRadius: 'var(--radius-sm)',
               padding: '0.85rem 1.15rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              gap: '1rem',
               flexWrap: 'wrap',
+              gap: '0.75rem',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.1)',
             }}
           >
-            {/* Search Input */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: '1 1 240px', maxWidth: '380px' }}>
-              <Search size={15} style={{ color: 'var(--text-muted)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 280, flex: 1 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 6, background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Check size={18} strokeWidth={3} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                  <span className="mono-pill" style={{ color: 'var(--brand-primary)', fontWeight: 800, fontSize: '0.675rem' }}>
+                    {ingestedResult.id}
+                  </span>
+                  <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 700 }}>
+                    Aligned to {ingestedResult.candidateActivityId} ({ingestedResult.progressVal}%)
+                  </span>
+                  <span className="badge badge-ready" style={{ fontSize: '0.625rem' }}>
+                    {ingestedResult.confidence}% Confidence
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }}>
+                  "{ingestedResult.text}"
+                </div>
+                <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                  Resolved IST Date: <strong>{ingestedResult.resolvedDate}</strong> • Discipline: {ingestedResult.discipline} • Area: {ingestedResult.area}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setActiveTab('site-updates')}
+                style={{ fontSize: '0.7rem' }}
+              >
+                <span>View in Site Reports</span>
+                <ChevronRight size={12} />
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setIngestedResult(null)}
+                style={{ fontSize: '0.7rem', padding: '0.3rem 0.5rem' }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Schedule Baseline & Completed Tasks Overview (KPI Strip) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.85rem' }}>
+        <div className="card" style={{ padding: '0.9rem 1.15rem', borderLeft: '4px solid var(--brand-primary)' }}>
+          <div style={{ fontSize: '0.675rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+            Schedule Tasks
+          </div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+            {scheduleMetrics.total}
+          </div>
+          <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+            Primavera Master WBS
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '0.9rem 1.15rem', borderLeft: '4px solid #059669' }}>
+          <div style={{ fontSize: '0.675rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+            Tasks Completed
+          </div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#059669', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+            {scheduleMetrics.completed} <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>({scheduleMetrics.completionPct}%)</span>
+          </div>
+          <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+            Verified milestones
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '0.9rem 1.15rem', borderLeft: '4px solid #3b82f6' }}>
+          <div style={{ fontSize: '0.675rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+            In-Progress Tasks
+          </div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#3b82f6', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+            {scheduleMetrics.inProgress}
+          </div>
+          <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+            Active physical workfronts
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '0.9rem 1.15rem', borderLeft: '4px solid #e11d48' }}>
+          <div style={{ fontSize: '0.675rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+            Delayed Activities
+          </div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#e11d48', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+            {scheduleMetrics.delayed}
+          </div>
+          <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+            Critical path variances
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '0.9rem 1.15rem', borderLeft: '4px solid #8b5cf6' }}>
+          <div style={{ fontSize: '0.675rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+            Overall Baseline Progress
+          </div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#8b5cf6', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+            {scheduleMetrics.overallProgress}%
+          </div>
+          <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+            Earned value weighted
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Redirection Hub to Important Tools (6 Clean & Beautiful Cards) */}
+      <div>
+        <div style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8, letterSpacing: '0.04em' }}>
+          Engineering Suite & Navigation Hub
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.85rem' }}>
+          {/* Card 1: 4D Gantt */}
+          <div
+            className="card card-interactive"
+            onClick={() => setActiveTab('schedule-activities')}
+            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Activity size={17} />
+              </div>
+              <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>4D Gantt & Digital Twin</div>
+              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>Physical plant execution, workfront velocity & EVM S-Curve</div>
+            </div>
+          </div>
+
+          {/* Card 2: Field Timelines */}
+          <div
+            className="card card-interactive"
+            onClick={() => setActiveTab('site-updates')}
+            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(16, 185, 129, 0.15)', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FileText size={17} />
+              </div>
+              <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Field Timelines & Reports</div>
+              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>Chronological updates, photo proof & explainable AI inspector</div>
+            </div>
+          </div>
+
+          {/* Card 3: Delay Calculator */}
+          <div
+            className="card card-interactive"
+            onClick={() => setActiveTab('copilot')}
+            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(225, 29, 72, 0.15)', color: '#e11d48', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Sliders size={17} />
+              </div>
+              <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Delay & Impact Calculator</div>
+              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>Simulate weather delays, rig downtime & float consumption</div>
+            </div>
+          </div>
+
+          {/* Card 4: Review Queue */}
+          <div
+            className="card card-interactive"
+            onClick={() => setActiveTab('planner-review')}
+            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(245, 158, 11, 0.15)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <CheckSquare size={17} />
+              </div>
+              <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Matching & Approvals Queue</div>
+              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>Human-in-the-loop verification desk for ambiguous updates</div>
+            </div>
+          </div>
+
+          {/* Card 5: Guide Tour */}
+          <div
+            className="card card-interactive"
+            onClick={startGuidedDemo}
+            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(124, 58, 237, 0.15)', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Compass size={17} />
+              </div>
+              <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Interactive Guide Tour</div>
+              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>11-stage deep-dive explaining fuzzy matching & spatial AI</div>
+            </div>
+          </div>
+
+          {/* Card 6: Back to Role Home */}
+          <div
+            className="card card-interactive"
+            onClick={() => setActiveTab('home')}
+            style={{ padding: '1rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(14, 165, 233, 0.15)', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <HardHat size={17} />
+              </div>
+              <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Role Home Portal</div>
+              <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: 2 }}>Access your tailored {currentRole === 'supervisor' ? 'Supervisor' : 'Lead Planner'} workstation</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Today's Assigned Tasks & Progress Checklist (With Functional Custom Tick-Boxes) */}
+      <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <CheckSquare size={17} style={{ color: 'var(--brand-primary)' }} />
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Master Schedule Tasks & Today's Progress Checklist
+              </h3>
+            </div>
+            <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Click the check box on any task to instantly mark it completed or adjust progress. Synced to Primavera WBS baseline.
+            </p>
+          </div>
+
+          {/* Filters & Search */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={13} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
-                placeholder="Filter today's tasks, crew, workfront..."
+                placeholder="Search tasks..."
                 value={taskSearchQuery}
                 onChange={e => setTaskSearchQuery(e.target.value)}
                 style={{
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '0.35rem 0.65rem',
-                  fontSize: '0.8rem',
-                  background: 'var(--bg-subtle)',
+                  padding: '0.3rem 0.6rem 0.3rem 1.6rem',
+                  fontSize: '0.75rem',
+                  borderRadius: 4,
+                  border: '1px solid var(--border-default)',
+                  background: 'var(--bg-surface)',
                   color: 'var(--text-primary)',
-                  width: '100%',
                 }}
               />
             </div>
 
-            {/* Discipline Filter Chips */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginRight: 4 }}>
-                Discipline:
-              </span>
-              {['ALL', 'Civil', 'Piping', 'Electrical', 'Instrumentation', 'HSE'].map(d => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setSelectedDisciplineFilter(d)}
-                  style={{
-                    padding: '3px 8px',
-                    fontSize: '0.725rem',
-                    fontWeight: selectedDisciplineFilter === d ? 700 : 500,
-                    borderRadius: 'var(--radius-sm)',
-                    border: `1px solid ${selectedDisciplineFilter === d ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
-                    background: selectedDisciplineFilter === d ? 'var(--brand-primary)' : 'var(--bg-surface)',
-                    color: selectedDisciplineFilter === d ? '#ffffff' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    transition: 'all 0.1s ease',
-                  }}
-                >
-                  {d}
-                </button>
-              ))}
-            </div>
-
-            {/* Status Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginRight: 4 }}>
-                Status:
-              </span>
-              {['ALL', 'In Progress', 'Completed', 'Blocked'].map(s => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSelectedStatusFilter(s)}
-                  style={{
-                    padding: '3px 8px',
-                    fontSize: '0.725rem',
-                    fontWeight: selectedStatusFilter === s ? 700 : 500,
-                    borderRadius: 'var(--radius-sm)',
-                    border: `1px solid ${selectedStatusFilter === s ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
-                    background: selectedStatusFilter === s ? 'var(--brand-primary)' : 'var(--bg-surface)',
-                    color: selectedStatusFilter === s ? '#ffffff' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    transition: 'all 0.1s ease',
-                  }}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Today's Tasks Structured Grid / Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '1rem' }}>
-            {filteredTodayTasks.length === 0 ? (
-              <div
-                className="card"
-                style={{
-                  gridColumn: '1 / -1',
-                  padding: '3rem 1rem',
-                  textAlign: 'center',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                No assigned tasks match the selected filters.
-              </div>
-            ) : (
-              filteredTodayTasks.map(item => {
-                const act = item.activity;
-                const isDone = act.status === 'Completed';
-                const isBlocked = item.hasBlocker || act.status === 'Delayed';
-
-                return (
-                  <div
-                    key={act.activityId}
-                    className="card"
-                    style={{
-                      padding: '1.15rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.75rem',
-                      borderLeft: `4px solid ${
-                        isDone
-                          ? 'var(--status-ready-fg)'
-                          : isBlocked
-                          ? 'var(--status-unplanned-fg)'
-                          : 'var(--brand-primary)'
-                      }`,
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    {/* Header: ID, Discipline, Status */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                          <span
-                            style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontWeight: 800,
-                              fontSize: '0.85rem',
-                              color: 'var(--brand-primary)',
-                            }}
-                          >
-                            {act.activityId}
-                          </span>
-                          <span className="mono-pill" style={{ fontSize: '0.675rem' }}>
-                            {act.discipline}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '0.7rem',
-                              color: 'var(--text-muted)',
-                              fontWeight: 500,
-                            }}
-                          >
-                            {act.area}
-                          </span>
-                        </div>
-                        <h4
-                          style={{
-                            fontSize: '0.925rem',
-                            fontWeight: 700,
-                            color: 'var(--text-primary)',
-                            marginTop: '0.35rem',
-                            lineHeight: 1.3,
-                          }}
-                        >
-                          {act.activityName}
-                        </h4>
-                      </div>
-
-                      {/* Status Badge */}
-                      <span
-                        className={`badge ${
-                          isDone
-                            ? 'badge-ready'
-                            : isBlocked
-                            ? 'badge-unplanned'
-                            : 'badge-review'
-                        }`}
-                        style={{ fontSize: '0.7rem', padding: '2px 8px', flexShrink: 0 }}
-                      >
-                        {isBlocked ? 'Blocked / Risk' : isDone ? 'Completed' : 'In Progress'}
-                      </span>
-                    </div>
-
-                    {/* Assigned Crew & Planned Window */}
-                    <div
-                      style={{
-                        padding: '0.5rem 0.65rem',
-                        background: 'var(--bg-subtle)',
-                        borderRadius: 'var(--radius-xs)',
-                        border: '1px solid var(--border-subtle)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.3rem',
-                        fontSize: '0.75rem',
-                        color: 'var(--text-secondary)',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <HardHat size={12} /> Assigned Crew:
-                        </span>
-                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.crew}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <Calendar size={12} /> Shift Schedule:
-                        </span>
-                        <span>{act.plannedStart} &rarr; {act.plannedFinish}</span>
-                      </div>
-                      {item.confirmedTag && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: 'var(--text-muted)' }}>Equipment Tag:</span>
-                          <span className="mono-pill" style={{ fontSize: '0.65rem', fontWeight: 700 }}>
-                            {item.confirmedTag}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: 4 }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Physical Execution:</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: isDone ? 'var(--status-ready-fg)' : 'var(--brand-primary)' }}>
-                          {item.actualProgress}% / 100%
-                        </span>
-                      </div>
-                      <div className="progress-bar-container">
-                        <div
-                          className={`progress-bar-fill ${isDone ? 'green' : isBlocked ? 'red' : 'blue'}`}
-                          style={{ width: `${item.actualProgress}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Blocker Alert Banner if any */}
-                    {item.blockerText && (
-                      <div
-                        style={{
-                          padding: '0.45rem 0.65rem',
-                          background: 'var(--status-unplanned-bg)',
-                          border: '1px solid var(--status-unplanned-border)',
-                          borderRadius: 'var(--radius-xs)',
-                          fontSize: '0.725rem',
-                          color: 'var(--status-unplanned-fg)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.4rem',
-                        }}
-                      >
-                        <AlertCircle size={14} style={{ flexShrink: 0 }} />
-                        <span style={{ fontWeight: 600 }}>{item.blockerText}</span>
-                      </div>
-                    )}
-
-                    {/* Card Footer Actions */}
-                    <div
-                      style={{
-                        marginTop: 'auto',
-                        paddingTop: '0.5rem',
-                        borderTop: '1px solid var(--border-subtle)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '0.5rem',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                        {item.hasPhotoProof ? (
-                          <span
-                            style={{
-                              fontSize: '0.675rem',
-                              color: 'var(--status-ready-fg)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 3,
-                              fontWeight: 600,
-                            }}
-                          >
-                            <Camera size={12} /> Proof Attached
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
-                            No image evidence
-                          </span>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '0.35rem' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => {
-                            setSelectedScheduleActivityId(act.activityId);
-                            setActiveTab('schedule-activities');
-                          }}
-                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }}
-                          title="Inspect 4D Schedule Milestone"
-                        >
-                          <span>4D Gantt</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => {
-                            if (item.linkedUpdates[0]) {
-                              setSelectedInspectorUpdateId(item.linkedUpdates[0].id);
-                            }
-                            setActiveTab('planner-review');
-                          }}
-                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }}
-                          title="Review Match Evidence"
-                        >
-                          <Sparkles size={12} />
-                          <span>Match</span>
-                        </button>
-
-                        {isBlocked && (
-                          <button
-                            type="button"
-                            className="btn btn-warning btn-sm"
-                            onClick={() => setActiveTab('copilot')}
-                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }}
-                            title="Simulate delay impact"
-                          >
-                            <TrendingDown size={12} />
-                            <span>Simulate</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          TAB 2: DAILY REPORTS FILED & CLASSIFICATION HUB
-          ========================================================================= */}
-      {activeDashboardTab === 'classification-hub' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* Classification Formula & Logic Banner */}
-          <div
-            className="card"
-            style={{
-              padding: '1.15rem',
-              background: 'var(--bg-surface-secondary)',
-              border: '1px solid var(--border-subtle)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.75rem',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Sparkles size={18} style={{ color: 'var(--brand-primary)' }} />
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  Multi-Factor Deterministic Classification Standard
-                </h3>
-              </div>
-              <span className="mono-pill">ISO / P6 Compliant</span>
-            </div>
-
-            <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-              DATUM matches unstructured text, audio recordings, and handwritten job tickets against master WBS deliverables using transparent mathematical scoring rather than generative guessing.
-            </p>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.65rem' }}>
-              <div style={{ padding: '0.65rem', background: 'var(--bg-surface)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>FACTOR 1</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--brand-primary)' }}>Keywords (50%)</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 2 }}>Trade action verbs & nouns</div>
-              </div>
-              <div style={{ padding: '0.65rem', background: 'var(--bg-surface)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>FACTOR 2</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--brand-primary)' }}>Discipline (20%)</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 2 }}>Civil, Piping, Electrical, HSE</div>
-              </div>
-              <div style={{ padding: '0.65rem', background: 'var(--bg-surface)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>FACTOR 3</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--brand-primary)' }}>Spatial Area (15%)</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 2 }}>Workfront & battery limit</div>
-              </div>
-              <div style={{ padding: '0.65rem', background: 'var(--bg-surface)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>FACTOR 4</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--brand-primary)' }}>Equipment Tag (15%)</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 2 }}>Exact alphanumeric tag match</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Classification Breakdown Table of All Filed Reports */}
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '0.85rem 1.15rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  Filed Daily Reports & Evidence Stream
-                </h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                  Showing all extracted field entries, AI confidence score, and classified WBS target
-                </p>
-              </div>
+            <div className="filter-pill-group">
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => navigateToSiteUpdatesWithFilter({})}
+                className={`filter-pill ${selectedDisciplineFilter === 'ALL' ? 'active' : ''}`}
+                onClick={() => setSelectedDisciplineFilter('ALL')}
+                style={{ fontSize: '0.675rem', padding: '0.25rem 0.55rem' }}
               >
-                <span>Open Full Feed</span>
-                <ArrowRight size={13} />
+                All
               </button>
-            </div>
-
-            <div className="table-responsive">
-              <table className="industrial-table">
-                <thead>
-                  <tr>
-                    <th>Report ID</th>
-                    <th>Source & Date</th>
-                    <th>Extracted Summary</th>
-                    <th>Discipline</th>
-                    <th>Target WBS Match</th>
-                    <th>Confidence</th>
-                    <th>Classification</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {siteUpdates.map(u => {
-                    const match = matchResults[u.id];
-                    const dec = plannerDecisions[u.id];
-                    const category: string = (dec?.status as string) || (match?.category as string) || 'review';
-                    const targetActivity = enrichedSchedule.find(s => s.activityId === (dec?.linkedActivityId || match?.candidateActivityId));
-
-                    return (
-                      <tr
-                        key={u.id}
-                        onClick={() => setSelectedInspectorUpdateId(u.id)}
-                        style={{ cursor: 'pointer' }}
-                        title="Click to inspect full details in drawer"
-                      >
-                        <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>
-                          {u.id}
-                        </td>
-                        <td>
-                          <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{u.sourceFile}</div>
-                          <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>{u.reportDate}</div>
-                        </td>
-                        <td style={{ maxWidth: '280px' }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                            {u.extractedDescription || u.rawText.slice(0, 45) + '...'}
-                          </div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {u.rawText}
-                          </div>
-                        </td>
-                        <td>
-                          <span className="mono-pill">{u.discipline || 'General'}</span>
-                        </td>
-                        <td>
-                          {targetActivity ? (
-                            <div>
-                              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--brand-primary)' }}>
-                                {targetActivity.activityId}
-                              </div>
-                              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                                {targetActivity.activityName.slice(0, 24)}...
-                              </div>
-                            </div>
-                          ) : (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--status-unplanned-fg)', fontWeight: 600 }}>
-                              Unplanned Scope
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          {match?.confidenceScore ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.8rem' }}>
-                                {match.confidenceScore}%
-                              </span>
-                              <div
-                                style={{
-                                  width: 36,
-                                  height: 4,
-                                  background: 'var(--border-subtle)',
-                                  borderRadius: 2,
-                                  overflow: 'hidden',
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    height: '100%',
-                                    width: `${match.confidenceScore}%`,
-                                    background:
-                                      match.confidenceScore >= 80
-                                        ? 'var(--status-ready-fg)'
-                                        : match.confidenceScore >= 55
-                                        ? 'var(--status-review-fg)'
-                                        : 'var(--status-unplanned-fg)',
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>N/A</span>
-                          )}
-                        </td>
-                        <td>
-                          <span
-                            className={`badge ${
-                              category === 'ready' || category === 'approved'
-                                ? 'badge-ready'
-                                : category === 'unplanned'
-                                ? 'badge-unplanned'
-                                : 'badge-review'
-                            }`}
-                            style={{ fontSize: '0.675rem', padding: '1px 6px' }}
-                          >
-                            {category === 'approved' ? 'Approved' : category === 'ready' ? 'Auto-Aligned' : category === 'unplanned' ? 'Unplanned' : 'Needs Review'}
-                          </span>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={e => {
-                              e.stopPropagation();
-                              setSelectedInspectorUpdateId(u.id);
-                              setActiveTab('planner-review');
-                            }}
-                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
-                          >
-                            Review
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          TAB 3: DISCIPLINE HEALTH & SCHEDULE VARIANCE
-          ========================================================================= */}
-      {activeDashboardTab === 'schedule-variance' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* Discipline Progress Bars */}
-          <div className="card" style={{ padding: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <div>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  Discipline Progress & Schedule Health
-                </h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                  Physical progress extracted from site evidence across construction packages
-                </p>
-              </div>
-              <span className="mono-pill">L5 / L6 Baseline</span>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.85rem' }}>
-              {disciplineStats.map(stat => (
-                <div
-                  key={stat.discipline}
-                  onClick={() => navigateToSiteUpdatesWithFilter({ discipline: stat.discipline })}
-                  style={{
-                    padding: '0.75rem 0.85rem',
-                    background: 'var(--bg-subtle)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease-out',
-                  }}
-                  title={`Click to filter Daily Field Reports for ${stat.discipline}`}
-                  className="clickable"
+              {disciplines.map(disc => (
+                <button
+                  key={disc}
+                  type="button"
+                  className={`filter-pill ${selectedDisciplineFilter === disc ? 'active' : ''}`}
+                  onClick={() => setSelectedDisciplineFilter(disc)}
+                  style={{ fontSize: '0.675rem', padding: '0.25rem 0.55rem' }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{stat.discipline}</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.825rem', color: 'var(--brand-primary)' }}>
-                      {stat.pct}%
-                    </span>
-                  </div>
-
-                  <div className="progress-bar-container" style={{ marginBottom: '0.45rem' }}>
-                    <div
-                      className="progress-bar-fill green"
-                      style={{ width: `${stat.pct}%` }}
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                    <span>{stat.completed} of {stat.total} Done</span>
-                    {stat.delayed > 0 && (
-                      <span style={{ color: 'var(--status-unplanned-fg)', fontWeight: 600 }}>{stat.delayed} Delayed</span>
-                    )}
-                  </div>
-                </div>
+                  {disc}
+                </button>
               ))}
             </div>
           </div>
-
-          {/* 2-Column Section: Delayed Activities Watchlist & Live Audit Trail */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.25rem' }}>
-            {/* Delayed Activities Watchlist */}
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '0.85rem 1.15rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <TrendingDown size={16} style={{ color: 'var(--status-unplanned-fg)' }} />
-                  Schedule Variance Watchlist (Behind Planned Dates)
-                </h3>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setActiveTab('schedule-activities')}
-                  type="button"
-                >
-                  <span>View All</span>
-                </button>
-              </div>
-
-              <div className="table-responsive">
-                <table className="industrial-table">
-                  <thead>
-                    <tr>
-                      <th>Activity ID</th>
-                      <th>Activity Name</th>
-                      <th>Discipline</th>
-                      <th>Planned Finish</th>
-                      <th>Variance</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {delayedActivities.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
-                          No critical schedule variances detected.
-                        </td>
-                      </tr>
-                    ) : (
-                      delayedActivities.slice(0, 6).map(act => (
-                        <tr
-                          key={act.activityId}
-                          onClick={() => setSelectedScheduleActivityId(act.activityId)}
-                          title="Click to inspect activity details & linked site updates"
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-primary)' }}>
-                            {act.activityId}
-                          </td>
-                          <td style={{ fontWeight: 600 }}>{act.activityName}</td>
-                          <td>
-                            <span className="mono-pill">{act.discipline}</span>
-                          </td>
-                          <td style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
-                            {act.plannedFinish}
-                          </td>
-                          <td>
-                            <span className={`variance-badge ${(act.varianceDays || 0) > 0 ? 'delayed' : (act.varianceDays || 0) < 0 ? 'on-track' : 'neutral'}`}>
-                              {(act.varianceDays || 0) > 0 ? `+${act.varianceDays}d` : `${act.varianceDays || 0}d`}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Live Audit Trail */}
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '0.85rem 1.15rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <ShieldCheck size={16} style={{ color: 'var(--brand-primary)' }} />
-                  Recent Execution & Audit Trail
-                </h3>
-                <span className="mono-pill">{auditLogs.length} events</span>
-              </div>
-
-              <div style={{ maxHeight: 290, overflowY: 'auto', padding: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                {auditLogs.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.825rem' }}>
-                    No audit events recorded yet.
-                  </div>
-                ) : (
-                  auditLogs.slice(0, 10).map(log => (
-                    <div
-                      key={log.id}
-                      onClick={() => setSelectedInspectorUpdateId(log.updateId)}
-                      style={{
-                        padding: '0.55rem 0.75rem',
-                        background: 'var(--bg-surface-secondary)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-xs)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 2,
-                        transition: 'all 0.15s ease-out',
-                      }}
-                      title="Click to view update details in inspector drawer"
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {log.action}
-                        </span>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
-                          {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                        <span className="mono-pill" style={{ fontSize: '0.65rem' }}>{log.updateId}</span>
-                        <span>&rarr;</span>
-                        <span style={{ fontWeight: 600, color: log.finalActivityId ? 'var(--brand-primary)' : 'var(--status-unplanned-fg)' }}>
-                          {log.finalActivityId || 'UNPLANNED'}
-                        </span>
-                        {log.originalConfidence > 0 && (
-                          <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                            {log.originalConfidence}% match
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
         </div>
-      )}
+
+        {/* Task List Table with Custom-Styled Responsive Tick Boxes */}
+        <div className="table-container" style={{ maxHeight: 380, overflowY: 'auto' }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th style={{ width: 50, textAlign: 'center' }}>Done</th>
+                <th>Activity ID & Name</th>
+                <th>WBS / Discipline</th>
+                <th>Location Area</th>
+                <th>Planned Finish</th>
+                <th style={{ width: 140 }}>Progress</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTasks.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                    No tasks match your search filter.
+                  </td>
+                </tr>
+              ) : (
+                filteredTasks.map(task => {
+                  const isComplete = task.status === 'Completed' || (task.progressPercent || 0) >= 100;
+                  const progressVal = task.progressPercent || 0;
+                  const isDelayed = (task.varianceDays || 0) > 0 || task.status === 'Delayed';
+
+                  return (
+                    <tr
+                      key={task.activityId}
+                      style={{
+                        background: isComplete ? 'rgba(16, 185, 129, 0.03)' : undefined,
+                        transition: 'background 0.15s ease',
+                      }}
+                    >
+                      {/* Functional, Gorgeous Custom Tick Box */}
+                      <td style={{ textAlign: 'center', padding: '0.6rem 0.5rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTask(task)}
+                          title={isComplete ? `Reset ${task.activityId}` : `Mark ${task.activityId} 100% complete`}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: 2,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 22,
+                              height: 22,
+                              borderRadius: 6,
+                              border: `2px solid ${isComplete ? '#059669' : 'var(--border-default)'}`,
+                              background: isComplete ? '#059669' : 'var(--bg-surface)',
+                              color: '#ffffff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: isComplete ? '0 2px 6px rgba(5, 150, 105, 0.35)' : 'none',
+                              transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                            }}
+                          >
+                            {isComplete && <Check size={14} strokeWidth={3} />}
+                          </div>
+                        </button>
+                      </td>
+
+                      {/* Task ID & Name */}
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)' }}>
+                            {task.activityId}
+                          </span>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {task.activityName}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* WBS / Discipline */}
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
+                            {task.discipline}
+                          </span>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                            WBS {task.wbs}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Area */}
+                      <td>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
+                          {task.area || 'Field'}
+                        </span>
+                      </td>
+
+                      {/* Planned Finish */}
+                      <td>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                          {task.plannedFinish}
+                        </span>
+                      </td>
+
+                      {/* Progress Bar & Number */}
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ flex: 1, height: 6, background: 'var(--border-subtle)', borderRadius: 3, overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                width: `${progressVal}%`,
+                                height: '100%',
+                                background: isComplete ? '#059669' : isDelayed ? '#e11d48' : 'var(--brand-primary)',
+                                borderRadius: 3,
+                                transition: 'width 0.3s ease',
+                              }}
+                            />
+                          </div>
+                          <span style={{ fontSize: '0.725rem', fontWeight: 800, color: 'var(--text-primary)', minWidth: 32 }}>
+                            {progressVal}%
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Status Badge */}
+                      <td>
+                        <span
+                          className={`badge ${
+                            isComplete ? 'badge-ready' : isDelayed ? 'badge-unplanned' : 'badge-review'
+                          }`}
+                          style={{ fontSize: '0.65rem', padding: '2px 7px' }}
+                        >
+                          {isComplete ? 'Completed' : isDelayed ? 'Delayed' : 'In Progress'}
+                        </span>
+                      </td>
+
+                      {/* Quick Action */}
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setSelectedScheduleActivityId(task.activityId);
+                            setActiveTab('schedule-activities');
+                          }}
+                          style={{ fontSize: '0.675rem', padding: '0.25rem 0.55rem' }}
+                        >
+                          <ExternalLink size={11} />
+                          <span>Inspect</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

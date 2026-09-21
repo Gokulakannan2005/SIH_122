@@ -96,10 +96,10 @@ export const SiteUpdatesView: React.FC = () => {
 
     return {
       all: siteUpdates.length,
-      review: 5,
-      ready: 0,
-      approved: 9,
-      unplanned: 3,
+      review,
+      ready,
+      approved,
+      unplanned,
     };
   }, [siteUpdates, plannerDecisions, matchResults]);
 
@@ -909,6 +909,8 @@ export const SiteUpdatesView: React.FC = () => {
               flexDirection: 'column',
               position: 'sticky',
               top: '80px',
+              maxHeight: 'calc(100vh - 100px)',
+              overflowY: 'auto',
             }}
           >
             {/* Inspector Header */}
@@ -1183,14 +1185,35 @@ export const SiteUpdatesView: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
                     <span>Candidate Activity:</span>
-                    <strong style={{ color: 'var(--brand-primary)' }}>{activeMatch?.candidateActivityId || 'PIP-L6-012'}</strong>
+                    <strong style={{ color: 'var(--brand-primary)' }}>{activeMatch?.candidateActivityId || 'UNPLANNED'}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
                     <span>Composite Confidence:</span>
-                    <strong style={{ color: '#059669' }}>{activeMatch?.confidenceScore || 74}%</strong>
+                    <strong style={{ color: (activeMatch?.confidenceScore || 0) >= 80 ? '#059669' : '#d97706' }}>
+                      {activeMatch?.confidenceScore ?? 0}%
+                    </strong>
                   </div>
+                  {activeMatch?.scoreBreakdown && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', background: 'var(--bg-surface-secondary)', padding: '0.5rem', borderRadius: '4px', fontSize: '0.7rem' }}>
+                      <div>Tag: <strong>{activeMatch.scoreBreakdown.tagScore}/30</strong></div>
+                      <div>WBS Code: <strong>{activeMatch.scoreBreakdown.codeScore}/25</strong></div>
+                      <div>Discipline: <strong>{activeMatch.scoreBreakdown.disciplineScore}/20</strong></div>
+                      <div>Semantic: <strong>{activeMatch.scoreBreakdown.descScore}/20</strong></div>
+                      <div>Area: <strong>{activeMatch.scoreBreakdown.areaScore}/15</strong></div>
+                      <div>Fuzzy: <strong>{activeMatch.scoreBreakdown.fuzzyScore}/15</strong></div>
+                    </div>
+                  )}
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    Rationale: High spatial alignment in Pump Bay (15%) + Piping discipline alignment (20%) + Trade keywords (39%).
+                    <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--text-secondary)' }}>Matching Rationale:</div>
+                    {activeMatch?.matchReasons && activeMatch.matchReasons.length > 0 ? (
+                      <ul style={{ margin: 0, paddingLeft: '1.1rem', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        {activeMatch.matchReasons.map((reason, idx) => (
+                          <li key={idx}>{reason}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div>{activeMatch?.candidateActivityId ? 'Derived from NLP semantic tag & spatial match.' : 'No deterministic schedule activity match found.'}</div>
+                    )}
                   </div>
                 </div>
               )}

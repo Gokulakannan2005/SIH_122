@@ -48,6 +48,7 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 export const SupervisorEntryView: React.FC = () => {
   const {
     handleAddNewFieldEntry,
+    updateTaskProgress,
     handleCustomUpload,
     siteUpdates,
     schedule,
@@ -70,6 +71,8 @@ export const SupervisorEntryView: React.FC = () => {
   const [taskStatusTab, setTaskStatusTab] = useState<'today' | 'upcoming' | 'completed'>('today');
   const [taskSortBy, setTaskSortBy] = useState<'priority' | 'progress' | 'name' | 'area'>('priority');
   const [showTaskSortMenu, setShowTaskSortMenu] = useState<boolean>(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>(['PIP-L6-012']);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>('PIP-L6-012');
   const [submissionFeedback, setSubmissionFeedback] = useState<{
     status: 'approved' | 'review';
     title: string;
@@ -156,8 +159,10 @@ export const SupervisorEntryView: React.FC = () => {
   // 4 Focused Workflow Tabs
   const [activeSubTab, setActiveSubTab] = useState<'direct-report' | 'voice-input' | 'photo-ocr' | 'batch-upload'>('direct-report');
 
-  // Pre-populate direct report from assigned task
+  // Pre-populate direct report from assigned task and set selection
   const handleSelectTaskForProgress = (task: ScheduleActivity) => {
+    setActiveTaskId(task.activityId);
+    setSelectedTaskIds(prev => (prev.includes(task.activityId) ? prev : [...prev, task.activityId]));
     setDiscipline(task.discipline);
     setArea(task.area);
     const tag = task.aliases && task.aliases.length > 0 ? task.aliases[0] : '';
@@ -180,6 +185,37 @@ export const SupervisorEntryView: React.FC = () => {
     if (formElem) {
       formElem.scrollIntoView({ behavior: 'smooth' });
     }
+  };
+
+  const handleToggleTaskSelection = (task: ScheduleActivity) => {
+    const isComplete = Boolean(task.status === 'Completed' || (typeof task.progressPercent === 'number' && task.progressPercent >= 100));
+    const newPct = isComplete ? 0 : 100;
+    const newStatus = isComplete ? ('In Progress' as const) : ('Completed' as const);
+    updateTaskProgress(task.activityId, newPct, newStatus, `Checklist toggle from Daily Field Log`);
+
+    if (isComplete) {
+      setSelectedTaskIds(prev => prev.filter(id => id !== task.activityId));
+      if (activeTaskId === task.activityId) setActiveTaskId(null);
+    } else {
+      setSelectedTaskIds(prev => (prev.includes(task.activityId) ? prev : [...prev, task.activityId]));
+      handleSelectTaskForProgress(task);
+    }
+
+    addToast({
+      type: 'success',
+      title: isComplete ? `Task Reset: ${task.activityId}` : `Task Completed: ${task.activityId}`,
+      message: `${task.activityName} progress updated to ${newPct}%. Master schedule synchronized.`,
+    });
+  };
+
+  const handleQuickCompleteTask = (task: ScheduleActivity) => {
+    updateTaskProgress(task.activityId, 100, 'Completed', 'Marked completed from Today\'s Tasks workspace');
+    setSelectedTaskIds(prev => (prev.includes(task.activityId) ? prev : [...prev, task.activityId]));
+    addToast({
+      type: 'success',
+      title: `Milestone Achieved: ${task.activityId}`,
+      message: `Completed "${task.activityName}" (100%). Synchronized with Master WBS Schedule.`,
+    });
   };
 
   const handleSelectTaskForPhotoProof = (task: ScheduleActivity) => {
@@ -601,6 +637,10 @@ export const SupervisorEntryView: React.FC = () => {
       return;
     }
 
+    const progressVal = eventStatus === 'Completed' || quantity === '100%'
+      ? 100
+      : (typeof quantity === 'string' && quantity.includes('%') ? parseInt(quantity, 10) : 60);
+
     await handleAddNewFieldEntry({
       discipline,
       description,
@@ -609,6 +649,7 @@ export const SupervisorEntryView: React.FC = () => {
       eventStatus,
       quantity,
       supervisor: supervisorName,
+      targetActivityId: activeTaskId || undefined,
       imageFile: imagePreview || undefined,
       imageType,
       caption: imageCaption,
@@ -624,6 +665,15 @@ export const SupervisorEntryView: React.FC = () => {
       issueFlag: isIssueReport ? issueFlag : undefined,
       issueSeverity: isIssueReport ? issueSeverity : undefined,
     });
+
+    if (activeTaskId) {
+      updateTaskProgress(
+        activeTaskId,
+        isNaN(progressVal) ? 60 : progressVal,
+        eventStatus === 'Completed' ? 'Completed' : 'In Progress',
+        `Daily log submitted: ${description.slice(0, 50)}...`
+      );
+    }
 
     setSubmitSuccess(`Progress entry submitted & processed with explainable schedule matching!`);
     setSubmissionFeedback({
@@ -1060,7 +1110,45 @@ export const SupervisorEntryView: React.FC = () => {
           <table className="industrial-table">
             <thead>
               <tr>
-                <th style={{ width: 32 }}></th>
+                <th style={{ width: 44, textAlign: 'center', padding: '0.65rem 0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedTaskIds.length === displayedTasks.length) {
+                        setSelectedTaskIds([]);
+                      } else {
+                        setSelectedTaskIds(displayedTasks.map(t => t.activityId));
+                      }
+                    }}
+                    title={selectedTaskIds.length === displayedTasks.length && displayedTasks.length > 0 ? 'Deselect all tasks' : 'Select all tasks'}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 4,
+                        border: `1.5px solid ${selectedTaskIds.length === displayedTasks.length && displayedTasks.length > 0 ? 'var(--brand-primary)' : 'var(--border-default)'}`,
+                        background: selectedTaskIds.length === displayedTasks.length && displayedTasks.length > 0 ? 'var(--brand-primary)' : 'var(--bg-surface)',
+                        color: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {selectedTaskIds.length === displayedTasks.length && displayedTasks.length > 0 && <Check size={12} strokeWidth={3} />}
+                    </div>
+                  </button>
+                </th>
                 <th>Activity</th>
                 <th>Discipline</th>
                 <th>Location</th>
@@ -1072,26 +1160,52 @@ export const SupervisorEntryView: React.FC = () => {
             </thead>
             <tbody>
               {displayedTasks.map(task => {
+                const isSelected = selectedTaskIds.includes(task.activityId) || activeTaskId === task.activityId;
                 const isComplete = Boolean(task.status === 'Completed' || (typeof task.progressPercent === 'number' && task.progressPercent >= 100));
-                const progressVal = isComplete ? 100 : (task.progressPercent ?? (task.activityId === 'CIV-L6-002' ? 25 : 0));
+                const progressVal = typeof task.progressPercent === 'number' ? task.progressPercent : (isComplete ? 100 : (task.activityId === 'CIV-L6-002' ? 25 : 0));
 
                 return (
-                  <tr key={task.activityId}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={isComplete}
-                        onChange={() => {
-                          handleSelectTaskForProgress(task);
-                          addToast({
-                            type: 'info',
-                            title: `Task Selected: ${task.activityId}`,
-                            message: `Loaded "${task.activityName}" into daily field report form.`,
-                          });
+                  <tr
+                    key={task.activityId}
+                    style={{
+                      background: isSelected ? 'var(--brand-surface)' : undefined,
+                      borderLeft: isSelected ? '3px solid var(--brand-primary)' : '3px solid transparent',
+                      transition: 'background 0.15s ease',
+                    }}
+                  >
+                    <td style={{ textAlign: 'center', padding: '0.65rem 0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTaskSelection(task)}
+                        title={isSelected ? `Deselect ${task.activityId}` : `Select ${task.activityId} to log daily progress`}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 4,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                         }}
-                        title={`Select ${task.activityId} to log progress`}
-                        style={{ cursor: 'pointer', accentColor: 'var(--brand-primary)', width: 15, height: 15 }}
-                      />
+                      >
+                        <div
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 6,
+                            border: `2px solid ${isComplete ? '#059669' : isSelected ? 'var(--brand-primary)' : 'var(--border-default)'}`,
+                            background: isComplete ? '#059669' : isSelected ? 'var(--brand-primary)' : 'var(--bg-surface)',
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: isComplete ? '0 2px 6px rgba(5, 150, 105, 0.35)' : isSelected ? '0 2px 6px rgba(37, 99, 235, 0.35)' : 'none',
+                            transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                          }}
+                        >
+                          {(isComplete || isSelected) && <Check size={13} strokeWidth={3} />}
+                        </div>
+                      </button>
                     </td>
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1127,6 +1241,7 @@ export const SupervisorEntryView: React.FC = () => {
                               height: '100%',
                               background: isComplete ? '#059669' : progressVal > 0 ? '#2563eb' : '#94a3b8',
                               borderRadius: 3,
+                              transition: 'width 0.3s ease',
                             }}
                           />
                         </div>
@@ -1147,13 +1262,32 @@ export const SupervisorEntryView: React.FC = () => {
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.35rem' }}>
+                        {!isComplete && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleQuickCompleteTask(task)}
+                            style={{
+                              padding: '0.25rem 0.55rem',
+                              fontSize: '0.7rem',
+                              color: 'var(--status-ready-fg)',
+                              borderColor: 'rgba(5, 150, 105, 0.35)',
+                              fontWeight: 700,
+                              gap: 3,
+                            }}
+                            title="Instantly mark milestone 100% complete in schedule"
+                          >
+                            <Check size={11} strokeWidth={3} />
+                            <span>100% Done</span>
+                          </button>
+                        )}
                         <button
                           type="button"
-                          className="btn btn-secondary btn-sm"
+                          className="btn btn-primary btn-sm"
                           onClick={() => handleSelectTaskForProgress(task)}
-                          style={{ padding: '0.25rem 0.55rem', fontSize: '0.7rem' }}
+                          style={{ padding: '0.25rem 0.55rem', fontSize: '0.7rem', fontWeight: 600 }}
                         >
-                          {isComplete ? 'View' : 'Update'}
+                          {isComplete ? 'View Details' : 'Log Daily Progress'}
                         </button>
                       </div>
                     </td>
@@ -1570,15 +1704,28 @@ export const SupervisorEntryView: React.FC = () => {
                       Flag as Work Blocker / Issue
                     </span>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={isIssueReport}
-                    onChange={e => {
+                  <div
+                    onClick={(e) => {
                       e.stopPropagation();
-                      setIsIssueReport(e.target.checked);
+                      setIsIssueReport(!isIssueReport);
                     }}
-                    style={{ width: 16, height: 16, cursor: 'pointer' }}
-                  />
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 5,
+                      border: `2px solid ${isIssueReport ? '#e11d48' : 'var(--border-default)'}`,
+                      background: isIssueReport ? '#e11d48' : 'var(--bg-surface)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {isIssueReport && <Check size={13} strokeWidth={3} />}
+                  </div>
                 </div>
 
                 {isIssueReport && (

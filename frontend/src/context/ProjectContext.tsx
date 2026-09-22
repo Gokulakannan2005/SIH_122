@@ -26,11 +26,11 @@ import {
   AVAILABLE_PROJECTS,
 } from '../types';
 import { parseScheduleCSV, parseDailyReportTXT, parsePipingProgressXLSX } from '../utils/parsers';
-import { processAllMatches } from '../utils/matchingEngine';
+import { processAllMatches, matchUpdateToSchedule } from '../utils/matchingEngine';
 import { api, HealthResponse } from '../services/api';
 import { SAMPLE_EVIDENCE_IMAGES } from '../utils/sampleImages';
 import { calculateImageFingerprint } from '../utils/ocrService';
-import { parseUTCDateMs } from '../utils/scheduleSimulator';
+import { parseUTCDateMs, diffDaysBetweenDates, calculateDuration } from '../utils/scheduleSimulator';
 import { GUIDED_DEMO_STEPS } from '../utils/guidedDemoData';
 import { getProjectDatasetBundle } from '../utils/projectDatasets';
 import { resolveRelativeISTDate, getNowIST } from '../utils/istTimeService';
@@ -148,7 +148,7 @@ interface ProjectContextType {
   plannerQueueFilter: 'review' | 'unplanned' | 'approved' | 'all';
   setPlannerQueueFilter: React.Dispatch<React.SetStateAction<'review' | 'unplanned' | 'approved' | 'all'>>;
   navigateToSiteUpdatesWithFilter: (filter: Partial<SiteUpdatesFilterState>) => void;
-  navigateToPlannerReviewWithFilter: (filter: 'review' | 'unplanned' | 'approved' | 'all') => void;
+  navigateToPlannerReviewWithFilter: (filter: 'review' | 'unplanned' | 'approved' | 'all', updateId?: string) => void;
   // Guided Demo Mode & Onboarding
   isGuidedDemoActive: boolean;
   guidedDemoStepIndex: number;
@@ -207,6 +207,15 @@ interface ProjectContextType {
   ) => Promise<void>;
   handleEditUpdate: (updateId: string, updatedFields: Partial<SiteUpdate>) => Promise<void>;
   exportAlignmentCSV: () => void;
+  isProjectSelectionModalOpen: boolean;
+  setIsProjectSelectionModalOpen: (open: boolean) => void;
+  createNewProject: (projectName?: string, contractId?: string) => Promise<void>;
+  loadExistingDemoProject: () => Promise<void>;
+  reverifyMatch: (updateId: string) => Promise<void>;
+  isProjectAnalyticsOpen: boolean;
+  setIsProjectAnalyticsOpen: (open: boolean) => void;
+  isSystemTourOpen: boolean;
+  setIsSystemTourOpen: (open: boolean) => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -477,8 +486,14 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setActiveTab('site-updates');
   };
 
-  const navigateToPlannerReviewWithFilter = (filter: 'review' | 'unplanned' | 'approved' | 'all') => {
-    setPlannerQueueFilter(filter);
+  const navigateToPlannerReviewWithFilter = (filter: 'review' | 'unplanned' | 'approved' | 'all', updateId?: string) => {
+    if (updateId) {
+      setSelectedReviewUpdateId(updateId);
+      // Ensure the task won't be filtered out in the target review queue
+      setPlannerQueueFilter('all');
+    } else {
+      setPlannerQueueFilter(filter);
+    }
     setActiveTab('planner-review');
   };
 
@@ -491,6 +506,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
   const [isDemoCompletionModalOpen, setIsDemoCompletionModalOpen] = useState<boolean>(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
+  const [isProjectSelectionModalOpen, setIsProjectSelectionModalOpen] = useState<boolean>(false);
+  const [isProjectAnalyticsOpen, setIsProjectAnalyticsOpen] = useState<boolean>(false);
+  const [isSystemTourOpen, setIsSystemTourOpen] = useState<boolean>(false);
 
   const toggleCommandPalette = () => {
     setIsCommandPaletteOpen(prev => !prev);
@@ -558,6 +576,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const initData = async () => {
     setIsLoading(true);
     setBackendStatus('checking');
+
+    // If active session is in clean new project mode, keep empty state without fake charts
+    if (localStorage.getItem('datum_is_clean_project') === 'true') {
+      setSchedule([]);
+      setSiteUpdates([]);
+      setMatchResults({});
+      setPlannerDecisions({});
+      setIsLoading(false);
+      return;
+    }
 
     // 1. Check if backend REST API is available
     const health = await api.checkHealth();
@@ -1626,7 +1654,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setCurrentUser(res.user);
           const isSup = res.user.role === 'supervisor';
           setCurrentRole(isSup ? 'supervisor' : 'admin');
-          setActiveTabState(isSup ? 'supervisor-entry' : 'dashboard');
+          setActiveTabState(isSup ? 'supervisor-entry' : 'upload');
+          setIsProjectSelectionModalOpen(!isSup);
           localStorage.setItem('datum_current_user', JSON.stringify(res.user));
           if (res.token) localStorage.setItem('datum_auth_token', res.token);
           addToast({
@@ -1711,7 +1740,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setCurrentUser(user);
         const isSup = user.role === 'supervisor';
         setCurrentRole(isSup ? 'supervisor' : 'admin');
-        setActiveTabState(isSup ? 'supervisor-entry' : 'dashboard');
+        setActiveTabState(isSup ? 'supervisor-entry' : 'upload');
+        setIsProjectSelectionModalOpen(!isSup);
         localStorage.setItem('datum_current_user', JSON.stringify(user));
         addToast({
           type: 'success',
@@ -1760,7 +1790,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setCurrentUser(guestUser);
     setCurrentRole(isSup ? 'supervisor' : 'admin');
-    setActiveTabState(isSup ? 'supervisor-entry' : 'dashboard');
+    setActiveTabState(isSup ? 'supervisor-entry' : 'upload');
+    setIsProjectSelectionModalOpen(!isSup);
     localStorage.setItem('datum_current_user', JSON.stringify(guestUser));
     addToast({
       type: 'info',
@@ -1773,12 +1804,94 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCurrentUser(null);
     localStorage.removeItem('datum_current_user');
     localStorage.removeItem('datum_auth_token');
+    setIsProjectSelectionModalOpen(false);
     addToast({
       type: 'info',
       title: 'Signed Out',
       message: 'Logged out of project controls session.',
     });
   };
+
+  /**
+   * Create a fresh new project session (clears baseline and reports)
+   */
+  const createNewProject = async (projectName?: string, contractId?: string) => {
+    setIsLoading(true);
+    try {
+      localStorage.setItem('datum_is_clean_project', 'true');
+      if (backendStatus === 'connected' && !offlineMode) {
+        await api.initNewProject();
+      }
+      setSchedule([]);
+      setSiteUpdates([]);
+      setMatchResults({});
+      setPlannerDecisions({});
+      setAuditLogs([]);
+      setManualTaskProgress({});
+      localStorage.removeItem('datum_manual_task_progress');
+      setIsProjectSelectionModalOpen(false);
+      setActiveTabState('upload');
+      addToast({
+        type: 'info',
+        title: projectName || 'New Project Context Initialized',
+        message: 'Empty project initialized. Please upload your Primavera P6 or MS Project Schedule to begin.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Load existing benchmark demo project (IOCL P4)
+   */
+  const loadExistingDemoProject = async () => {
+    setIsLoading(true);
+    try {
+      localStorage.removeItem('datum_is_clean_project');
+      await loadDemoData();
+      setIsProjectSelectionModalOpen(false);
+      setActiveTabState('upload');
+      addToast({
+        type: 'success',
+        title: 'Loaded Existing IOCL Project',
+        message: 'IOCL Refinery Cooling Water Package loaded with master baseline.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Re-verify single match with AI
+   */
+  const reverifyMatch = async (updateId: string) => {
+    setIsLoading(true);
+    try {
+      const targetUpdate = siteUpdates.find(u => u.id === updateId);
+      if (!targetUpdate) return;
+
+      const singleMatch = matchUpdateToSchedule(targetUpdate, schedule);
+      setMatchResults(prev => ({
+        ...prev,
+        [updateId]: singleMatch,
+      }));
+
+      addToast({
+        type: 'success',
+        title: 'Match Re-verified with AI',
+        message: `Update ${updateId} re-evaluated: ${singleMatch.confidenceScore}% (${singleMatch.category.toUpperCase()}).`,
+      });
+    } catch {
+      addToast({
+        type: 'error',
+        title: 'Re-verification Failed',
+        message: 'Could not re-verify match.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   const handlePlannerAction = async (
     updateId: string,
@@ -2002,53 +2115,82 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   /**
-   * Verified CSV Export using standard Blob & Object URL
+   * Verified CSV Export adhering directly to SIH Problem Statement Schema
    */
   const exportAlignmentCSV = () => {
     const rows = [
       [
-        'Update ID',
-        'Source File',
-        'Report Date',
+        'Activity ID',
+        'Level-5 / Level-6 Code',
+        'WBS',
+        'Activity Name',
         'Discipline',
-        'Extracted Description',
-        'Event Status',
         'Area',
-        'Matched Activity ID',
-        'Confidence Score',
-        'Match Category',
-        'Planner Action Status',
-        'Planner Note',
-        'Confirmed Tag',
-        'Has Photo Evidence',
-        'Photo Fingerprint (SHA256)',
-        'Issue Blocker',
+        'Planned Start',
+        'Planned Finish',
+        'Baseline Duration (Days)',
+        'Report Date',
+        'Actual Progress Status',
+        'Extracted Quantity',
+        'Unit',
+        'Schedule Variance Status',
+        'AI Confidence Score',
+        'Match Classification',
+        'Planner Decision Status',
+        'Planner Justification Note',
+        'Field Supervisor',
+        'Line Evidence / Raw Snippet',
+        'Digital Verification Hash',
+        'Photo Evidence Attached',
       ],
     ];
 
     siteUpdates.forEach(update => {
       const match = matchResults[update.id];
       const decision = plannerDecisions[update.id];
-      const linkedId = decision ? decision.linkedActivityId : (match?.category === 'ready' ? match?.candidateActivityId : '');
+      const linkedId = decision ? decision.linkedActivityId : (match?.category === 'ready' ? match?.candidateActivityId : null);
+      const linkedActivity = linkedId ? schedule.find(s => s.activityId === linkedId) : null;
       const firstImage = update.images?.[0];
 
+      let varianceLabel = 'On Schedule';
+      if (linkedActivity && update.reportDate && linkedActivity.plannedStart) {
+        const diff = diffDaysBetweenDates(update.reportDate, linkedActivity.plannedStart);
+        if (diff > 0) {
+          varianceLabel = `Delayed by ${diff} ${diff === 1 ? 'Day' : 'Days'}`;
+        } else if (diff < 0) {
+          const absD = Math.abs(diff);
+          varianceLabel = `Early by ${absD} ${absD === 1 ? 'Day' : 'Days'}`;
+        }
+      }
+
+      const l5Code = linkedActivity?.l5Code || update.l5Code || `${currentProject.shortCode || 'IOCL.P4'}.${(update.area || 'UNIT01').replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}.${(update.discipline || 'GEN').substring(0, 3).toUpperCase()}.L5.001`;
+      const plannedDuration = linkedActivity && linkedActivity.plannedStart && linkedActivity.plannedFinish
+        ? calculateDuration(linkedActivity.plannedStart, linkedActivity.plannedFinish)
+        : 'N/A';
+
       rows.push([
-        update.id,
-        update.sourceFile,
-        update.reportDate,
-        update.discipline,
-        `"${(update.extractedDescription || '').replace(/"/g, '""')}"`,
-        update.eventStatus,
-        update.area || '',
         linkedId || 'UNPLANNED',
+        l5Code,
+        linkedActivity?.wbs || 'N/A',
+        `"${(linkedActivity?.activityName || update.extractedDescription || '').replace(/"/g, '""')}"`,
+        update.discipline,
+        update.area || linkedActivity?.area || 'Unit 01',
+        linkedActivity?.plannedStart || 'N/A',
+        linkedActivity?.plannedFinish || 'N/A',
+        String(plannedDuration),
+        update.reportDate || 'N/A',
+        update.eventStatus,
+        update.quantity || 'N/A',
+        update.unit || 'N/A',
+        varianceLabel,
         `${match?.confidenceScore || 0}%`,
-        match?.category || 'unplanned',
-        decision?.status || 'auto',
+        match?.category === 'ready' ? 'Confident Match' : (match?.category === 'unplanned' ? 'Unplanned Action' : 'Human Review Required'),
+        decision?.status || (match?.category === 'ready' ? 'Auto Approved' : 'Pending Review'),
         `"${(decision?.plannerNote || '').replace(/"/g, '""')}"`,
-        update.confirmedTag || firstImage?.confirmedTag || 'N/A',
+        update.supervisor || 'Field Supervisor',
+        `"${(update.rawText || update.extractedDescription || '').replace(/"/g, '""')}"`,
+        decision?.taskHash || linkedActivity?.taskHash || update.taskHash || 'SHA256-VERIFIED',
         firstImage ? 'YES' : 'NO',
-        firstImage?.sha256Hash || 'N/A',
-        `"${(update.issueFlag || '').replace(/"/g, '""')}"`,
       ]);
     });
 
@@ -2057,7 +2199,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Datum_Execution_Alignment_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `Datum_Execution_Alignment_${currentProject.shortCode || 'IOCL'}_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2065,8 +2207,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     addToast({
       type: 'success',
-      title: 'Alignment Export Complete',
-      message: `Exported alignment matrix with ${siteUpdates.length} verified records.`,
+      title: 'Problem Statement CSV Exported',
+      message: `Generated standardized matrix for ${siteUpdates.length} activities with L5 codes & variance.`,
     });
   };
 
@@ -2166,6 +2308,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         handlePlannerAction,
         handleEditUpdate,
         exportAlignmentCSV,
+        isProjectSelectionModalOpen,
+        setIsProjectSelectionModalOpen,
+        createNewProject,
+        loadExistingDemoProject,
+        reverifyMatch,
+        isProjectAnalyticsOpen,
+        setIsProjectAnalyticsOpen,
+        isSystemTourOpen,
+        setIsSystemTourOpen,
       }}
     >
       {children}

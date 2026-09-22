@@ -1,4 +1,4 @@
-import { ScheduleActivity, SiteUpdate, MatchResult, MatchCategory, ScoreBreakdown } from '../types';
+import type { ScheduleActivity, SiteUpdate, MatchResult, MatchCategory, ScoreBreakdown } from '../types/index.ts';
 
 /**
  * Tokenize and normalize text for keyword matching

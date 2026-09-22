@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { GanttTimelineView } from './GanttTimelineView';
 import { exportPrimaveraP6XER, exportMSProjectXML } from '../utils/scheduleExportService';
+import { formatVarianceBadge } from '../utils/scheduleSimulator';
 
 export const ScheduleActivitiesView: React.FC = () => {
   const {
@@ -31,8 +32,8 @@ export const ScheduleActivitiesView: React.FC = () => {
 
   const isSupervisor = currentRole === 'supervisor';
 
-  // View Mode: 'table' vs 'cards' vs 'gantt'
-  const [viewMode, setViewMode] = useState<'table' | 'cards' | 'gantt'>('gantt');
+  // View Mode: 'table' vs 'cards'
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -164,7 +165,7 @@ export const ScheduleActivitiesView: React.FC = () => {
           </div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
             <CalendarCheck size={20} style={{ color: 'var(--brand-primary)' }} />
-            <span>Master Schedule Tasks & 4D Progress Intelligence</span>
+            <span>Master Schedule Tasks & Level-5/6 Progress Mapping</span>
           </h2>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
             Master WBS schedule tasks and engineering milestones linked to incoming field logs and physical evidence.
@@ -210,16 +211,15 @@ export const ScheduleActivitiesView: React.FC = () => {
             <span>Export MSP (.XML)</span>
           </button>
 
-          {/* View Mode Toggle (4D Gantt vs Cards vs Table) */}
+          {/* View Mode Toggle (Table vs Cards) */}
           <div className="view-mode-toggle">
             <button
-              className={`view-mode-btn ${viewMode === 'gantt' ? 'active' : ''}`}
-              onClick={() => setViewMode('gantt')}
+              className={`view-mode-btn ${viewMode === 'table' ? 'active' : ''}`}
+              onClick={() => setViewMode('table')}
               type="button"
-              style={{ fontWeight: viewMode === 'gantt' ? 800 : 600 }}
             >
-              <Activity size={13} style={{ color: viewMode === 'gantt' ? 'var(--brand-primary)' : 'inherit' }} />
-              <span>4D Gantt & S-Curve</span>
+              <List size={13} />
+              <span>Table</span>
             </button>
             <button
               className={`view-mode-btn ${viewMode === 'cards' ? 'active' : ''}`}
@@ -228,14 +228,6 @@ export const ScheduleActivitiesView: React.FC = () => {
             >
               <LayoutGrid size={13} />
               <span>Cards</span>
-            </button>
-            <button
-              className={`view-mode-btn ${viewMode === 'table' ? 'active' : ''}`}
-              onClick={() => setViewMode('table')}
-              type="button"
-            >
-              <List size={13} />
-              <span>Table</span>
             </button>
           </div>
 
@@ -331,15 +323,9 @@ export const ScheduleActivitiesView: React.FC = () => {
         )}
       </div>
 
-      {/* Main Content: 4D Gantt View vs Card Grid Mode vs Table View Mode */}
-      {viewMode === 'gantt' ? (
-        <GanttTimelineView
-          activities={filteredActivities}
-          siteUpdates={siteUpdates}
-          onSelectActivity={setSelectedScheduleActivityId}
-        />
-      ) : viewMode === 'cards' ? (
-        /* Card Grid View (Trello/Linear Project Cards) */
+      {/* Main Content: Card Grid Mode vs Table View Mode */}
+      {viewMode === 'cards' ? (
+        /* Card Grid View (Project Cards) */
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '0.85rem' }}>
           {filteredActivities.length === 0 ? (
             <div className="card" style={{ gridColumn: '1 / -1', padding: '2.5rem 1.5rem', textAlign: 'center' }}>
@@ -446,7 +432,7 @@ export const ScheduleActivitiesView: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
                     <span>Area: {act.area}</span>
                     <span className={`variance-badge ${isDelayed ? 'delayed' : 'on-track'}`}>
-                      {variance > 0 ? `+${variance}d delay` : '0d on-track'}
+                      {formatVarianceBadge(variance).label}
                     </span>
                   </div>
 
@@ -465,7 +451,7 @@ export const ScheduleActivitiesView: React.FC = () => {
       ) : (
         /* Full Schedule Table View */
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="table-responsive">
+          <div className="table-responsive" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '720px' }}>
             <table className="industrial-table">
               <thead>
                 <tr>
@@ -577,12 +563,12 @@ export const ScheduleActivitiesView: React.FC = () => {
                           )}
                         </td>
                         <td>
-                          {act.actualFinish || act.status === 'Delayed' ? (
+                          {act.actualFinish || act.status === 'Delayed' || variance !== 0 ? (
                             <span className={`variance-badge ${isDelayed ? 'delayed' : 'on-track'}`}>
-                              {variance > 0 ? `+${variance}d` : `${variance}d`}
+                              {formatVarianceBadge(variance).label}
                             </span>
                           ) : (
-                            <span className="variance-badge neutral">0d</span>
+                            <span className="variance-badge neutral">On Schedule</span>
                           )}
                         </td>
                         <td>

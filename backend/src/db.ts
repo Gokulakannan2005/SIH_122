@@ -1246,4 +1246,11 @@ export function acknowledgeSupervisorScheduleUpdates() {
   db.exec('UPDATE notifications SET acknowledged = 1 WHERE target_role = "supervisor" AND type = "update"');
 }
 
+export function clearProjectData() {
+  db.exec('DELETE FROM schedule_activities');
+  db.exec('DELETE FROM site_updates');
+  db.exec('DELETE FROM match_results');
+  db.exec('DELETE FROM planner_decisions');
+}
+
 

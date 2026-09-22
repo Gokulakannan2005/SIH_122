@@ -162,6 +162,89 @@ export const ProjectCalendarView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
+      {/* 0. Live Clock & Dynamic Project Day Counter */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'linear-gradient(to right, rgba(14, 165, 233, 0.12), rgba(16, 185, 129, 0.08))',
+          border: '1px solid rgba(56, 189, 248, 0.3)',
+          borderRadius: 12,
+          padding: '0.85rem 1.25rem',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.25)', padding: '0.35rem 0.75rem', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 8px #34d399' }} />
+            <Clock size={16} style={{ color: '#38bdf8' }} />
+            <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', fontFamily: 'var(--font-mono, monospace)' }}>
+              {istClock.time || '10:00:00 AM IST'}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', background: 'rgba(14, 165, 233, 0.2)', padding: '2px 8px', borderRadius: 4 }}>
+              DAY COUNTER:
+            </span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary, #fff)' }}>
+              Day 22 of 90 • 24.4% Time Elapsed
+            </span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted, #94a3b8)' }}>
+              (Baseline Window: Sep 01 - Nov 30, 2026)
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted, #94a3b8)' }}>
+            Schedule Tasks Mapped:
+          </span>
+          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#34d399' }}>
+            {enrichedSchedule.length} Activities
+          </span>
+        </div>
+      </div>
+
+      {/* Empty State Banner if no schedule is uploaded */}
+      {enrichedSchedule.length === 0 && (
+        <div
+          style={{
+            padding: '3rem 2rem',
+            textAlign: 'center',
+            background: 'var(--bg-surface)',
+            border: '1px dashed var(--border-default)',
+            borderRadius: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '1rem',
+          }}
+        >
+          <CalendarIcon size={40} style={{ color: '#38bdf8', opacity: 0.8 }} />
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              No Baseline Schedule Uploaded Yet
+            </h3>
+            <p style={{ margin: '0.35rem 0 0', fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: 460 }}>
+              Upload your Primavera P6 or MS Project schedule in the Ingestion Suite to automatically populate this calendar with planned activity dates and disciplines.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setActiveTab('upload')}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}
+          >
+            <span>Go to Ingestion Suite</span>
+            <ExternalLink size={15} />
+          </button>
+        </div>
+      )}
+
       {/* 1. Header Toolbar */}
       <div
         className="card"

@@ -160,10 +160,11 @@ export const formatDisplayDate = (dateStr?: string): string => {
  */
 export const formatVarianceBadge = (varianceDays: number = 0): { label: string; type: 'delayed' | 'ahead' | 'ontrack' } => {
   if (varianceDays > 0) {
-    return { label: `+${varianceDays}d Slip`, type: 'delayed' };
+    return { label: `Delayed by ${varianceDays} ${varianceDays === 1 ? 'Day' : 'Days'}`, type: 'delayed' };
   }
   if (varianceDays < 0) {
-    return { label: `${varianceDays}d Ahead`, type: 'ahead' };
+    const absDays = Math.abs(varianceDays);
+    return { label: `Early by ${absDays} ${absDays === 1 ? 'Day' : 'Days'}`, type: 'ahead' };
   }
   return { label: 'On Schedule', type: 'ontrack' };
 };

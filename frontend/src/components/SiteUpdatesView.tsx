@@ -665,7 +665,7 @@ export const SiteUpdatesView: React.FC = () => {
       <div id="demo-target-field-reality" className="field-reports-split-view">
         {/* Left: Industrial Table */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="table-responsive" style={{ maxHeight: 'calc(100vh - 270px)', overflowY: 'auto' }}>
+          <div className="table-responsive" style={{ maxHeight: 'calc(100vh - 260px)', overflowY: 'auto', overflowX: 'auto' }}>
             <table className="data-table">
               <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr>
@@ -718,7 +718,10 @@ export const SiteUpdatesView: React.FC = () => {
                   return (
                     <tr
                       key={update.id}
-                      onClick={() => setSelectedUpdateId(update.id)}
+                      onClick={() => {
+                        setSelectedUpdateId(update.id);
+                        setSelectedInspectorUpdateId(update.id);
+                      }}
                       style={{
                         cursor: 'pointer',
                         background: isSelected ? 'var(--brand-surface)' : undefined,

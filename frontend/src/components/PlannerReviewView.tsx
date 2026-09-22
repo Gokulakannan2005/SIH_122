@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useProject } from '../context/ProjectContext';
 import {
   AlertTriangle,
@@ -23,6 +23,249 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { PlannerActionType } from '../types';
+import { evaluateMatch } from '../utils/matchingEngine';
+
+interface MatchScoreRadarChartProps {
+  score: number;
+  scoreBreakdown: {
+    keywordScore: number;
+    disciplineScore: number;
+    areaScore: number;
+    fuzzyScore: number;
+  };
+  activityId: string;
+  activityName: string;
+  isAlternative?: boolean;
+  reasons?: string[];
+}
+
+export const MatchScoreRadarChart: React.FC<MatchScoreRadarChartProps> = ({
+  score,
+  scoreBreakdown,
+  activityId,
+  activityName,
+  isAlternative = false,
+  reasons = [],
+}) => {
+  const cx = 120;
+  const cy = 110;
+  const maxR = 68;
+
+  // Normalized values clamped between 0 and 1
+  const kNorm = Math.min(1, Math.max(0, (scoreBreakdown.keywordScore || 0) / 50));
+  const dNorm = Math.min(1, Math.max(0, (scoreBreakdown.disciplineScore || 0) / 20));
+  const aNorm = Math.min(1, Math.max(0, (scoreBreakdown.areaScore || 0) / 15));
+  const fNorm = Math.min(1, Math.max(0, (scoreBreakdown.fuzzyScore || 0) / 15));
+
+  // Coordinates:
+  // Top: Keyword
+  const x1 = cx;
+  const y1 = cy - maxR * kNorm;
+  // Right: Discipline
+  const x2 = cx + maxR * dNorm;
+  const y2 = cy;
+  // Bottom: Area
+  const x3 = cx;
+  const y3 = cy + maxR * aNorm;
+  // Left: Fuzzy
+  const x4 = cx - maxR * fNorm;
+  const y4 = cy;
+
+  const dataPolygon = `${x1},${y1} ${x2},${y2} ${x3},${y3} ${x4},${y4}`;
+
+  // Rings
+  const rings = [0.25, 0.5, 0.75, 1.0];
+
+  const badgeColor = score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#ef4444';
+  const badgeBg = score >= 70 ? 'rgba(16, 185, 129, 0.12)' : score >= 40 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+  const badgeBorder = score >= 70 ? 'rgba(16, 185, 129, 0.3)' : score >= 40 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+
+  return (
+    <div
+      id="demo-target-explainability"
+      style={{
+        background: 'var(--bg-surface-secondary)',
+        border: '1px solid var(--border-default)',
+        borderRadius: 'var(--radius-md)',
+        padding: '1rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.85rem',
+      }}
+    >
+      {/* Header bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <Sparkles size={16} style={{ color: 'var(--brand-primary)' }} />
+          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+            Multi-Factor Match Score Radar
+          </span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--brand-primary)', fontWeight: 700 }}>
+            ({activityId})
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {isAlternative ? (
+            <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: 4, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', fontWeight: 700 }}>
+              Manual Target Selected
+            </span>
+          ) : (
+            <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: 4, background: 'rgba(16, 185, 129, 0.12)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 700 }}>
+              ★ AI Top Candidate
+            </span>
+          )}
+          <span
+            style={{
+              fontSize: '0.8rem',
+              fontWeight: 800,
+              padding: '2px 10px',
+              borderRadius: 6,
+              background: badgeBg,
+              color: badgeColor,
+              border: `1px solid ${badgeBorder}`,
+            }}
+          >
+            {score}% Apt Confidence
+          </span>
+        </div>
+      </div>
+
+      {/* 2-Column Visualization: SVG Radar Chart on Left, Breakdown Meters on Right */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, auto) 1fr', gap: '1.25rem', alignItems: 'center' }}>
+        {/* SVG Radar */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="240" height="220" viewBox="0 0 240 220" style={{ overflow: 'visible' }}>
+            {/* Concentric diamond grid rings */}
+            {rings.map((r, i) => {
+              const rad = maxR * r;
+              return (
+                <polygon
+                  key={i}
+                  points={`${cx},${cy - rad} ${cx + rad},${cy} ${cx},${cy + rad} ${cx - rad},${cy}`}
+                  fill={i === rings.length - 1 ? 'rgba(0,0,0,0.06)' : 'none'}
+                  stroke="var(--border-default)"
+                  strokeWidth={i === rings.length - 1 ? '1.2' : '0.8'}
+                  strokeDasharray={i === rings.length - 1 ? 'none' : '2 2'}
+                  opacity={0.7}
+                />
+              );
+            })}
+
+            {/* Axis grid lines */}
+            <line x1={cx} y1={cy - maxR} x2={cx} y2={cy + maxR} stroke="var(--border-default)" strokeWidth="1" strokeDasharray="3 3" opacity={0.8} />
+            <line x1={cx - maxR} y1={cy} x2={cx + maxR} y2={cy} stroke="var(--border-default)" strokeWidth="1" strokeDasharray="3 3" opacity={0.8} />
+
+            {/* Data Polygon */}
+            <polygon
+              points={dataPolygon}
+              fill="rgba(14, 165, 233, 0.28)"
+              stroke="var(--brand-primary, #0284c7)"
+              strokeWidth="2.5"
+              style={{ transition: 'all 0.3s ease-out' }}
+            />
+
+            {/* Data Vertices */}
+            <circle cx={x1} cy={y1} r={4} fill="#fff" stroke="var(--brand-primary, #0284c7)" strokeWidth="2" />
+            <circle cx={x2} cy={y2} r={4} fill="#fff" stroke="var(--brand-primary, #0284c7)" strokeWidth="2" />
+            <circle cx={x3} cy={y3} r={4} fill="#fff" stroke="var(--brand-primary, #0284c7)" strokeWidth="2" />
+            <circle cx={x4} cy={y4} r={4} fill="#fff" stroke="var(--brand-primary, #0284c7)" strokeWidth="2" />
+
+            {/* Axis Labels */}
+            <text x={cx} y={cy - maxR - 8} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
+              Keyword ({scoreBreakdown.keywordScore}/50)
+            </text>
+            <text x={cx + maxR + 6} y={cy + 4} textAnchor="start" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
+              Discipline ({scoreBreakdown.disciplineScore}/20)
+            </text>
+            <text x={cx} y={cy + maxR + 18} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
+              Area ({scoreBreakdown.areaScore}/15)
+            </text>
+            <text x={cx - maxR - 6} y={cy + 4} textAnchor="end" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
+              Fuzzy ({scoreBreakdown.fuzzyScore}/15)
+            </text>
+          </svg>
+        </div>
+
+        {/* 4 Multi-Factor Score Meters */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+          <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
+              <span style={{ color: 'var(--text-muted)' }}>Keyword Weight</span>
+              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown.keywordScore}/50</strong>
+            </div>
+            <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
+              <div className="progress-bar-fill blue" style={{ width: `${(scoreBreakdown.keywordScore / 50) * 100}%`, transition: 'width 0.3s ease' }} />
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
+              <span style={{ color: 'var(--text-muted)' }}>Discipline Match</span>
+              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown.disciplineScore}/20</strong>
+            </div>
+            <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
+              <div className="progress-bar-fill green" style={{ width: `${(scoreBreakdown.disciplineScore / 20) * 100}%`, transition: 'width 0.3s ease' }} />
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
+              <span style={{ color: 'var(--text-muted)' }}>Spatial / Area</span>
+              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown.areaScore}/15</strong>
+            </div>
+            <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
+              <div className="progress-bar-fill amber" style={{ width: `${(scoreBreakdown.areaScore / 15) * 100}%`, transition: 'width 0.3s ease' }} />
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
+              <span style={{ color: 'var(--text-muted)' }}>Fuzzy Similarity</span>
+              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown.fuzzyScore}/15</strong>
+            </div>
+            <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
+              <div className="progress-bar-fill blue" style={{ width: `${(scoreBreakdown.fuzzyScore / 15) * 100}%`, transition: 'width 0.3s ease' }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Matching Evidence Rationale tags */}
+      {reasons && reasons.length > 0 && (
+        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.65rem' }}>
+          <div style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase' }}>
+            Apt Evidence Rationale:
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+            {reasons.map((reason, idx) => {
+              const isPhotoTag = reason.toLowerCase().includes('photo evidence') || reason.toLowerCase().includes('confirmed tag');
+              return (
+                <span
+                  key={idx}
+                  style={{
+                    fontSize: '0.725rem',
+                    padding: '3px 9px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: isPhotoTag ? 'var(--brand-surface)' : 'var(--bg-surface)',
+                    border: isPhotoTag ? '1px solid var(--brand-accent)' : '1px solid var(--border-subtle)',
+                    color: isPhotoTag ? 'var(--brand-primary)' : 'var(--text-primary)',
+                    fontWeight: isPhotoTag ? 700 : 500,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  {isPhotoTag ? '📷 ' : '✓ '} {reason}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const PlannerReviewView: React.FC = () => {
   const {
@@ -80,15 +323,37 @@ export const PlannerReviewView: React.FC = () => {
       });
   }, [siteUpdates, matchResults, plannerDecisions, plannerQueueFilter, queueSearch]);
 
-  // Robust active update resolution: ensures no stale selection if queue item is completed
+  // Robust active update resolution: ensures selectedReviewUpdateId from Data Ingestion Hub or other views is immediately loaded
   const currentUpdate = useMemo(() => {
-    if (queueItems.length === 0) return null;
     if (selectedReviewUpdateId) {
-      const found = queueItems.find(item => item.id === selectedReviewUpdateId);
-      if (found) return found;
+      const foundInQueue = queueItems.find(item => item.id === selectedReviewUpdateId);
+      if (foundInQueue) return foundInQueue;
+      const foundInAll = siteUpdates.find(item => item.id === selectedReviewUpdateId);
+      if (foundInAll) return foundInAll;
     }
+    if (queueItems.length === 0) return siteUpdates[0] || null;
     return queueItems[0];
-  }, [queueItems, selectedReviewUpdateId]);
+  }, [queueItems, selectedReviewUpdateId, siteUpdates]);
+
+  // If a task is selected from outside (e.g. Data Ingestion Hub) that is not in the current filter, auto-adjust to 'all' so it is visible in the list
+  useEffect(() => {
+    if (selectedReviewUpdateId) {
+      const inCurrentQueue = queueItems.some(item => item.id === selectedReviewUpdateId);
+      const existsInAll = siteUpdates.some(item => item.id === selectedReviewUpdateId);
+      if (existsInAll && !inCurrentQueue && plannerQueueFilter !== 'all') {
+        setPlannerQueueFilter('all');
+      }
+    }
+  }, [selectedReviewUpdateId, queueItems, siteUpdates, plannerQueueFilter, setPlannerQueueFilter]);
+
+  // Ref to automatically scroll to the active queue item in the left queue list
+  const activeQueueItemRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (activeQueueItemRef.current) {
+      activeQueueItemRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [currentUpdate?.id]);
 
   const currentMatch = currentUpdate ? matchResults[currentUpdate.id] : null;
   const currentDecision = currentUpdate ? plannerDecisions[currentUpdate.id] : null;
@@ -130,10 +395,42 @@ export const PlannerReviewView: React.FC = () => {
     });
   }, [schedule, searchScheduleQuery]);
 
-  const selectedActivityObj = schedule.find(a => a.activityId === selectedActivityId);
-  const recommendedActivityObj = schedule.find(a => a.activityId === currentMatch?.candidateActivityId);
+  const selectedActivityObj = useMemo(() => {
+    return schedule.find(a => a.activityId === selectedActivityId) || null;
+  }, [schedule, selectedActivityId]);
+
+  const recommendedActivityObj = useMemo(() => {
+    return schedule.find(a => a.activityId === currentMatch?.candidateActivityId) || null;
+  }, [schedule, currentMatch?.candidateActivityId]);
+
   const isSelectedDifferentFromRecommended =
     selectedActivityId !== (currentMatch?.candidateActivityId || null);
+
+  // Dynamic real-time multi-factor evaluation for the currently selected schedule activity
+  const selectedActivityEvaluation = useMemo(() => {
+    if (!currentUpdate || !selectedActivityObj) return null;
+    return evaluateMatch(currentUpdate, selectedActivityObj);
+  }, [currentUpdate, selectedActivityObj]);
+
+  // Compute match confidence scores for schedule search results against currentUpdate
+  const scheduleItemsWithConfidence = useMemo(() => {
+    if (!currentUpdate) {
+      return filteredSchedule.map(act => ({ act, score: 0 }));
+    }
+    return filteredSchedule.map(act => {
+      const evaluation = evaluateMatch(currentUpdate, act);
+      return {
+        act,
+        score: evaluation.score,
+      };
+    }).sort((a, b) => {
+      // If user typed a search query, sort highest confidence first
+      if (searchScheduleQuery.trim()) {
+        return b.score - a.score;
+      }
+      return 0;
+    });
+  }, [currentUpdate, filteredSchedule, searchScheduleQuery]);
 
   // AI Suggestions: Top candidates for this update
   const suggestedCandidates = useMemo(() => {
@@ -315,6 +612,7 @@ export const PlannerReviewView: React.FC = () => {
                 return (
                   <div
                     key={item.id}
+                    ref={isActive ? activeQueueItemRef : null}
                     className={`review-queue-item ${isActive ? 'active' : ''}`}
                     onClick={() => setSelectedReviewUpdateId(item.id)}
                     style={{
@@ -559,57 +857,16 @@ export const PlannerReviewView: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Match Evidence Rationale & Photo Tag Attribution */}
-                    {currentMatch.matchReasons && currentMatch.matchReasons.length > 0 && (
-                      <div id="demo-target-explainability" style={{ background: 'var(--bg-surface-secondary)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <Sparkles size={14} style={{ color: 'var(--brand-primary)' }} />
-                          Matching Evidence Breakdown:
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: 10 }}>
-                          {currentMatch.matchReasons.map((reason, idx) => {
-                            const isPhotoTag = reason.toLowerCase().includes('photo evidence') || reason.toLowerCase().includes('confirmed tag');
-                            return (
-                              <span
-                                key={idx}
-                                style={{
-                                  fontSize: '0.75rem',
-                                  padding: '4px 10px',
-                                  borderRadius: 'var(--radius-sm)',
-                                  background: isPhotoTag ? 'var(--brand-surface)' : 'var(--bg-surface)',
-                                  border: isPhotoTag ? '1px solid var(--brand-accent)' : '1px solid var(--border-subtle)',
-                                  color: isPhotoTag ? 'var(--brand-primary)' : 'var(--text-primary)',
-                                  fontWeight: isPhotoTag ? 700 : 600,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 5,
-                                  boxShadow: 'var(--shadow-xs)',
-                                }}
-                              >
-                                {isPhotoTag ? '📷 ' : '✓ '} {reason}
-                              </span>
-                            );
-                          })}
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, fontSize: '0.725rem' }}>
-                          <div style={{ background: 'var(--bg-surface)', padding: '6px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>Keyword/Tag:</span>
-                            <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.keywordScore}/50</strong>
-                          </div>
-                          <div style={{ background: 'var(--bg-surface)', padding: '6px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>Discipline:</span>
-                            <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.disciplineScore}/20</strong>
-                          </div>
-                          <div style={{ background: 'var(--bg-surface)', padding: '6px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>Spatial Area:</span>
-                            <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.areaScore}/15</strong>
-                          </div>
-                          <div style={{ background: 'var(--bg-surface)', padding: '6px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>Fuzzy Sim:</span>
-                            <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{currentMatch.scoreBreakdown.fuzzyScore}/15</strong>
-                          </div>
-                        </div>
-                      </div>
+                    {/* AI Multi-Factor Match Score Radar (Dynamic for Selected Schedule Item) */}
+                    {selectedActivityObj && (
+                      <MatchScoreRadarChart
+                        score={selectedActivityEvaluation ? selectedActivityEvaluation.score : (currentMatch?.confidenceScore || 0)}
+                        scoreBreakdown={selectedActivityEvaluation ? selectedActivityEvaluation.scoreBreakdown : (currentMatch?.scoreBreakdown || { keywordScore: 0, disciplineScore: 0, areaScore: 0, fuzzyScore: 0 })}
+                        activityId={selectedActivityObj.activityId}
+                        activityName={selectedActivityObj.activityName}
+                        isAlternative={isSelectedDifferentFromRecommended}
+                        reasons={selectedActivityEvaluation ? selectedActivityEvaluation.reasons : (currentMatch?.matchReasons || [])}
+                      />
                     )}
                   </>
                 ) : (
@@ -673,15 +930,15 @@ export const PlannerReviewView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Schedule Activity Manual Search Box */}
+                {/* Schedule Activity Manual Search Box & Full Schedule Browser */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                      Browse Full Milestone Schedule (L5/L6):
+                      Browse Full Milestone Schedule (L5/L6 Activities):
                     </span>
                     {searchScheduleQuery && (
-                      <span style={{ fontSize: '0.7rem', color: 'var(--brand-primary)', cursor: 'pointer' }} onClick={() => setSearchScheduleQuery('')}>
-                        Clear Search
+                      <span style={{ fontSize: '0.7rem', color: 'var(--brand-primary)', cursor: 'pointer', fontWeight: 700 }} onClick={() => setSearchScheduleQuery('')}>
+                        Clear Search ({scheduleItemsWithConfidence.length} matches)
                       </span>
                     )}
                   </div>
@@ -697,35 +954,89 @@ export const PlannerReviewView: React.FC = () => {
                     />
                   </div>
 
-                  {searchScheduleQuery && (
-                    <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '4px' }}>
-                      {filteredSchedule.map(act => (
-                        <div
-                          key={act.activityId}
-                          onClick={() => setSelectedActivityId(act.activityId)}
-                          style={{
-                            padding: '0.45rem 0.65rem',
-                            borderRadius: 'var(--radius-xs)',
-                            background: selectedActivityId === act.activityId ? 'var(--brand-surface)' : 'transparent',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <div>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.75rem', color: 'var(--brand-primary)', marginRight: 6 }}>
-                              {act.activityId}
-                            </span>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                              {act.activityName}
+                  {/* Display Schedule Items with Real-Time Apt Confidence Scores */}
+                  <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '6px', background: 'var(--bg-surface)' }}>
+                    {scheduleItemsWithConfidence.length === 0 ? (
+                      <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        No schedule activities matched "{searchScheduleQuery}"
+                      </div>
+                    ) : (
+                      scheduleItemsWithConfidence.map(({ act, score }) => {
+                        const isSelected = selectedActivityId === act.activityId;
+                        const isRecommended = currentMatch?.candidateActivityId === act.activityId;
+                        const confColor = score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#94a3b8';
+                        const confBg = score >= 70 ? 'rgba(16, 185, 129, 0.12)' : score >= 40 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(148, 163, 184, 0.08)';
+                        const confBorder = score >= 70 ? 'rgba(16, 185, 129, 0.3)' : score >= 40 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(148, 163, 184, 0.2)';
+
+                        return (
+                          <div
+                            key={act.activityId}
+                            onClick={() => setSelectedActivityId(act.activityId)}
+                            style={{
+                              padding: '0.45rem 0.65rem',
+                              borderRadius: 'var(--radius-xs)',
+                              background: isSelected ? 'var(--brand-surface)' : 'transparent',
+                              border: isSelected ? '1.5px solid var(--brand-primary)' : '1px solid transparent',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                              transition: 'background 0.15s ease, border-color 0.15s ease',
+                            }}
+                            className="hover-card"
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                              <input
+                                type="radio"
+                                name="scheduleSearchSelection"
+                                checked={isSelected}
+                                onChange={() => setSelectedActivityId(act.activityId)}
+                                style={{ accentColor: 'var(--brand-primary)', cursor: 'pointer', flexShrink: 0 }}
+                              />
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.75rem', color: 'var(--brand-primary)' }}>
+                                    {act.activityId}
+                                  </span>
+                                  {isRecommended && (
+                                    <span style={{ fontSize: '0.65rem', padding: '1px 5px', borderRadius: 3, background: '#047857', color: '#fff', fontWeight: 800 }}>
+                                      ★ AI Top Match
+                                    </span>
+                                  )}
+                                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {act.activityName}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                                  Discipline: {act.discipline} • Area: {act.area} • WBS: {act.wbs}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Real-time confidence badge displayed next to every schedule item in the search list */}
+                            <span
+                              className="mono-pill"
+                              style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                padding: '3px 8px',
+                                borderRadius: 5,
+                                background: confBg,
+                                color: confColor,
+                                border: `1px solid ${confBorder}`,
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0,
+                              }}
+                              title={`Multi-factor AI match score: ${score}%`}
+                            >
+                              {score}% Conf
                             </span>
                           </div>
-                          <span className="mono-pill" style={{ fontSize: '0.65rem' }}>{act.area}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { PlannerActionType } from '../types';
 import { formatDisplayDate, diffDaysBetweenDates, formatVarianceBadge } from '../utils/scheduleSimulator';
+import { evaluateMatch } from '../utils/matchingEngine';
 
 export const InspectorDrawer: React.FC = () => {
   const {
@@ -42,6 +43,7 @@ export const InspectorDrawer: React.FC = () => {
     handleConfirmImageTag,
     handleRemoveImageFromUpdate,
     currentRole,
+    reverifyMatch,
   } = useProject();
 
   if (!selectedInspectorUpdateId) return null;
@@ -100,6 +102,12 @@ export const InspectorDrawer: React.FC = () => {
   });
 
   const selectedActivityObj = schedule.find(a => a.activityId === selectedActivityId);
+
+  // Dynamic multi-factor evaluation for selected activity
+  const dynamicEvaluation = selectedActivityObj ? evaluateMatch(update, selectedActivityObj) : null;
+  const activeScoreBreakdown = dynamicEvaluation?.scoreBreakdown || match.scoreBreakdown;
+  const activeConfidence = dynamicEvaluation?.score ?? match.confidenceScore;
+  const activeReasons = dynamicEvaluation?.reasons?.length ? dynamicEvaluation.reasons : match.matchReasons;
 
   // Calculate schedule variance if linked
   const varianceDays = selectedActivityObj && update.reportDate
@@ -547,7 +555,7 @@ export const InspectorDrawer: React.FC = () => {
                 <span>Multi-Factor Match Score Radar</span>
               </div>
               <span className={`status-badge ${match.category}`} style={{ fontSize: '0.75rem', padding: '2px 8px' }}>
-                {match.confidenceScore}% Confidence
+                {activeConfidence}% Confidence
               </span>
             </div>
 
@@ -555,49 +563,72 @@ export const InspectorDrawer: React.FC = () => {
               <div style={{ background: 'var(--bg-surface-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)', padding: '6px 8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
                   <span>Keyword Weight</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{match.scoreBreakdown.keywordScore}/50</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{activeScoreBreakdown.keywordScore}/50</span>
                 </div>
                 <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill blue" style={{ width: `${(match.scoreBreakdown.keywordScore / 50) * 100}%` }} />
+                  <div className="progress-bar-fill blue" style={{ width: `${(activeScoreBreakdown.keywordScore / 50) * 100}%` }} />
                 </div>
               </div>
 
               <div style={{ background: 'var(--bg-surface-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)', padding: '6px 8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
                   <span>Discipline Match</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{match.scoreBreakdown.disciplineScore}/20</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{activeScoreBreakdown.disciplineScore}/20</span>
                 </div>
                 <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill green" style={{ width: `${(match.scoreBreakdown.disciplineScore / 20) * 100}%` }} />
+                  <div className="progress-bar-fill green" style={{ width: `${(activeScoreBreakdown.disciplineScore / 20) * 100}%` }} />
                 </div>
               </div>
 
               <div style={{ background: 'var(--bg-surface-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)', padding: '6px 8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
                   <span>Spatial / Area</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{match.scoreBreakdown.areaScore}/15</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{activeScoreBreakdown.areaScore}/15</span>
                 </div>
                 <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill amber" style={{ width: `${(match.scoreBreakdown.areaScore / 15) * 100}%` }} />
+                  <div className="progress-bar-fill amber" style={{ width: `${(activeScoreBreakdown.areaScore / 15) * 100}%` }} />
                 </div>
               </div>
 
               <div style={{ background: 'var(--bg-surface-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)', padding: '6px 8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
                   <span>Fuzzy Similarity</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{match.scoreBreakdown.fuzzyScore}/15</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{activeScoreBreakdown.fuzzyScore}/15</span>
                 </div>
                 <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill blue" style={{ width: `${(match.scoreBreakdown.fuzzyScore / 15) * 100}%` }} />
+                  <div className="progress-bar-fill blue" style={{ width: `${(activeScoreBreakdown.fuzzyScore / 15) * 100}%` }} />
                 </div>
               </div>
             </div>
 
-            {match.matchReasons.length > 0 && (
+            {activeReasons.length > 0 && (
               <div style={{ fontSize: '0.75rem', color: 'var(--brand-primary)', marginTop: '0.25rem', fontWeight: 600, background: 'var(--brand-surface)', padding: '6px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-default)' }}>
-                💡 Rationale: <i>{match.matchReasons[0]}</i>
+                💡 Rationale: <i>{activeReasons[0]}</i>
               </div>
             )}
+
+            <div style={{ marginTop: '0.65rem', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => reverifyMatch(update.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  padding: '0.4rem 0.85rem',
+                  borderRadius: 6,
+                  border: '1px solid var(--brand-primary)',
+                  background: 'rgba(14, 165, 233, 0.12)',
+                  color: 'var(--brand-primary)',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                <Sparkles size={13} />
+                <span>Re-verify Match with AI</span>
+              </button>
+            </div>
           </div>
 
           {/* Section 5: Blocker or Risk Alerts */}

@@ -23,6 +23,8 @@ import {
   Database,
   Sparkles,
   LayoutDashboard,
+  BookOpen,
+  BarChart3,
 } from 'lucide-react';
 
 interface NotificationItem {
@@ -91,6 +93,10 @@ export const AppHeader: React.FC = () => {
     startGuidedDemo,
     presentationMode,
     setPresentationMode,
+    setIsSystemTourOpen,
+    setIsProjectAnalyticsOpen,
+    setIsProjectSelectionModalOpen,
+    currentProject,
   } = useProject();
 
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -202,22 +208,24 @@ export const AppHeader: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
           <button
             type="button"
-            onClick={() => {
-              setPresentationMode('standard');
-              setActiveTab('dashboard');
-            }}
+            onClick={() => setIsProjectSelectionModalOpen(true)}
             style={{
-              fontWeight: 600,
+              fontWeight: 700,
               color: 'var(--text-secondary)',
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
+              background: 'var(--bg-subtle)',
+              border: '1px solid var(--border-subtle)',
+              padding: '2px 7px',
+              borderRadius: 'var(--radius-xs)',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
             }}
-            title="Go to Project Control Center"
+            title="Switch or Create Project Baseline"
           >
-            IOCL Refinery
+            <span>{currentProject.shortCode || 'IOCL-REF'}</span>
+            <ChevronDown size={11} />
           </button>
           <ChevronRight size={12} style={{ color: 'var(--text-muted)' }} />
           <span
@@ -383,6 +391,30 @@ export const AppHeader: React.FC = () => {
           <span>Upload Data</span>
         </button>
 
+        {/* System Guidebook On-demand button */}
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setIsSystemTourOpen(true)}
+          title="Open DATUM System Tour Guidebook"
+          style={{ padding: '0.32rem 0.65rem', fontSize: '0.74rem', fontWeight: 600, gap: 5, whiteSpace: 'nowrap' }}
+        >
+          <BookOpen size={13} style={{ color: 'var(--brand-primary)' }} />
+          <span>Guidebook</span>
+        </button>
+
+        {/* Analytics & Export Modal Trigger */}
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setIsProjectAnalyticsOpen(true)}
+          title="Open Dataset Analytics & Export Problem Statement CSV"
+          style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', gap: 4, whiteSpace: 'nowrap' }}
+        >
+          <BarChart3 size={13} style={{ color: '#10b981' }} />
+          <span>Analytics & CSV</span>
+        </button>
+
         {/* Theme Switcher */}
         <button
           type="button"
@@ -392,18 +424,6 @@ export const AppHeader: React.FC = () => {
           aria-label="Toggle visual theme"
         >
           {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
-
-        {/* Export Data */}
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          onClick={exportAlignmentCSV}
-          title="Export CSV alignment report"
-          style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', gap: 4, whiteSpace: 'nowrap' }}
-        >
-          <Download size={13} />
-          <span>Export</span>
         </button>
 
         {/* Notifications Bell with Popover */}

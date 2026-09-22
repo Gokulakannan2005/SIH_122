@@ -25,6 +25,9 @@ import { GuidedDemoWalkthroughView } from './components/GuidedDemoWalkthroughVie
 import { SihPresentationContainer } from './components/presentation/SihPresentationContainer';
 import { ProjectCalendarView } from './components/ProjectCalendarView';
 import { ProjectMemoryView } from './components/ProjectMemoryView';
+import { ProjectSelectionModal } from './components/ProjectSelectionModal';
+import { SystemTourGuideModal } from './components/SystemTourGuideModal';
+import { AnalyticsExportModal } from './components/AnalyticsExportModal';
 import { GUIDED_DEMO_STEPS } from './utils/guidedDemoData';
 
 const AppContent: React.FC = () => {
@@ -137,6 +140,9 @@ const AppContent: React.FC = () => {
       <InspectorDrawer />
       <ScheduleActivityDrawer />
       <AuditTrailModal />
+      <ProjectSelectionModal />
+      <SystemTourGuideModal />
+      <AnalyticsExportModal />
 
       {/* Global Toast Action-Feedback System */}
       <ToastContainer />

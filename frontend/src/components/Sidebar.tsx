@@ -24,6 +24,8 @@ import {
   UploadCloud,
   ShieldCheck,
   HardHat,
+  BookOpen,
+  PlusCircle,
 } from 'lucide-react';
 import { NavigationTab, ProjectOption, AVAILABLE_PROJECTS } from '../types';
 
@@ -41,6 +43,9 @@ export const Sidebar: React.FC = () => {
     loadDemoData,
     presentationMode,
     setPresentationMode,
+    setIsSystemTourOpen,
+    setIsProjectSelectionModalOpen,
+    setIsProjectAnalyticsOpen,
   } = useProject();
 
   const isSupervisor = currentRole === 'supervisor';
@@ -390,6 +395,26 @@ export const Sidebar: React.FC = () => {
             <Sparkles size={13} />
             <span>{isGuidedDemoActive ? 'Resume System Tour' : 'Start System Tour'}</span>
           </button>
+          <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setIsSystemTourOpen(true)}
+              style={{ flex: 1, padding: '0.35rem 0.4rem', fontSize: '0.68rem', fontWeight: 700, justifyContent: 'center', background: 'rgba(255,255,255,0.08)' }}
+            >
+              <BookOpen size={12} />
+              <span>Guidebook</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setIsProjectAnalyticsOpen(true)}
+              style={{ flex: 1, padding: '0.35rem 0.4rem', fontSize: '0.68rem', fontWeight: 700, justifyContent: 'center', background: 'rgba(255,255,255,0.08)' }}
+            >
+              <Database size={12} />
+              <span>Analytics</span>
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -493,31 +518,46 @@ export const Sidebar: React.FC = () => {
             </div>
 
             {/* Quick Action Shortcuts */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, paddingTop: '0.4rem', borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: '0.5rem', borderTop: '1px solid var(--border-subtle)' }}>
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className="btn btn-primary btn-sm"
                 onClick={() => {
                   setShowProjectSwitcher(false);
-                  setActiveTab('dashboard');
+                  setIsProjectSelectionModalOpen(true);
                 }}
-                style={{ padding: '0.3rem 0.4rem', fontSize: '0.675rem', justifyContent: 'center' }}
+                style={{ width: '100%', padding: '0.4rem 0.5rem', fontSize: '0.72rem', fontWeight: 700, justifyContent: 'center', gap: 5 }}
               >
-                <LayoutDashboard size={12} />
-                <span>Control Center</span>
+                <PlusCircle size={13} />
+                <span>Create New Project Baseline</span>
               </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  setShowProjectSwitcher(false);
-                  setActiveTab('upload');
-                }}
-                style={{ padding: '0.3rem 0.4rem', fontSize: '0.675rem', justifyContent: 'center' }}
-              >
-                <Database size={12} />
-                <span>Ingest Schemas</span>
-              </button>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setShowProjectSwitcher(false);
+                    setIsProjectAnalyticsOpen(true);
+                  }}
+                  style={{ padding: '0.3rem 0.4rem', fontSize: '0.675rem', justifyContent: 'center' }}
+                >
+                  <Database size={12} />
+                  <span>CSV & Stats</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setShowProjectSwitcher(false);
+                    setIsSystemTourOpen(true);
+                  }}
+                  style={{ padding: '0.3rem 0.4rem', fontSize: '0.675rem', justifyContent: 'center' }}
+                >
+                  <BookOpen size={12} />
+                  <span>Guidebook</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

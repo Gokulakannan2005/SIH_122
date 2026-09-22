@@ -36,6 +36,7 @@ import {
   saveNotification,
   markNotificationRead,
   acknowledgeSupervisorScheduleUpdates,
+  clearProjectData,
 } from './db.ts';
 import type { PlannerDecision, AuditLog, UserAccount, ScheduleVersion, FieldSubmissionInboxItem, SystemNotification } from './db.ts';
 import { parseScheduleCSV, parseDailyReportTXT, parsePipingProgressXLSX } from './parsers.ts';
@@ -408,6 +409,45 @@ app.post('/api/notifications/acknowledge-updates', (req, res) => {
   try {
     acknowledgeSupervisorScheduleUpdates();
     res.json({ success: true, message: 'Supervisor acknowledged schedule updates.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * 6.10 Project Lifecycle & Re-verify Match
+ */
+app.post('/api/projects/new', (req, res) => {
+  try {
+    clearProjectData();
+    res.json({
+      success: true,
+      message: 'Clean project context initialized. Upload master schedule to begin.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/match/reverify', (req, res) => {
+  try {
+    const { updateId } = req.body;
+    const schedule = getScheduleActivities();
+    const siteUpdates = getSiteUpdates();
+    const targetUpdate = siteUpdates.find(u => u.id === updateId);
+
+    if (!targetUpdate) {
+      return res.status(404).json({ error: 'Update not found' });
+    }
+
+    const allMatches = processAllMatches(siteUpdates, schedule);
+    saveMatchResults(allMatches);
+
+    res.json({
+      success: true,
+      matchResult: allMatches[updateId] || null,
+      message: 'AI re-verification complete.',
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

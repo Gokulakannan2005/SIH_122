@@ -464,4 +464,33 @@ export const api = {
       return false;
     }
   },
+
+  /**
+   * Initialize a fresh, clean project session
+   */
+  async initNewProject(): Promise<boolean> {
+    try {
+      const res = await apiFetch('/projects/new', { method: 'POST' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Re-verify single match result with AI
+   */
+  async reverifyMatch(updateId: string): Promise<any> {
+    try {
+      const res = await apiFetch('/match/reverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updateId }),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
 };

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node scripts/start-dev.mjs",
     "build": "cd backend && npm install",
-    "start": "node --experimental-strip-types backend/src/server.ts",
+    "start": "node --experimental-strip-types --experimental-sqlite backend/src/server.ts",
     "server": "cd backend && npm run dev",
     "client": "cd frontend && npm run dev"
   }

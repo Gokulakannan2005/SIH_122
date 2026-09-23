@@ -8,8 +8,8 @@
     "node": ">=22.5.0"
   },
   "scripts": {
-    "start": "node --experimental-strip-types src/server.ts",
-    "dev": "node --experimental-strip-types --watch src/server.ts"
+    "start": "node --experimental-strip-types --experimental-sqlite src/server.ts",
+    "dev": "node --experimental-strip-types --experimental-sqlite --watch src/server.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

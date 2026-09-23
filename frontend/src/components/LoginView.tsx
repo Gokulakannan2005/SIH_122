@@ -20,7 +20,7 @@ import {
 import { AVAILABLE_PROJECTS } from '../types';
 
 export const LoginView: React.FC = () => {
-  const { login, loginAsGuest, backendStatus, backendMetrics, currentProject, switchProject } = useProject();
+  const { login, loginAsGuest, backendStatus, backendMetrics, currentProject, switchProject, availableProjects } = useProject();
 
   const [activeMode, setActiveMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('planner');
@@ -88,7 +88,7 @@ export const LoginView: React.FC = () => {
               <div>
                 <div className="login-org-title">DATUM • PROJECT CONTROLS</div>
                 <div className="login-org-sub" style={{ color: 'var(--brand-primary)', fontWeight: 800 }}>
-                  {currentProject.shortCode} • {currentProject.contractId}
+                  {currentProject?.shortCode || currentProject?.code || 'IOCL-P4'} • {currentProject?.contractId || 'IOCL-EPCC-PKG-04'}
                 </div>
               </div>
             </div>
@@ -110,7 +110,7 @@ export const LoginView: React.FC = () => {
               TARGET PROJECT:
             </span>
             <select
-              value={currentProject.id}
+              value={currentProject?.id || 'iocl-p4'}
               onChange={e => switchProject(e.target.value)}
               style={{
                 background: 'transparent',
@@ -124,7 +124,7 @@ export const LoginView: React.FC = () => {
               }}
               title="Select Project Context for Session"
             >
-              {AVAILABLE_PROJECTS.map(p => (
+              {(availableProjects || AVAILABLE_PROJECTS).map(p => (
                 <option key={p.id} value={p.id} style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
                   {p.name} ({p.status} - {p.location})
                 </option>

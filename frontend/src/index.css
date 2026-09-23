@@ -278,20 +278,137 @@ body {
 
 /* Left Sidebar */
 .app-sidebar {
-  width: 250px;
-  min-width: 250px;
-  max-width: 250px;
+  width: 68px;
+  min-width: 68px;
+  max-width: 68px;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-sidebar);
   display: flex;
   flex-direction: column;
+  align-items: center;
   height: 100vh;
   position: sticky;
   top: 0;
   z-index: 120;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.25);
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.12);
   color: var(--text-sidebar-primary);
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  transition: all var(--transition-fast);
+  padding: 0.85rem 0.35rem 0.65rem;
+  box-sizing: border-box;
+}
+
+/* ==========================================================================
+   APPLE macOS DOCK NAVIGATION SYSTEM
+   - Names hidden by default (icons only)
+   - Hover magnification spring scale
+   - Floating glassmorphism tooltip pill without serial numbers
+   - Active glow indicator
+   ========================================================================== */
+.macos-dock-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  flex: 1;
+  padding: 0.4rem 0;
+}
+
+.macos-dock-divider {
+  width: 36px;
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 0.35rem 0;
+  opacity: 0.8;
+}
+
+.macos-dock-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-sidebar-secondary);
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background 0.2s ease,
+              box-shadow 0.2s ease,
+              color 0.2s ease;
+  will-change: transform;
+}
+
+.macos-dock-item:hover {
+  transform: scale(1.24) translateX(4px);
+  background: var(--bg-sidebar-hover);
+  color: var(--brand-primary);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+  z-index: 250;
+}
+
+.macos-dock-item.active {
+  background: var(--brand-surface, rgba(37, 99, 235, 0.12));
+  color: var(--brand-primary);
+  border-color: rgba(37, 99, 235, 0.3);
+}
+
+.macos-dock-item.active.supervisor {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+  border-color: rgba(2, 132, 199, 0.3);
+}
+
+/* Active Indicator Dot */
+.macos-dock-indicator {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--brand-primary);
+  box-shadow: 0 0 8px var(--brand-primary);
+}
+
+/* Floating Glassmorphism Tooltip Pill */
+.macos-dock-tooltip {
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-6px);
+  background: rgba(15, 23, 42, 0.94);
+  color: #FFFFFF;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.775rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.16s;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-theme="light"] .macos-dock-tooltip {
+  background: rgba(15, 23, 42, 0.92);
+  color: #FFFFFF;
+}
+
+.macos-dock-item:hover .macos-dock-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(0);
 }
 
 .sidebar-category-label {

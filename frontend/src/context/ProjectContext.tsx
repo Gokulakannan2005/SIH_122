@@ -56,7 +56,9 @@ interface ProjectContextType {
 
   // Project Switcher & Enterprise Authentication
   currentProject: ProjectOption;
+  availableProjects: ProjectOption[];
   switchProject: (projectId: string) => void;
+  deleteUserProject?: (projectId: string) => void;
 
   // Direct Task Progress Updates
   updateTaskProgress: (
@@ -209,7 +211,7 @@ interface ProjectContextType {
   exportAlignmentCSV: () => void;
   isProjectSelectionModalOpen: boolean;
   setIsProjectSelectionModalOpen: (open: boolean) => void;
-  createNewProject: (projectName?: string, contractId?: string) => Promise<void>;
+  createNewProject: (projectName?: string, contractId?: string, location?: string) => Promise<void>;
   loadExistingDemoProject: () => Promise<void>;
   reverifyMatch: (updateId: string) => Promise<void>;
   isProjectAnalyticsOpen: boolean;
@@ -280,14 +282,37 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [offlineMode, setOfflineMode] = useState<boolean>(false);
   const [offlineSyncQueue, setOfflineSyncQueue] = useState<OfflineSyncItem[]>([]);
 
+  // User Created Projects List (persisted across sessions)
+  const [availableProjects, setAvailableProjects] = useState<ProjectOption[]>(() => {
+    try {
+      const saved = localStorage.getItem('datum_user_projects');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((p: ProjectOption) => p.id));
+          const merged = [...parsed];
+          for (const defaultProj of AVAILABLE_PROJECTS) {
+            if (!existingIds.has(defaultProj.id)) {
+              merged.push(defaultProj);
+            }
+          }
+          return merged;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved projects', e);
+    }
+    return AVAILABLE_PROJECTS;
+  });
+
   // Active Project Context & Project Switcher
   const [currentProjectId, setCurrentProjectId] = useState<string>(() => {
     return localStorage.getItem('datum_current_project_id') || 'iocl-p4';
   });
 
   const currentProject = useMemo(() => {
-    return AVAILABLE_PROJECTS.find(p => p.id === currentProjectId) || AVAILABLE_PROJECTS[0];
-  }, [currentProjectId]);
+    return availableProjects.find(p => p.id === currentProjectId) || availableProjects[0] || AVAILABLE_PROJECTS[0];
+  }, [availableProjects, currentProjectId]);
 
   // Manual / Field Task Progress Overrides for reliable real-time updates
   const [manualTaskProgress, setManualTaskProgress] = useState<Record<string, { progressPercent: number; status: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed' }>>(() => {
@@ -489,11 +514,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const navigateToPlannerReviewWithFilter = (filter: 'review' | 'unplanned' | 'approved' | 'all', updateId?: string) => {
     if (updateId) {
       setSelectedReviewUpdateId(updateId);
-      // Ensure the task won't be filtered out in the target review queue
-      setPlannerQueueFilter('all');
-    } else {
-      setPlannerQueueFilter(filter);
     }
+    setPlannerQueueFilter(filter);
     setActiveTab('planner-review');
   };
 
@@ -577,24 +599,23 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsLoading(true);
     setBackendStatus('checking');
 
-    // If active session is in clean new project mode, keep empty state without fake charts
-    if (localStorage.getItem('datum_is_clean_project') === 'true') {
-      setSchedule([]);
-      setSiteUpdates([]);
-      setMatchResults({});
-      setPlannerDecisions({});
-      setIsLoading(false);
-      return;
-    }
-
     // 1. Check if backend REST API is available
     const health = await api.checkHealth();
     if (health) {
       setBackendStatus('connected');
       setBackendMetrics(health.metrics);
 
-      // Fetch from backend SQLite
-      const backendData = await api.fetchInitialData();
+      // Sync projects registry from SQLite database
+      const dbProjects = await api.fetchProjects();
+      if (dbProjects && dbProjects.length > 0) {
+        setAvailableProjects(dbProjects);
+      }
+
+      // Determine active project to query
+      const activeProjId = localStorage.getItem('datum_current_project_id') || currentProjectId || 'iocl-p4';
+
+      // Fetch from backend SQLite scoped to active project
+      const backendData = await api.fetchInitialData(activeProjId);
       if (backendData) {
         setSchedule(backendData.schedule);
         setSiteUpdates(backendData.siteUpdates);
@@ -1051,7 +1072,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Record in Field Submissions Inbox
     const newSubmission: FieldSubmissionInboxItem = {
       id: `SUB-${Date.now()}`,
-      projectId: currentProject.contractId || 'IOCL-P4-REFINERY',
+      projectId: currentProject?.contractId || 'IOCL-P4-REFINERY',
       submittedAt: new Date().toISOString(),
       submittedBy: entry.supervisor || currentUser?.fullName || 'Rajesh Kumar (Field Supervisor)',
       userId: currentUser?.id || 'usr-supervisor-rajesh',
@@ -1134,24 +1155,68 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
-  // Switch project context and redirect back to login screen for re-authentication
-  const switchProject = (projectId: string) => {
+  // Switch project context with real-time SQLite database loading
+  const switchProject = async (projectId: string) => {
     setCurrentProjectId(projectId);
     localStorage.setItem('datum_current_project_id', projectId);
-    const proj = AVAILABLE_PROJECTS.find(p => p.id === projectId) || AVAILABLE_PROJECTS[0];
+    const proj = availableProjects.find(p => p.id === projectId) || availableProjects[0];
 
-    // Load dataset for this project immediately
-    loadClientDemoData(projectId);
-    setManualTaskProgress({});
-    localStorage.removeItem('datum_manual_task_progress');
+    setIsLoading(true);
+    try {
+      if (backendStatus === 'connected' && !offlineMode) {
+        const backendData = await api.fetchInitialData(projectId);
+        if (backendData) {
+          setSchedule(backendData.schedule);
+          setSiteUpdates(backendData.siteUpdates);
+          setMatchResults(backendData.matchResults);
+          setPlannerDecisions(backendData.plannerDecisions);
+          setAuditLogs(backendData.auditLogs);
+          setManualTaskProgress({});
+          localStorage.removeItem('datum_manual_task_progress');
+          setIsLoading(false);
+          addToast({
+            type: 'info',
+            title: `Workspace: ${proj.shortCode || proj.code || 'Active'}`,
+            message: `Active workspace set to "${proj.name}". Loaded from SQLite DB.`,
+          });
+          return;
+        }
+      }
 
-    // Log out user session to return to login screen
-    logout();
+      await loadClientDemoData(projectId);
+      setManualTaskProgress({});
+      localStorage.removeItem('datum_manual_task_progress');
+    } catch (err) {
+      console.error('Failed to load project data:', err);
+    } finally {
+      setIsLoading(false);
+    }
 
     addToast({
       type: 'info',
-      title: `Project Selected: ${proj.shortCode}`,
-      message: `Loaded ${proj.name} baseline. Please authenticate to continue.`,
+      title: `Workspace: ${proj.shortCode || proj.code || 'Active'}`,
+      message: `Active workspace set to "${proj.name}".`,
+    });
+  };
+
+  const deleteUserProject = async (projectId: string) => {
+    if (backendStatus === 'connected') {
+      await api.deleteProject(projectId);
+    }
+    setAvailableProjects(prev => {
+      const updated = prev.filter(p => p.id !== projectId || p.id === 'iocl-p4');
+      try {
+        localStorage.setItem('datum_user_projects', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+    if (currentProjectId === projectId) {
+      switchProject('iocl-p4');
+    }
+    addToast({
+      type: 'info',
+      title: 'Project Removed',
+      message: 'Workspace removed from project registry and database.',
     });
   };
 
@@ -1274,9 +1339,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsLoading(true);
     try {
       if (backendStatus === 'connected' && !offlineMode) {
-        const success = await api.uploadFiles(files);
+        const success = await api.uploadFiles(files, currentProjectId);
         if (success) {
-          const backendData = await api.fetchInitialData();
+          const backendData = await api.fetchInitialData(currentProjectId);
           if (backendData) {
             setSchedule(backendData.schedule);
             setSiteUpdates(backendData.siteUpdates);
@@ -1287,7 +1352,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             addToast({
               type: 'success',
               title: 'Batch Ingestion Complete',
-              message: 'Processed project files and updated execution baseline.',
+              message: 'Processed project files and updated execution baseline in SQLite DB.',
             });
             return;
           }
@@ -1813,14 +1878,47 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   /**
-   * Create a fresh new project session (clears baseline and reports)
+   * Create a fresh new project session and persist in availableProjects list
    */
-  const createNewProject = async (projectName?: string, contractId?: string) => {
+  const createNewProject = async (projectName?: string, contractId?: string, location?: string) => {
     setIsLoading(true);
     try {
-      localStorage.setItem('datum_is_clean_project', 'true');
+      const cleanName = (projectName || '').trim() || 'New Project';
+      const cleanCode = (contractId || '').trim() || `PRJ-${Date.now().toString().slice(-4)}`;
+      const cleanLoc = (location || '').trim() || 'Site Workfront';
+      const newId = `proj-${Date.now()}`;
+
+      const newProj: ProjectOption = {
+        id: newId,
+        name: cleanName,
+        shortCode: cleanCode,
+        code: cleanCode,
+        client: 'Indian Oil Corporation Ltd',
+        contractId: cleanCode,
+        location: cleanLoc,
+        progress: 0,
+        progressDelta: 'Baseline Staged',
+        status: 'Planning',
+        statusColor: 'var(--brand-primary)',
+        workfronts: '0 / 0 active',
+      };
+
+      // Add to available projects and persist
+      setAvailableProjects(prev => {
+        const updated = [newProj, ...prev];
+        try {
+          localStorage.setItem('datum_user_projects', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+
+      // Switch to this new project immediately
+      setCurrentProjectId(newId);
+      localStorage.setItem('datum_current_project_id', newId);
+      localStorage.removeItem('datum_is_clean_project');
+
       if (backendStatus === 'connected' && !offlineMode) {
-        await api.initNewProject();
+        await api.createProject(newProj);
       }
       setSchedule([]);
       setSiteUpdates([]);
@@ -1832,9 +1930,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsProjectSelectionModalOpen(false);
       setActiveTabState('upload');
       addToast({
-        type: 'info',
-        title: projectName || 'New Project Context Initialized',
-        message: 'Empty project initialized. Please upload your Primavera P6 or MS Project Schedule to begin.',
+        type: 'success',
+        title: `Project Created: ${cleanName}`,
+        message: `Activated workspace [${cleanCode}]. Saved to SQLite database. Upload your Primavera P6 or MS Project Schedule to begin.`,
       });
     } finally {
       setIsLoading(false);
@@ -1912,7 +2010,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     // Send to backend if online
     if (backendStatus === 'connected' && !offlineMode) {
-      const backendRes = await api.submitPlannerAction(updateId, actionType, targetActivityId, note, userContext);
+      const backendRes = await api.submitPlannerAction(updateId, actionType, targetActivityId, note, userContext, currentProjectId);
       if (backendRes) {
         setPlannerDecisions(prev => ({
           ...prev,
@@ -2163,7 +2261,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
 
-      const l5Code = linkedActivity?.l5Code || update.l5Code || `${currentProject.shortCode || 'IOCL.P4'}.${(update.area || 'UNIT01').replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}.${(update.discipline || 'GEN').substring(0, 3).toUpperCase()}.L5.001`;
+      const l5Code = linkedActivity?.l5Code || update.l5Code || `${currentProject?.shortCode || 'IOCL.P4'}.${(update.area || 'UNIT01').replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}.${(update.discipline || 'GEN').substring(0, 3).toUpperCase()}.L5.001`;
       const plannedDuration = linkedActivity && linkedActivity.plannedStart && linkedActivity.plannedFinish
         ? calculateDuration(linkedActivity.plannedStart, linkedActivity.plannedFinish)
         : 'N/A';
@@ -2199,7 +2297,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Datum_Execution_Alignment_${currentProject.shortCode || 'IOCL'}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `Datum_Execution_Alignment_${currentProject?.shortCode || 'IOCL'}_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2238,7 +2336,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         loginAsGuest,
         logout,
         currentProject,
+        availableProjects,
         switchProject,
+        deleteUserProject,
         updateTaskProgress,
         activeTab,
         setActiveTab,

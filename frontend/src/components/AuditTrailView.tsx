@@ -53,32 +53,66 @@ export const AuditTrailView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Top Banner */}
-      <div className="banner-card" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(59, 130, 246, 0.08))', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-              <ShieldCheck size={20} style={{ color: '#10b981' }} />
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-                Immutable Audit Trail & Decision Provenance
-              </h2>
-              <span className="badge badge-success">Cryptographically Verifiable</span>
-            </div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, maxWidth: '800px', lineHeight: 1.5 }}>
-              Every field update, AI hybrid match, confidence score, and human planner verification is logged chronologically to ensure complete regulatory traceability and dispute resolution.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={exportAlignmentCSV}
-            style={{ fontWeight: 700 }}
+      {/* Top Clean Header */}
+      <div
+        className="card"
+        style={{
+          padding: '1.15rem 1.4rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'var(--bg-surface)',
+          borderLeft: '4px solid #10b981',
+          flexWrap: 'wrap',
+          gap: '1rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'rgba(16, 185, 129, 0.15)',
+              color: '#10b981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
-            <Download size={14} />
-            <span>Export Audit Log (CSV)</span>
-          </button>
+            <ShieldCheck size={22} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                Cryptographic Audit Trail & Decision Provenance
+              </h2>
+              <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>
+                SHA-256 Ledger
+              </span>
+            </div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Chronological provenance tracking with live system timestamps and planner authority verification.
+            </div>
+          </div>
         </div>
+
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={exportAlignmentCSV}
+          style={{
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '0.55rem 1.15rem',
+            borderRadius: 8,
+          }}
+        >
+          <Download size={15} />
+          <span>Export Audit Log (CSV)</span>
+        </button>
       </div>
 
       {/* Filter and Search Bar */}
@@ -130,15 +164,15 @@ export const AuditTrailView: React.FC = () => {
         </div>
 
         <div className="table-responsive">
-          <table className="table" style={{ margin: 0 }}>
+          <table className="table" style={{ margin: 0, width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>
-                <th style={{ width: '130px' }}>Timestamp</th>
-                <th style={{ width: '150px' }}>Action & Authority</th>
-                <th>Field Evidence & Raw Log</th>
-                <th style={{ width: '130px' }}>AI Confidence</th>
-                <th style={{ width: '200px' }}>Target Schedule Activity</th>
-                <th style={{ width: '110px' }}>Actions</th>
+              <tr style={{ background: 'var(--bg-subtle)' }}>
+                <th style={{ width: '140px', padding: '12px 16px', fontSize: '0.725rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>Timestamp</th>
+                <th style={{ width: '160px', padding: '12px 16px', fontSize: '0.725rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>Action & Authority</th>
+                <th style={{ padding: '12px 16px', fontSize: '0.725rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>Field Evidence & Raw Log</th>
+                <th style={{ width: '110px', padding: '12px 16px', fontSize: '0.725rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>AI Confidence</th>
+                <th style={{ width: '220px', padding: '12px 16px', fontSize: '0.725rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>Target Schedule Activity</th>
+                <th style={{ width: '90px', padding: '12px 16px', fontSize: '0.725rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -148,30 +182,30 @@ export const AuditTrailView: React.FC = () => {
                   const activity = schedule.find(a => a.activityId === log.finalActivityId);
 
                   return (
-                    <tr key={log.id} style={{ transition: 'background 0.15s ease' }}>
-                      <td>
+                    <tr key={log.id} style={{ transition: 'background 0.15s ease', borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <span style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                            {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                            {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
                           </span>
-                          <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
-                            {new Date(log.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            {new Date(log.timestamp).toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' })}
                           </span>
                         </div>
                       </td>
 
-                      <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <span className={`status-badge ${log.action.toLowerCase().includes('approved') ? 'ready' : log.action.toLowerCase().includes('unplanned') ? 'unplanned' : 'review'}`}>
                             {log.action}
                           </span>
-                          <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
                             by {log.userName || log.userRole || 'Lead Planner'}
                           </span>
                         </div>
                       </td>
 
-                      <td>
+                      <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
                         <div style={{ maxWidth: '420px' }}>
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.4 }}>
                             &ldquo;{log.rawText}&rdquo;
@@ -182,7 +216,7 @@ export const AuditTrailView: React.FC = () => {
                         </div>
                       </td>
 
-                      <td>
+                      <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                           <div className={`confidence-pill ${log.originalConfidence >= 80 ? 'high' : log.originalConfidence >= 50 ? 'medium' : 'low'}`} style={{ fontSize: '0.75rem', padding: '2px 8px' }}>
                             {log.originalConfidence}%
@@ -190,7 +224,7 @@ export const AuditTrailView: React.FC = () => {
                         </div>
                       </td>
 
-                      <td>
+                      <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
                         {activity ? (
                           <div>
                             <span className="code-badge" style={{ fontSize: '0.7rem' }}>{activity.activityId}</span>
@@ -210,7 +244,7 @@ export const AuditTrailView: React.FC = () => {
                         )}
                       </td>
 
-                      <td>
+                      <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"

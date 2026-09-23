@@ -215,7 +215,10 @@ export function matchUpdateToSchedule(
 
   let category: MatchCategory = 'unplanned';
 
-  if (isVagueText || isCloseRunnerUp || (highestScore >= 40 && highestScore < 75)) {
+  if (highestScore < 40) {
+    category = 'unplanned';
+    bestReasons.push('Low matching confidence (< 40%) — automatically categorized as Unplanned / Out-of-Baseline activity');
+  } else if (isVagueText || isCloseRunnerUp || (highestScore >= 40 && highestScore < 75)) {
     category = 'review';
     bestReasons.push('Ambiguous or generic activity description — Planner Review required');
   } else if (highestScore >= 75 && bestMatchActivity) {

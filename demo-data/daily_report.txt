@@ -1,22 +1,26 @@
-DAILY PROGRESS REPORT — Cooling Water Pump Package
-Date: 2026-09-05
+DAILY PROGRESS REPORT — IOCL Refinery Expansion (Cooling Water & Infrastructure Package)
+Date: 2026-09-22
+Project: IOCL-EPCC-PKG-04
+Lead Supervisor: Rajesh Kumar (Field Operations)
+Shift: Day Shift A (07:00 - 17:30)
 
-Civil
-1. Pump foundation excavation completed at Pump Bay.
-2. PCC started for the pump foundation after inspection.
+Civil Works
+1. Cast pump foundation concrete (CIV-L6-002) completed at Pump Bay; 25 cum M35 pour cured.
+2. Excavated cable trench reached 1.2m final invert level along Substation perimeter.
+3. Emergency temporary bypass trench for rainwater routing around pump pit. [Unplanned activity - non-baseline field modification]
 
-Piping
-3. CW 24-inch spool was erected near Pump Bay today; alignment is in progress.
-4. Fabrication of one more cooling-water spool completed in the yard.
-5. Fire-water spool erection at Filter Bay has started.
-6. A small-bore drain line was installed near the pump. [Not in baseline]
+Piping Works
+4. Erect Line 24-CW-017 heavy cooling water spool at inlet bay; alignment completed, ready for fit-up.
+5. Erected pipe spool near pump bay inlet without specific isometric line tag.
+6. Small-bore utility drain piping installed near pump casing. [Not in baseline schedule - field instruction #14]
 
-Electrical
-7. Cable tray work completed in Pump Bay.
-8. Earthing strip installation started around motor foundation.
-9. Crew reported cable pulling, but feeder number was not mentioned.
+Electrical Works
+7. Erect perforated galvanized cable tray Tier-1 completed in Pump Bay.
+8. Pull heavy armored feeder cable without specified feeder tag in Pump Bay cable trench.
+9. Motor earthing copper strip installation completed around pump foundation perimeter.
 
-HSE
-10. Crane lifting safety inspection completed before spool erection.
+HSE Safety & Rigging
+10. Crane lifting permit safety inspection conducted for 75T mobile crane before heavy spool lift.
 
-Supervisor note: Rain delayed morning work by two hours.
+Supervisor Shift Summary:
+Morning heavy crane mobilization completed smoothly under standard PTW safety protocol. Weather clear, productivity high.

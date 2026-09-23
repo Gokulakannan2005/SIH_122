@@ -1,30 +1,26 @@
-DAILY PROGRESS REPORT — Cooling Water Pump Package & Balance of Plant
-Date: 2026-09-08
+DAILY PROGRESS REPORT — IOCL Refinery Expansion (Cooling Water & Infrastructure Package)
+Date: 2026-09-22
+Project: IOCL-EPCC-PKG-04
+Lead Supervisor: Rajesh Kumar (Field Operations)
+Shift: Day Shift A (07:00 - 17:30)
 
-Civil
-1. Pump foundation excavation completed at Pump Bay with Level-6 survey inspection signed off.
-2. PCC started for the pump foundation after rebar cage placement and QA audit.
-3. Pipe rack pedestal concrete casting started at Pipe Rack A.
-4. Trench excavation for 415V power cable feeder started near Substation.
+Civil Works
+1. Cast pump foundation concrete (CIV-L6-002) completed at Pump Bay; 25 cum M35 pour cured.
+2. Excavated cable trench reached 1.2m final invert level along Substation perimeter.
+3. Emergency temporary bypass trench for rainwater routing around pump pit. [Unplanned activity - non-baseline field modification]
 
-Piping
-5. CW 24-inch spool was erected near Pump Bay today; laser alignment is in progress.
-6. Fabrication of Line 24-CW-017 cooling-water spool completed in the yard with 100% NDT clearance.
-7. Fire-water spool erection at Filter Bay has started for Line 18-FW-008.
-8. A small-bore drain line was installed near the pump. [Not in baseline]
-9. Suction piping fit-up for cooling water pump completed at Pump Bay.
+Piping Works
+4. Erect Line 24-CW-017 heavy cooling water spool at inlet bay; alignment completed, ready for fit-up.
+5. Erected pipe spool near pump bay inlet without specific isometric line tag.
+6. Small-bore utility drain piping installed near pump casing. [Not in baseline schedule - field instruction #14]
 
-Electrical
-10. Cable tray work completed in Pump Bay tier-2 support structure.
-11. Pulling of 415V MCC feeder cable commenced between Substation and Pump Bay MCC-415V.
-12. Earthing strip installation started around motor foundation and pump skid.
-13. Crew reported cable pulling, but feeder number was not mentioned.
+Electrical Works
+7. Erect perforated galvanized cable tray Tier-1 completed in Pump Bay.
+8. Pull heavy armored feeder cable without specified feeder tag in Pump Bay cable trench.
+9. Motor earthing copper strip installation completed around pump foundation perimeter.
 
-Instrumentation
-14. Pressure transmitter PT-2401 mounting bracket installed on pump suction header.
+HSE Safety & Rigging
+10. Crane lifting permit safety inspection conducted for 75T mobile crane before heavy spool lift.
 
-HSE
-15. Crane lifting safety inspection completed before 50T heavy spool erection.
-16. Work permit safety audit conducted for confined space cable trench excavation.
-
-Supervisor note: 50T Mobile Crane hydraulic seal leak reported in morning; replacement completed and certified safe.
+Supervisor Shift Summary:
+Morning heavy crane mobilization completed smoothly under standard PTW safety protocol. Weather clear, productivity high.

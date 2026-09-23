@@ -309,7 +309,10 @@ export function matchUpdateToSchedule(
 
   let category: MatchCategory = 'unplanned';
 
-  if (isMissingSpecificTag || isCloseRunnerUp || (highestScore >= 40 && highestScore < 75)) {
+  if (highestScore < 40) {
+    category = 'unplanned';
+    bestReasons.push('Low matching confidence (< 40%) — automatically categorized as Unplanned / Out-of-Baseline activity');
+  } else if (isMissingSpecificTag || isCloseRunnerUp || (highestScore >= 40 && highestScore < 75)) {
     category = 'review';
     bestReasons.push('Ambiguous or generic activity description — Missing specific equipment tag — Lead Planner verification required');
     if (highestScore > 65) highestScore = 58; // Realistic ambiguous confidence

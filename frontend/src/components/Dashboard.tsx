@@ -22,14 +22,10 @@ import {
   CheckSquare,
   UploadCloud,
   Sliders,
-  Send,
   RotateCcw,
-  Zap,
   FolderTree,
   ChevronDown,
 } from 'lucide-react';
-import { inferDisciplineFromText, matchUpdateToSchedule } from '../utils/matchingEngine';
-import { SiteUpdate } from '../types';
 
 export const Dashboard: React.FC = () => {
   const {
@@ -40,7 +36,6 @@ export const Dashboard: React.FC = () => {
     setActiveTab,
     startGuidedDemo,
     setSelectedScheduleActivityId,
-    handleAddNewFieldEntry,
     addToast,
     updateTaskProgress,
     currentProject,
@@ -48,23 +43,6 @@ export const Dashboard: React.FC = () => {
   } = useProject();
 
   const istClock = useLiveISTClock();
-
-  // Instant Text Ingestion Studio State
-  const [quickUpdateText, setQuickUpdateText] = useState<string>('');
-  const [isIngesting, setIsIngesting] = useState<boolean>(false);
-  const [ingestedResult, setIngestedResult] = useState<{
-    id: string;
-    text: string;
-    discipline: string;
-    area: string;
-    equipmentTag?: string;
-    candidateActivityId?: string;
-    candidateActivityName?: string;
-    confidence: number;
-    resolvedDate: string;
-    relativeDatePhrase: string;
-    progressVal: number;
-  } | null>(null);
 
   // Today's Tasks Filters
   const [taskSearchQuery, setTaskSearchQuery] = useState<string>('');
@@ -89,147 +67,6 @@ export const Dashboard: React.FC = () => {
 
     return { total, completed, delayed, inProgress, completionPct, overallProgress };
   }, [enrichedSchedule]);
-
-  // Deterministic NLP & Matching Engine for Any Quick Text (Clicked or Typed)
-  const parseQuickText = (text: string, schedule: typeof enrichedSchedule) => {
-    const trimmed = text.trim();
-    const discipline = inferDisciplineFromText(trimmed, 'Piping');
-
-    // 1. Tag extraction
-    const tagMatch = trimmed.match(/\b([0-9]{2}-[A-Z]{2,4}-[0-9]{3,4}[A-Z]?|[A-Z]{2,4}-[0-9]{3,4}|[A-Z]-[0-9]{3,4}[A-Z]?|TK-[0-9]{1,2}|SUB-[0-9]{1,2})\b/i);
-    const tag = tagMatch ? tagMatch[1].toUpperCase() : undefined;
-
-    // 2. Area inference
-    let area = 'Pump Bay';
-    if (/tank farm|crude storage|storage tank|ring wall|bund/i.test(trimmed)) {
-      area = 'Unit-05 Tank Farm';
-    } else if (/pump bay|cooling water|pump/i.test(trimmed)) {
-      area = 'Pump Bay';
-    } else if (/substation|switchgear|electrical room/i.test(trimmed)) {
-      area = 'Substation-03';
-    } else if (/control room|dcs rack|rack room/i.test(trimmed)) {
-      area = 'Central Control Room';
-    }
-
-    // 3. Progress percentage inference
-    let progressVal = 75;
-    const pctMatch = trimmed.match(/([0-9]{1,3})%/);
-    if (pctMatch) {
-      progressVal = Math.min(100, parseInt(pctMatch[1], 10));
-    } else if (/complete|finished|erected|done|excavated|poured|terminated|commissioned/i.test(trimmed)) {
-      progressVal = 100;
-    }
-
-    const dateResolution = resolveRelativeISTDate(trimmed);
-
-    // 4. Candidate matching via matchingEngine
-    const syntheticUpdate: SiteUpdate = {
-      id: 'TEMP-QUICK-INGEST',
-      sourceFile: 'instant_quick_ingest',
-      sourceType: 'supervisor_upload',
-      discipline,
-      reportDate: dateResolution.isoDate,
-      rawText: trimmed,
-      extractedDescription: trimmed,
-      eventStatus: progressVal === 100 ? 'Completed' : 'In Progress',
-      area,
-      quantity: `${progressVal}%`,
-    };
-
-    const matchRes = matchUpdateToSchedule(syntheticUpdate, schedule);
-    const candidate = schedule.find(s => s.activityId === matchRes.candidateActivityId) || null;
-
-    return {
-      discipline,
-      tag: tag || (candidate?.equipmentTag ? candidate.equipmentTag : 'Auto-Detected'),
-      candidate,
-      matchRes,
-      area: candidate?.area || area,
-      dateResolution,
-      progressVal,
-    };
-  };
-
-  // Live NLP Preview for Text Ingestion
-  const nlpPreview = useMemo(() => {
-    if (!quickUpdateText.trim()) return null;
-    return parseQuickText(quickUpdateText, enrichedSchedule);
-  }, [quickUpdateText, enrichedSchedule]);
-
-  // Handle Instant Text Ingestion
-  const handleInstantIngest = async (textOverride?: string) => {
-    const textToIngest = (textOverride || quickUpdateText).trim();
-    if (!textToIngest) {
-      addToast({
-        type: 'warning',
-        title: 'Input Required',
-        message: 'Please enter a site execution update to analyze and ingest.',
-      });
-      return;
-    }
-
-    setIsIngesting(true);
-
-    try {
-      const preview = parseQuickText(textToIngest, enrichedSchedule);
-      const isComplete = preview.progressVal === 100 || /complete|finished|erected|done|excavated/i.test(textToIngest);
-
-      // Ingest into ProjectContext
-      await handleAddNewFieldEntry({
-        discipline: preview.discipline,
-        description: textToIngest,
-        rawText: textToIngest,
-        area: preview.area,
-        eventStatus: isComplete ? 'Completed' : 'In Progress',
-        quantity: `${preview.progressVal}%`,
-        supervisor: currentRole === 'supervisor' ? 'Site Supervisor' : 'Lead Planner',
-        targetActivityId: preview.candidate?.activityId,
-        confirmedTag: preview.tag !== 'Auto-Detected' ? preview.tag : undefined,
-      });
-
-      // Update task progress immediately if linked to an existing schedule task
-      if (preview.candidate) {
-        updateTaskProgress(
-          preview.candidate.activityId,
-          preview.progressVal,
-          isComplete ? 'Completed' : 'In Progress',
-          `Instant Ingestion: "${textToIngest.slice(0, 45)}..."`
-        );
-      }
-
-      setIngestedResult({
-        id: `FIELD-${Date.now().toString().slice(-4)}`,
-        text: textToIngest,
-        discipline: preview.discipline,
-        area: preview.area,
-        equipmentTag: preview.tag,
-        candidateActivityId: preview.candidate?.activityId,
-        candidateActivityName: preview.candidate?.activityName,
-        confidence: preview.matchRes?.confidenceScore || (preview.tag !== 'Auto-Detected' ? 95 : 82),
-        resolvedDate: preview.dateResolution.resolvedDate,
-        relativeDatePhrase: preview.dateResolution.matchedPhrase || 'today',
-        progressVal: preview.progressVal,
-      });
-
-      setQuickUpdateText('');
-      addToast({
-        type: 'success',
-        title: 'Instant Update Ingested & Schedule Synced',
-        message: preview.candidate
-          ? `Linked to ${preview.candidate.activityId} (${preview.progressVal}%). Schedule updated.`
-          : `Ingested update. Flagged for planner verification.`,
-      });
-    } catch (err) {
-      console.error(err);
-      addToast({
-        type: 'error',
-        title: 'Ingestion Error',
-        message: 'Could not process the text entry. Please try again.',
-      });
-    } finally {
-      setIsIngesting(false);
-    }
-  };
 
   // Filtered Today's Tasks
   const filteredTasks = useMemo(() => {
@@ -325,231 +162,13 @@ export const Dashboard: React.FC = () => {
               Indian Standard Time (IST)
             </div>
             <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-              {istClock.formattedIST} • <span style={{ color: '#059669' }}>{istClock.shiftName}</span>
+              {istClock.dateFormatted} • {istClock.timeFormatted} • <span style={{ color: '#059669' }}>{istClock.shiftName}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. MAIN FEATURE: Instant Text Ingestion Studio */}
-      <div
-        className="card"
-        style={{
-          padding: '1.35rem 1.5rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1rem',
-          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(16, 185, 129, 0.03))',
-          border: '1.5px solid var(--brand-primary)',
-          boxShadow: '0 4px 20px rgba(37, 99, 235, 0.08)',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-              <Zap size={16} style={{ color: 'var(--brand-primary)' }} />
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                Instant Text Quick Ingestion Studio
-              </h3>
-              <span className="badge badge-ready" style={{ fontSize: '0.65rem' }}>
-                Main Ingestion Engine
-              </span>
-            </div>
-            <p style={{ margin: 0, fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-              Type natural site progress in plain English. DATUM resolves relative dates ("today", "yesterday"), detects equipment tags, and updates Primavera schedule actuals instantly without page reloads.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => handleInstantIngest('Excavated crude storage tank ring wall foundation yesterday.')}
-              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
-              title="98% Match: Civil Tank Foundation"
-            >
-              + Civil (High Confidence)
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => handleInstantIngest('Erected pipe spool 24-CW-017 today in pump bay. Hydrotest ready.')}
-              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
-              title="95% Match: Line 24-CW-017"
-            >
-              + Piping (Line 24-CW-017)
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => handleInstantIngest('Terminated 415V switchgear feeder cables in substation-03 today.')}
-              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
-              title="94% Match: Electrical Substation"
-            >
-              + Electrical (Substation-03)
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => handleInstantIngest('Pipe erection completed near pump bay. Crew demobilized for shift change.')}
-              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem', border: '1px solid #d97706', color: '#d97706' }}
-              title="Ambiguous Case (58%): Missing Line Tag, routes to Review Queue"
-            >
-              ⚠ Ambiguous (Needs Review)
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => handleInstantIngest('Fabricated and installed 2-inch bypass drain tie-in line near cooling tower manifold.')}
-              style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem', border: '1px solid #e11d48', color: '#e11d48' }}
-              title="Out-of-Baseline Scope (12%): Commercial Claim Control"
-            >
-              ✖ Out-of-Baseline Claim
-            </button>
-          </div>
-        </div>
-
-        {/* Ingestion Input Row */}
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <textarea
-              className="form-textarea"
-              rows={2}
-              placeholder="e.g. Completed 85% welding on line 24-CW-017 yesterday with 14 pipe fitters in Unit-01..."
-              value={quickUpdateText}
-              onChange={e => setQuickUpdateText(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                  handleInstantIngest();
-                }
-              }}
-              style={{
-                width: '100%',
-                resize: 'none',
-                fontSize: '0.85rem',
-                fontFamily: 'inherit',
-                padding: '0.65rem 0.85rem',
-                borderColor: nlpPreview ? 'var(--brand-primary)' : undefined,
-              }}
-            />
-
-            {/* Live Parsing Preview Pill */}
-            {nlpPreview && (
-              <div
-                style={{
-                  marginTop: 6,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  fontSize: '0.725rem',
-                  color: 'var(--text-secondary)',
-                  background: 'var(--bg-surface)',
-                  padding: '0.35rem 0.65rem',
-                  borderRadius: 4,
-                  border: '1px solid var(--border-subtle)',
-                }}
-              >
-                <span>Discipline: <strong style={{ color: 'var(--brand-primary)' }}>{nlpPreview.discipline}</strong></span>
-                <span>Tag: <strong style={{ color: 'var(--brand-primary)' }}>{nlpPreview.tag}</strong></span>
-                <span>Target: <strong>{nlpPreview.candidate?.activityId || 'Auto'}</strong></span>
-                <span>Date: <strong style={{ color: '#059669' }}>{nlpPreview.dateResolution.resolvedDate} ({nlpPreview.dateResolution.matchedPhrase})</strong></span>
-                <span>Progress: <strong style={{ color: '#059669' }}>{nlpPreview.progressVal}%</strong></span>
-              </div>
-            )}
-          </div>
-
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => handleInstantIngest()}
-            disabled={isIngesting || !quickUpdateText.trim()}
-            style={{
-              padding: '0.75rem 1.4rem',
-              fontWeight: 800,
-              fontSize: '0.85rem',
-              height: 60,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              flexShrink: 0,
-            }}
-          >
-            {isIngesting ? (
-              <span>Ingesting...</span>
-            ) : (
-              <>
-                <Send size={15} />
-                <span>Ingest & Sync</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Instant Ingestion Success Result Banner (stays right in place!) */}
-        {ingestedResult && (
-          <div
-            style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid rgba(16, 185, 129, 0.4)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.85rem 1.15rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '0.75rem',
-              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.1)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 280, flex: 1 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 6, background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Check size={18} strokeWidth={3} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                  <span className="mono-pill" style={{ color: 'var(--brand-primary)', fontWeight: 800, fontSize: '0.675rem' }}>
-                    {ingestedResult.id}
-                  </span>
-                  <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 700 }}>
-                    Aligned to {ingestedResult.candidateActivityId} ({ingestedResult.progressVal}%)
-                  </span>
-                  <span className="badge badge-ready" style={{ fontSize: '0.625rem' }}>
-                    {ingestedResult.confidence}% Confidence
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }}>
-                  "{ingestedResult.text}"
-                </div>
-                <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                  Resolved IST Date: <strong>{ingestedResult.resolvedDate}</strong> • Discipline: {ingestedResult.discipline} • Area: {ingestedResult.area}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setActiveTab('site-updates')}
-                style={{ fontSize: '0.7rem' }}
-              >
-                <span>View in Site Reports</span>
-                <ChevronRight size={12} />
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setIngestedResult(null)}
-                style={{ fontSize: '0.7rem', padding: '0.3rem 0.5rem' }}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 3. Schedule Baseline & Completed Tasks Overview (KPI Strip) */}
+      {/* 2. Schedule Baseline & Completed Tasks Overview (KPI Strip) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.85rem' }}>
         <div className="card" style={{ padding: '0.9rem 1.15rem', borderLeft: '4px solid var(--brand-primary)' }}>
           <div style={{ fontSize: '0.675rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>

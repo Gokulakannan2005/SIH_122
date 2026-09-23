@@ -29,9 +29,9 @@ export const ProjectCalendarView: React.FC = () => {
 
   const istClock = useLiveISTClock();
 
-  // Target view month: Default to September 2026 (the active execution baseline window)
-  const [currentYear, setCurrentYear] = useState<number>(2026);
-  const [currentMonth, setCurrentMonth] = useState<number>(8); // 0-indexed: 8 = September
+  // Target view month: Default to current IST date
+  const [currentYear, setCurrentYear] = useState<number>(() => istClock.currentISTDate.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState<number>(() => istClock.currentISTDate.getMonth());
   const [selectedDiscipline, setSelectedDiscipline] = useState<string>('ALL');
   const [selectedActivity, setSelectedActivity] = useState<ScheduleActivity | null>(null);
 
@@ -102,7 +102,7 @@ export const ProjectCalendarView: React.FC = () => {
     }
 
     // Days in current month
-    const todayStr = '2026-09-21'; // Current prototype IST sync date
+    const todayStr = istClock.dateIsoString;
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = formatDate(currentYear, currentMonth, d);
       const isToday = dateStr === todayStr;
@@ -140,7 +140,7 @@ export const ProjectCalendarView: React.FC = () => {
     }
 
     return days;
-  }, [currentYear, currentMonth, enrichedSchedule, selectedDiscipline]);
+  }, [currentYear, currentMonth, enrichedSchedule, selectedDiscipline, istClock.dateIsoString]);
 
   // Discipline badge color
   const getDisciplineColor = (disc: string) => {

@@ -24,248 +24,7 @@ import {
 } from 'lucide-react';
 import { PlannerActionType } from '../types';
 import { evaluateMatch } from '../utils/matchingEngine';
-
-interface MatchScoreRadarChartProps {
-  score: number;
-  scoreBreakdown: {
-    keywordScore: number;
-    disciplineScore: number;
-    areaScore: number;
-    fuzzyScore: number;
-  };
-  activityId: string;
-  activityName: string;
-  isAlternative?: boolean;
-  reasons?: string[];
-}
-
-export const MatchScoreRadarChart: React.FC<MatchScoreRadarChartProps> = ({
-  score,
-  scoreBreakdown,
-  activityId,
-  activityName,
-  isAlternative = false,
-  reasons = [],
-}) => {
-  const cx = 120;
-  const cy = 110;
-  const maxR = 68;
-
-  // Normalized values clamped between 0 and 1
-  const kNorm = Math.min(1, Math.max(0, (scoreBreakdown.keywordScore || 0) / 50));
-  const dNorm = Math.min(1, Math.max(0, (scoreBreakdown.disciplineScore || 0) / 20));
-  const aNorm = Math.min(1, Math.max(0, (scoreBreakdown.areaScore || 0) / 15));
-  const fNorm = Math.min(1, Math.max(0, (scoreBreakdown.fuzzyScore || 0) / 15));
-
-  // Coordinates:
-  // Top: Keyword
-  const x1 = cx;
-  const y1 = cy - maxR * kNorm;
-  // Right: Discipline
-  const x2 = cx + maxR * dNorm;
-  const y2 = cy;
-  // Bottom: Area
-  const x3 = cx;
-  const y3 = cy + maxR * aNorm;
-  // Left: Fuzzy
-  const x4 = cx - maxR * fNorm;
-  const y4 = cy;
-
-  const dataPolygon = `${x1},${y1} ${x2},${y2} ${x3},${y3} ${x4},${y4}`;
-
-  // Rings
-  const rings = [0.25, 0.5, 0.75, 1.0];
-
-  const badgeColor = score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#ef4444';
-  const badgeBg = score >= 70 ? 'rgba(16, 185, 129, 0.12)' : score >= 40 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)';
-  const badgeBorder = score >= 70 ? 'rgba(16, 185, 129, 0.3)' : score >= 40 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)';
-
-  return (
-    <div
-      id="demo-target-explainability"
-      style={{
-        background: 'var(--bg-surface-secondary)',
-        border: '1px solid var(--border-default)',
-        borderRadius: 'var(--radius-md)',
-        padding: '1rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.85rem',
-      }}
-    >
-      {/* Header bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <Sparkles size={16} style={{ color: 'var(--brand-primary)' }} />
-          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
-            Multi-Factor Match Score Radar
-          </span>
-          <span style={{ fontSize: '0.75rem', color: 'var(--brand-primary)', fontWeight: 700 }}>
-            ({activityId})
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          {isAlternative ? (
-            <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: 4, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', fontWeight: 700 }}>
-              Manual Target Selected
-            </span>
-          ) : (
-            <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: 4, background: 'rgba(16, 185, 129, 0.12)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 700 }}>
-              ★ AI Top Candidate
-            </span>
-          )}
-          <span
-            style={{
-              fontSize: '0.8rem',
-              fontWeight: 800,
-              padding: '2px 10px',
-              borderRadius: 6,
-              background: badgeBg,
-              color: badgeColor,
-              border: `1px solid ${badgeBorder}`,
-            }}
-          >
-            {score}% Apt Confidence
-          </span>
-        </div>
-      </div>
-
-      {/* 2-Column Visualization: SVG Radar Chart on Left, Breakdown Meters on Right */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, auto) 1fr', gap: '1.25rem', alignItems: 'center' }}>
-        {/* SVG Radar */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="240" height="220" viewBox="0 0 240 220" style={{ overflow: 'visible' }}>
-            {/* Concentric diamond grid rings */}
-            {rings.map((r, i) => {
-              const rad = maxR * r;
-              return (
-                <polygon
-                  key={i}
-                  points={`${cx},${cy - rad} ${cx + rad},${cy} ${cx},${cy + rad} ${cx - rad},${cy}`}
-                  fill={i === rings.length - 1 ? 'rgba(0,0,0,0.06)' : 'none'}
-                  stroke="var(--border-default)"
-                  strokeWidth={i === rings.length - 1 ? '1.2' : '0.8'}
-                  strokeDasharray={i === rings.length - 1 ? 'none' : '2 2'}
-                  opacity={0.7}
-                />
-              );
-            })}
-
-            {/* Axis grid lines */}
-            <line x1={cx} y1={cy - maxR} x2={cx} y2={cy + maxR} stroke="var(--border-default)" strokeWidth="1" strokeDasharray="3 3" opacity={0.8} />
-            <line x1={cx - maxR} y1={cy} x2={cx + maxR} y2={cy} stroke="var(--border-default)" strokeWidth="1" strokeDasharray="3 3" opacity={0.8} />
-
-            {/* Data Polygon */}
-            <polygon
-              points={dataPolygon}
-              fill="rgba(14, 165, 233, 0.28)"
-              stroke="var(--brand-primary, #0284c7)"
-              strokeWidth="2.5"
-              style={{ transition: 'all 0.3s ease-out' }}
-            />
-
-            {/* Data Vertices */}
-            <circle cx={x1} cy={y1} r={4} fill="#fff" stroke="var(--brand-primary, #0284c7)" strokeWidth="2" />
-            <circle cx={x2} cy={y2} r={4} fill="#fff" stroke="var(--brand-primary, #0284c7)" strokeWidth="2" />
-            <circle cx={x3} cy={y3} r={4} fill="#fff" stroke="var(--brand-primary, #0284c7)" strokeWidth="2" />
-            <circle cx={x4} cy={y4} r={4} fill="#fff" stroke="var(--brand-primary, #0284c7)" strokeWidth="2" />
-
-            {/* Axis Labels */}
-            <text x={cx} y={cy - maxR - 8} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
-              Keyword ({scoreBreakdown.keywordScore}/50)
-            </text>
-            <text x={cx + maxR + 6} y={cy + 4} textAnchor="start" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
-              Discipline ({scoreBreakdown.disciplineScore}/20)
-            </text>
-            <text x={cx} y={cy + maxR + 18} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
-              Area ({scoreBreakdown.areaScore}/15)
-            </text>
-            <text x={cx - maxR - 6} y={cy + 4} textAnchor="end" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
-              Fuzzy ({scoreBreakdown.fuzzyScore}/15)
-            </text>
-          </svg>
-        </div>
-
-        {/* 4 Multi-Factor Score Meters */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
-          <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Keyword Weight</span>
-              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown.keywordScore}/50</strong>
-            </div>
-            <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
-              <div className="progress-bar-fill blue" style={{ width: `${(scoreBreakdown.keywordScore / 50) * 100}%`, transition: 'width 0.3s ease' }} />
-            </div>
-          </div>
-
-          <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Discipline Match</span>
-              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown.disciplineScore}/20</strong>
-            </div>
-            <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
-              <div className="progress-bar-fill green" style={{ width: `${(scoreBreakdown.disciplineScore / 20) * 100}%`, transition: 'width 0.3s ease' }} />
-            </div>
-          </div>
-
-          <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Spatial / Area</span>
-              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown.areaScore}/15</strong>
-            </div>
-            <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
-              <div className="progress-bar-fill amber" style={{ width: `${(scoreBreakdown.areaScore / 15) * 100}%`, transition: 'width 0.3s ease' }} />
-            </div>
-          </div>
-
-          <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Fuzzy Similarity</span>
-              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown.fuzzyScore}/15</strong>
-            </div>
-            <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
-              <div className="progress-bar-fill blue" style={{ width: `${(scoreBreakdown.fuzzyScore / 15) * 100}%`, transition: 'width 0.3s ease' }} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Matching Evidence Rationale tags */}
-      {reasons && reasons.length > 0 && (
-        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.65rem' }}>
-          <div style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase' }}>
-            Apt Evidence Rationale:
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
-            {reasons.map((reason, idx) => {
-              const isPhotoTag = reason.toLowerCase().includes('photo evidence') || reason.toLowerCase().includes('confirmed tag');
-              return (
-                <span
-                  key={idx}
-                  style={{
-                    fontSize: '0.725rem',
-                    padding: '3px 9px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: isPhotoTag ? 'var(--brand-surface)' : 'var(--bg-surface)',
-                    border: isPhotoTag ? '1px solid var(--brand-accent)' : '1px solid var(--border-subtle)',
-                    color: isPhotoTag ? 'var(--brand-primary)' : 'var(--text-primary)',
-                    fontWeight: isPhotoTag ? 700 : 500,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  {isPhotoTag ? '📷 ' : '✓ '} {reason}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+import { MatchScoreRadarChart } from './MatchScoreRadarChart';
 
 export const PlannerReviewView: React.FC = () => {
   const {
@@ -284,6 +43,47 @@ export const PlannerReviewView: React.FC = () => {
 
   // Search & Filter in the left queue
   const [queueSearch, setQueueSearch] = useState('');
+  const [disciplineFilter, setDisciplineFilter] = useState<string>('all');
+
+  // Dynamic real-time counts across all 4 queue tabs
+  const counts = useMemo(() => {
+    let review = 0;
+    let approved = 0;
+    let unplanned = 0;
+
+    siteUpdates.forEach(u => {
+      const match = matchResults[u.id];
+      const decision = plannerDecisions[u.id];
+
+      const isApproved =
+        decision?.status === 'approved' ||
+        decision?.status === 'modified' ||
+        (!decision && match?.category === 'ready');
+
+      const isUnplanned =
+        decision?.status === 'unplanned' ||
+        (!decision && match?.category === 'unplanned');
+
+      const isReview = !decision && match?.category === 'review';
+
+      if (isReview) review++;
+      if (isUnplanned) unplanned++;
+      if (isApproved) approved++;
+    });
+
+    return {
+      all: siteUpdates.length,
+      review,
+      approved,
+      unplanned,
+    };
+  }, [siteUpdates, matchResults, plannerDecisions]);
+
+  // Available disciplines for filtering
+  const availableDisciplines = useMemo(() => {
+    const list = Array.from(new Set(siteUpdates.map(u => u.discipline).filter(Boolean)));
+    return ['all', ...list];
+  }, [siteUpdates]);
 
   // Filtered review queue items
   const queueItems = useMemo(() => {
@@ -293,13 +93,23 @@ export const PlannerReviewView: React.FC = () => {
         const decision = plannerDecisions[u.id];
 
         // Status category
-        const isApproved = decision?.status === 'approved';
-        const isUnplanned = decision?.status === 'unplanned' || (!decision && match?.category === 'unplanned');
-        const isReview = !isApproved && !isUnplanned && match?.category === 'review';
+        const isApproved =
+          decision?.status === 'approved' ||
+          decision?.status === 'modified' ||
+          (!decision && match?.category === 'ready');
+        const isUnplanned =
+          decision?.status === 'unplanned' ||
+          (!decision && match?.category === 'unplanned');
+        const isReview = !decision && match?.category === 'review';
 
         if (plannerQueueFilter === 'review' && !isReview) return false;
         if (plannerQueueFilter === 'unplanned' && !isUnplanned) return false;
         if (plannerQueueFilter === 'approved' && !isApproved) return false;
+
+        // Discipline filter
+        if (disciplineFilter !== 'all' && u.discipline.toLowerCase() !== disciplineFilter.toLowerCase()) {
+          return false;
+        }
 
         // Search text
         if (queueSearch.trim()) {
@@ -321,30 +131,46 @@ export const PlannerReviewView: React.FC = () => {
         const matchB = matchResults[b.id];
         return (matchA?.confidenceScore || 0) - (matchB?.confidenceScore || 0);
       });
-  }, [siteUpdates, matchResults, plannerDecisions, plannerQueueFilter, queueSearch]);
+  }, [siteUpdates, matchResults, plannerDecisions, plannerQueueFilter, disciplineFilter, queueSearch]);
 
-  // Robust active update resolution: ensures selectedReviewUpdateId from Data Ingestion Hub or other views is immediately loaded
+  // Pagination & Arbitrary Dataset Scale Engine (supports 10 to 1,000,000+ records)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  const totalPages = Math.max(1, Math.ceil(queueItems.length / pageSize));
+
+  // Reset page on filter or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [plannerQueueFilter, queueSearch, disciplineFilter, pageSize]);
+
+  // Robust active update resolution: keeps selection within current filtered queue, or falls back to queue[0]
   const currentUpdate = useMemo(() => {
     if (selectedReviewUpdateId) {
       const foundInQueue = queueItems.find(item => item.id === selectedReviewUpdateId);
       if (foundInQueue) return foundInQueue;
-      const foundInAll = siteUpdates.find(item => item.id === selectedReviewUpdateId);
-      if (foundInAll) return foundInAll;
     }
-    if (queueItems.length === 0) return siteUpdates[0] || null;
-    return queueItems[0];
-  }, [queueItems, selectedReviewUpdateId, siteUpdates]);
+    if (queueItems.length > 0) return queueItems[0];
+    return null;
+  }, [queueItems, selectedReviewUpdateId]);
 
-  // If a task is selected from outside (e.g. Data Ingestion Hub) that is not in the current filter, auto-adjust to 'all' so it is visible in the list
+  // When active item changes, ensure current page contains it
   useEffect(() => {
-    if (selectedReviewUpdateId) {
-      const inCurrentQueue = queueItems.some(item => item.id === selectedReviewUpdateId);
-      const existsInAll = siteUpdates.some(item => item.id === selectedReviewUpdateId);
-      if (existsInAll && !inCurrentQueue && plannerQueueFilter !== 'all') {
-        setPlannerQueueFilter('all');
+    if (currentUpdate) {
+      const idx = queueItems.findIndex(item => item.id === currentUpdate.id);
+      if (idx !== -1) {
+        const itemPage = Math.floor(idx / pageSize) + 1;
+        if (itemPage !== currentPage) {
+          setCurrentPage(itemPage);
+        }
       }
     }
-  }, [selectedReviewUpdateId, queueItems, siteUpdates, plannerQueueFilter, setPlannerQueueFilter]);
+  }, [currentUpdate?.id, queueItems, pageSize]);
+
+  const paginatedQueueItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return queueItems.slice(start, start + pageSize);
+  }, [queueItems, currentPage, pageSize]);
 
   // Ref to automatically scroll to the active queue item in the left queue list
   const activeQueueItemRef = useRef<HTMLDivElement | null>(null);
@@ -355,7 +181,19 @@ export const PlannerReviewView: React.FC = () => {
     }
   }, [currentUpdate?.id]);
 
-  const currentMatch = currentUpdate ? matchResults[currentUpdate.id] : null;
+  const currentMatch = useMemo(() => {
+    if (!currentUpdate) return null;
+    return matchResults[currentUpdate.id] || {
+      siteUpdateId: currentUpdate.id,
+      candidateActivityId: '',
+      confidenceScore: 0,
+      category: 'unplanned',
+      explanation: 'No initial baseline match evaluated.',
+      subScores: { textSimilarity: 0, disciplineMatch: 0, wbsHierarchy: 0, dateProximity: 0, contractorMatch: 0 },
+      suggestedActivities: [],
+    };
+  }, [currentUpdate, matchResults]);
+
   const currentDecision = currentUpdate ? plannerDecisions[currentUpdate.id] : null;
 
   // Search & Selection within Schedule Activities Linker
@@ -460,33 +298,28 @@ export const PlannerReviewView: React.FC = () => {
     const updateIdToProcess = currentUpdate.id;
 
     // Determine next queue item to advance focus without disorientation
+    const remainingItems = queueItems.filter(item => item.id !== updateIdToProcess);
     const currentIndex = queueItems.findIndex(item => item.id === updateIdToProcess);
     let nextItemId: string | null = null;
-    if (queueItems.length > 1) {
-      const nextIndex = currentIndex < queueItems.length - 1 ? currentIndex + 1 : currentIndex > 0 ? currentIndex - 1 : 0;
-      if (queueItems[nextIndex] && queueItems[nextIndex].id !== updateIdToProcess) {
-        nextItemId = queueItems[nextIndex].id;
-      }
+    if (remainingItems.length > 0) {
+      const nextIndex = Math.min(currentIndex, remainingItems.length - 1);
+      nextItemId = remainingItems[nextIndex].id;
     }
 
     handlePlannerAction(updateIdToProcess, type, targetId, finalNote);
     setSelectedReviewUpdateId(nextItemId);
   };
 
-  const pendingReviewTotal = siteUpdates.filter(
-    u => matchResults[u.id]?.category === 'review' && !plannerDecisions[u.id]
-  ).length;
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Top Header matching Reference Screen 3 */}
+      {/* Top Header matching Verification Queue */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', paddingBottom: '0.25rem' }}>
         <div>
           <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: '0.25rem' }}>
-            Field Submissions Inbox
+            Verification Queue & Field Approvals
           </h1>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            Review and reconcile field updates from site supervisors.
+            Audit, verify, and reconcile field execution updates against the master schedule baseline.
           </p>
         </div>
 
@@ -494,10 +327,10 @@ export const PlannerReviewView: React.FC = () => {
           <button
             type="button"
             className="btn btn-secondary btn-sm"
-            onClick={() => setActiveTab('site-updates')}
+            onClick={() => setActiveTab('project-info')}
             style={{ padding: '0.4rem 0.85rem', fontSize: '0.75rem', fontWeight: 600 }}
           >
-            <span>View All Field Updates</span>
+            <span>View Master Schedule (Project Info)</span>
             <ArrowRight size={13} />
           </button>
         </div>
@@ -509,7 +342,7 @@ export const PlannerReviewView: React.FC = () => {
         {/* Left Pane: Submissions Inbox Queue with Filter Tabs */}
         <div className="review-queue-pane">
           <div className="review-queue-header">
-            {/* Top Filter Tabs matching Screen 3 */}
+            {/* Top Filter Tabs with live dynamic counts */}
             <div style={{ display: 'flex', gap: '4px', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
               <button
                 className={`btn btn-sm ${plannerQueueFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
@@ -517,7 +350,7 @@ export const PlannerReviewView: React.FC = () => {
                 onClick={() => setPlannerQueueFilter('all')}
                 type="button"
               >
-                All ({siteUpdates.length || 17})
+                All ({counts.all})
               </button>
               <button
                 className={`btn btn-sm ${plannerQueueFilter === 'review' ? 'btn-primary' : 'btn-secondary'}`}
@@ -525,7 +358,7 @@ export const PlannerReviewView: React.FC = () => {
                 onClick={() => setPlannerQueueFilter('review')}
                 type="button"
               >
-                Needs Review ({pendingReviewTotal || 5})
+                Needs Review ({counts.review})
               </button>
               <button
                 className={`btn btn-sm ${plannerQueueFilter === 'approved' ? 'btn-primary' : 'btn-secondary'}`}
@@ -533,7 +366,7 @@ export const PlannerReviewView: React.FC = () => {
                 onClick={() => setPlannerQueueFilter('approved')}
                 type="button"
               >
-                Auto-Matched (9)
+                Auto-Matched ({counts.approved})
               </button>
               <button
                 className={`btn btn-sm ${plannerQueueFilter === 'unplanned' ? 'btn-primary' : 'btn-secondary'}`}
@@ -541,7 +374,7 @@ export const PlannerReviewView: React.FC = () => {
                 onClick={() => setPlannerQueueFilter('unplanned')}
                 type="button"
               >
-                Unplanned Work (3)
+                Unplanned Work ({counts.unplanned})
               </button>
             </div>
 
@@ -550,29 +383,13 @@ export const PlannerReviewView: React.FC = () => {
               <select
                 className="form-input"
                 style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', height: 'auto', flex: 1 }}
+                value={disciplineFilter}
+                onChange={e => setDisciplineFilter(e.target.value)}
               >
-                <option>Date ▾</option>
-                <option>Today (8 Sep)</option>
-                <option>Yesterday (7 Sep)</option>
-                <option>Past 7 Days</option>
-              </select>
-              <select
-                className="form-input"
-                style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', height: 'auto', flex: 1 }}
-              >
-                <option>Discipline ▾</option>
-                <option>Piping</option>
-                <option>Civil</option>
-                <option>Electrical</option>
-              </select>
-              <select
-                className="form-input"
-                style={{ fontSize: '0.7rem', padding: '0.25rem 0.4rem', height: 'auto', flex: 1 }}
-              >
-                <option>Supervisor ▾</option>
-                <option>Ramesh</option>
-                <option>Kumar</option>
-                <option>Arun</option>
+                <option value="all">All Disciplines</option>
+                {availableDisciplines.filter(d => d !== 'all').map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
               </select>
             </div>
 
@@ -601,7 +418,7 @@ export const PlannerReviewView: React.FC = () => {
                 </div>
               </div>
             ) : (
-              queueItems.map(item => {
+              paginatedQueueItems.map(item => {
                 const match = matchResults[item.id];
                 const decision = plannerDecisions[item.id];
                 const isActive = item.id === currentUpdate?.id;
@@ -650,8 +467,35 @@ export const PlannerReviewView: React.FC = () => {
                     </div>
 
                     {decision && (
-                      <div style={{ marginTop: 6, paddingTop: 4, borderTop: '1px dashed var(--border-subtle)', fontSize: '0.725rem', color: '#047857', fontWeight: 700 }}>
-                        ✓ {decision.status.toUpperCase()} ({decision.linkedActivityId || 'UNPLANNED'})
+                      <div
+                        style={{
+                          marginTop: 6,
+                          paddingTop: 4,
+                          borderTop: '1px dashed var(--border-subtle)',
+                          fontSize: '0.725rem',
+                          color: decision.status === 'unplanned' ? '#d97706' : decision.status === 'rejected' ? '#dc2626' : '#047857',
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        {decision.status === 'unplanned' ? (
+                          <>
+                            <HelpCircle size={12} />
+                            <span>OUT-OF-BASELINE (UNPLANNED)</span>
+                          </>
+                        ) : decision.status === 'rejected' ? (
+                          <>
+                            <XCircle size={12} />
+                            <span>REJECTED</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 size={12} />
+                            <span>{decision.status.toUpperCase()} ({decision.linkedActivityId || 'VERIFIED'})</span>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -659,6 +503,51 @@ export const PlannerReviewView: React.FC = () => {
               })
             )}
           </div>
+
+          {/* High-Scale Pagination Footer (supports small batches to 10M+ tasks) */}
+          {queueItems.length > 0 && (
+            <div
+              style={{
+                padding: '0.55rem 0.85rem',
+                borderTop: '1px solid var(--border-default)',
+                background: 'var(--bg-surface-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '0.725rem',
+                borderBottomLeftRadius: 'var(--radius-sm)',
+                borderBottomRightRadius: 'var(--radius-sm)',
+              }}
+            >
+              <div style={{ color: 'var(--text-muted)' }}>
+                <strong>{Math.min((currentPage - 1) * pageSize + 1, queueItems.length)}</strong>–<strong>{Math.min(currentPage * pageSize, queueItems.length)}</strong> of <strong>{queueItems.length}</strong> tasks
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 7px', fontSize: '0.675rem', opacity: currentPage === 1 ? 0.4 : 1 }}
+                >
+                  Prev
+                </button>
+                <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}>
+                  Page {currentPage}/{totalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 7px', fontSize: '0.675rem', opacity: currentPage >= totalPages ? 0.4 : 1 }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Pane: Review & Approval Workbench */}
@@ -1043,6 +932,68 @@ export const PlannerReviewView: React.FC = () => {
 
             {/* SECTION 3: PROMINENT ACTION BAR */}
             <div id="demo-target-human-control" className="card" style={{ padding: '1.15rem 1.35rem', background: 'var(--bg-surface)' }}>
+              
+              {/* Decision Confirmation Banners */}
+              {currentDecision?.status === 'unplanned' && (
+                <div
+                  style={{
+                    background: 'rgba(217, 119, 6, 0.1)',
+                    border: '1px solid rgba(217, 119, 6, 0.35)',
+                    borderRadius: 8,
+                    padding: '0.85rem 1rem',
+                    marginBottom: '1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <HelpCircle size={22} style={{ color: '#d97706', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#d97706' }}>
+                      Classified as Out-of-Baseline (Unplanned Scope)
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                      This field log has been recorded as unplanned work outside baseline milestones and flagged for change-order review.
+                      {currentDecision.digitalSignature && (
+                        <span style={{ fontFamily: 'var(--font-mono)', marginLeft: 6, opacity: 0.85 }}>
+                          [{currentDecision.digitalSignature}]
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentDecision?.status === 'approved' && (
+                <div
+                  style={{
+                    background: 'rgba(5, 150, 105, 0.1)',
+                    border: '1px solid rgba(5, 150, 105, 0.35)',
+                    borderRadius: 8,
+                    padding: '0.85rem 1rem',
+                    marginBottom: '1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <CheckCircle2 size={22} style={{ color: '#059669', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#059669' }}>
+                      Verified & Linked to Master Schedule: {currentDecision.linkedActivityId}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                      Cryptographically verified & signed milestone progress update logged in project audit chain.
+                      {currentDecision.digitalSignature && (
+                        <span style={{ fontFamily: 'var(--font-mono)', marginLeft: 6, opacity: 0.85 }}>
+                          [{currentDecision.digitalSignature}]
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="form-group" style={{ marginBottom: '1rem' }}>
                 <label className="form-label" style={{ fontSize: '0.775rem' }}>
                   <span>Planner Verification Note / Justification (Logged to Audit Trail):</span>
@@ -1084,7 +1035,11 @@ export const PlannerReviewView: React.FC = () => {
                   >
                     <CheckCircle2 size={16} />
                     <span>
-                      {isSelectedDifferentFromRecommended
+                      {currentDecision?.status === 'unplanned'
+                        ? `Re-link & Align to ${selectedActivityObj.activityId}`
+                        : currentDecision?.status === 'approved' && !isSelectedDifferentFromRecommended
+                        ? `Re-confirm Link to ${selectedActivityObj.activityId}`
+                        : isSelectedDifferentFromRecommended
                         ? `Confirm Re-Link to ${selectedActivityObj.activityId}`
                         : `Approve Match to ${selectedActivityObj.activityId}`}
                     </span>
@@ -1096,19 +1051,21 @@ export const PlannerReviewView: React.FC = () => {
                   type="button"
                   className="btn"
                   style={{
-                    background: '#d97706',
-                    color: '#ffffff',
+                    background: currentDecision?.status === 'unplanned' ? 'rgba(217, 119, 6, 0.15)' : '#d97706',
+                    color: currentDecision?.status === 'unplanned' ? '#d97706' : '#ffffff',
                     borderColor: '#b45309',
                     padding: '0.65rem 1.15rem',
                     fontWeight: 700,
                     fontSize: '0.85rem',
+                    cursor: currentDecision?.status === 'unplanned' ? 'default' : 'pointer',
                   }}
+                  disabled={currentDecision?.status === 'unplanned'}
                   onClick={() =>
                     executeAction('mark_unplanned', null, 'Planner classified update as unplanned / out-of-scope work')
                   }
                 >
                   <HelpCircle size={16} />
-                  <span>Mark Unplanned Work</span>
+                  <span>{currentDecision?.status === 'unplanned' ? 'Classified as Unplanned' : 'Mark Unplanned Work'}</span>
                 </button>
 
                 {/* Reject Button */}

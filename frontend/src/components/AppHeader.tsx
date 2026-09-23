@@ -25,6 +25,7 @@ import {
   LayoutDashboard,
   BookOpen,
   BarChart3,
+  Building2,
 } from 'lucide-react';
 
 interface NotificationItem {
@@ -214,18 +215,24 @@ export const AppHeader: React.FC = () => {
               color: 'var(--text-secondary)',
               background: 'var(--bg-subtle)',
               border: '1px solid var(--border-subtle)',
-              padding: '2px 7px',
+              padding: '3px 8px',
               borderRadius: 'var(--radius-xs)',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               display: 'flex',
               alignItems: 'center',
-              gap: 4,
+              gap: 6,
             }}
             title="Switch or Create Project Baseline"
           >
-            <span>{currentProject.shortCode || 'IOCL-REF'}</span>
-            <ChevronDown size={11} />
+            <Building2 size={13} style={{ color: 'var(--brand-primary)', flexShrink: 0 }} />
+            <span style={{ fontWeight: 800, color: 'var(--text-primary)', maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {currentProject?.name || 'Active Project'}
+            </span>
+            <span className="mono-pill" style={{ fontSize: '0.62rem', padding: '1px 5px', lineHeight: 1 }}>
+              {currentProject?.shortCode || currentProject?.code || 'IOCL'}
+            </span>
+            <ChevronDown size={11} style={{ color: 'var(--text-muted)' }} />
           </button>
           <ChevronRight size={12} style={{ color: 'var(--text-muted)' }} />
           <span

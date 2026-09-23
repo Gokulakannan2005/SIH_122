@@ -1,84 +1,74 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useProject } from '../context/ProjectContext';
 import {
   Sparkles,
   AlertTriangle,
   TrendingDown,
-  ShieldCheck,
-  CheckCircle2,
-  ArrowRight,
-  Zap,
   Play,
   RotateCcw,
   Copy,
   Calendar,
   Layers,
-  ChevronRight,
-  ExternalLink,
-  Info,
-  Sliders,
   Check,
-  FileText
+  Zap,
+  Clock,
+  ArrowRight,
 } from 'lucide-react';
 import {
   runScenarioSimulation,
   DEMO_SCHEDULE_DEPENDENCIES,
-  getPredecessors,
-  getSuccessors,
 } from '../utils/scheduleSimulator';
 import { ScenarioSimulationResult } from '../types';
+
+const formatDisplayDate = (dateStr?: string) => {
+  if (!dateStr) return 'N/A';
+  try {
+    const d = new Date(dateStr);
+    return isNaN(d.getTime())
+      ? dateStr
+      : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+};
 
 export const CopilotView: React.FC = () => {
   const {
     enrichedSchedule,
-    siteUpdates,
-    matchResults,
-    plannerDecisions,
-    setActiveTab,
     setSelectedScheduleActivityId,
-    setSelectedInspectorUpdateId,
     addToast,
   } = useProject();
 
-  const [activeAnalysis, setActiveAnalysis] = useState<'simulator' | 'briefing' | 'provenance'>('simulator');
-
-  // Simulator Configuration State
+  // Simulator State
   const [selectedActivityId, setSelectedActivityId] = useState<string>('PIP-L6-012');
   const [simulatedDelayDays, setSimulatedDelayDays] = useState<number>(3);
   const [isScenarioActive, setIsScenarioActive] = useState<boolean>(true);
   const [briefingCopied, setBriefingCopied] = useState<boolean>(false);
+  const [showFullTable, setShowFullTable] = useState<boolean>(false);
 
-  // Selected Activity Object & Linked Updates
+  // Selected Activity Object
   const selectedActivityObj = useMemo(() => {
     return enrichedSchedule.find(a => a.activityId === selectedActivityId) || enrichedSchedule[0];
   }, [enrichedSchedule, selectedActivityId]);
-
-  const linkedUpdates = useMemo(() => {
-    if (!selectedActivityObj) return [];
-    return siteUpdates.filter(u => {
-      const dec = plannerDecisions[u.id];
-      if (dec && dec.linkedActivityId) {
-        return dec.linkedActivityId === selectedActivityObj.activityId && dec.status !== 'rejected';
-      }
-      const match = matchResults[u.id];
-      return match?.category === 'ready' && match.candidateActivityId === selectedActivityObj.activityId;
-    });
-  }, [selectedActivityObj, siteUpdates, plannerDecisions, matchResults]);
 
   // Compute Deterministic Simulation Result
   const simulationResult: ScenarioSimulationResult | null = useMemo(() => {
     if (!selectedActivityObj) return null;
     const delay = isScenarioActive ? simulatedDelayDays : 0;
-    return runScenarioSimulation(selectedActivityObj.activityId, delay, enrichedSchedule, DEMO_SCHEDULE_DEPENDENCIES);
+    return runScenarioSimulation(
+      selectedActivityObj.activityId,
+      delay,
+      enrichedSchedule,
+      DEMO_SCHEDULE_DEPENDENCIES
+    );
   }, [selectedActivityObj, simulatedDelayDays, isScenarioActive, enrichedSchedule]);
 
-  // Handle Scenario Actions
   const handleRunScenario = () => {
     setIsScenarioActive(true);
     addToast({
       type: 'info',
-      title: 'Scenario Simulation Executed',
-      message: `Calculated deterministic delay propagation for ${selectedActivityId} (+${simulatedDelayDays}d slip).`,
+      title: 'Simulation Updated',
+      message: `Calculated forward propagation for ${selectedActivityId} with +${simulatedDelayDays}d slip.`,
     });
   };
 
@@ -87,8 +77,8 @@ export const CopilotView: React.FC = () => {
     setIsScenarioActive(false);
     addToast({
       type: 'info',
-      title: 'Simulator Reset to Baseline',
-      message: 'Restored baseline schedule dates. Actual project data remains untouched.',
+      title: 'Simulator Reset',
+      message: 'Restored baseline schedule dates.',
     });
   };
 
@@ -96,857 +86,516 @@ export const CopilotView: React.FC = () => {
     if (!simulationResult) return;
     navigator.clipboard.writeText(simulationResult.executiveBriefing);
     setBriefingCopied(true);
-    setTimeout(() => setBriefingCopied(false), 3000);
+    setTimeout(() => setBriefingCopied(false), 2500);
     addToast({
       type: 'success',
-      title: 'Executive Briefing Copied',
-      message: 'Briefing summary copied to clipboard for distribution.',
+      title: 'Copied to Clipboard',
+      message: 'Executive prediction briefing copied.',
     });
   };
 
-  // Quick Prompt helper
-  const handleSelectPresetPrompt = (activityId: string, days: number) => {
+  const handleSelectPreset = (activityId: string, days: number) => {
     setSelectedActivityId(activityId);
     setSimulatedDelayDays(days);
     setIsScenarioActive(true);
-    setActiveAnalysis('simulator');
     addToast({
       type: 'info',
-      title: 'Scenario Loaded',
-      message: `Loaded scenario for ${activityId} with +${days} days delay.`,
+      title: 'Scenario Preset Loaded',
+      message: `Loaded ${activityId} (+${days}d).`,
     });
   };
 
-  // Briefing metrics
-  const completedCount = enrichedSchedule.filter(a => a.status === 'Completed').length;
-  const delayedItems = enrichedSchedule.filter(a => (a.varianceDays || 0) > 0 || a.status === 'Delayed');
-  const pendingReviews = siteUpdates.filter(u => !plannerDecisions[u.id] && matchResults[u.id]?.category === 'review');
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Top Banner */}
-      <div className="banner-card" style={{ borderLeftColor: 'var(--brand-primary)' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 6 }}>
-            <span className="brand-badge" style={{ padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700 }}>
-              Project Controls Intelligence
-            </span>
-            <span className="mono-pill" style={{ padding: '3px 8px', fontSize: '0.75rem' }}>
-              Deterministic Forward Propagation
-            </span>
-          </div>
-          <h2 className="banner-title" style={{ marginTop: 6, fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Sparkles size={22} style={{ color: 'var(--brand-primary)' }} />
-            What-If Schedule Risk Simulator & Copilot
-          </h2>
-          <p className="banner-desc" style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'var(--text-secondary)', maxWidth: '750px', marginTop: 4 }}>
-            Simulate operational delays on L5/L6 milestone activities, analyze downstream critical path cascades, and generate data-grounded executive briefings with full mathematical traceability.
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button
-            className={`btn btn-sm ${activeAnalysis === 'simulator' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveAnalysis('simulator')}
-            type="button"
-          >
-            What-If Schedule Simulator
-          </button>
-          <button
-            className={`btn btn-sm ${activeAnalysis === 'briefing' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveAnalysis('briefing')}
-            type="button"
-          >
-            Executive Progress Briefing
-          </button>
-          <button
-            className={`btn btn-sm ${activeAnalysis === 'provenance' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveAnalysis('provenance')}
-            type="button"
-          >
-            Forensic Provenance Model
-          </button>
-        </div>
-      </div>
-
-      {/* Quick Scenario Inquiries Toolbar */}
-      <div className="toolbar-card">
-        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-          Standard Scenarios:
-        </div>
-        <div className="filter-pill-group">
-          <button
-            className={`filter-pill ${selectedActivityId === 'PIP-L6-012' && simulatedDelayDays === 3 && activeAnalysis === 'simulator' ? 'active' : ''}`}
-            onClick={() => handleSelectPresetPrompt('PIP-L6-012', 3)}
-            type="button"
-          >
-            ⚡ Cooling Water Erection Slip (+3d)
-          </button>
-          <button
-            className={`filter-pill ${selectedActivityId === 'CIV-L6-002' && simulatedDelayDays === 4 && activeAnalysis === 'simulator' ? 'active' : ''}`}
-            onClick={() => handleSelectPresetPrompt('CIV-L6-002', 4)}
-            type="button"
-          >
-            🏗️ Pump Foundation Curing Delay (+4d)
-          </button>
-          <button
-            className={`filter-pill ${selectedActivityId === 'ELE-L6-021' && simulatedDelayDays === 5 && activeAnalysis === 'simulator' ? 'active' : ''}`}
-            onClick={() => handleSelectPresetPrompt('ELE-L6-021', 5)}
-            type="button"
-          >
-            🔌 Cable Tray Installation Hold (+5d)
-          </button>
-        </div>
-      </div>
-
-      {/* =========================================================================
-          TAB 1: WHAT-IF SCHEDULE RISK SIMULATOR (FLAGSHIP FEATURE)
-          ========================================================================= */}
-      {activeAnalysis === 'simulator' && simulationResult && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          
-          {/* Top Non-Destructive Sandbox Notice */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+      {/* Compact Top Header with Quick Presets */}
+      <div
+        className="card"
+        style={{
+          padding: '0.75rem 1rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          borderLeft: '4px solid var(--brand-primary)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <div
             style={{
-              padding: '0.65rem 1rem',
-              background: 'var(--bg-surface-secondary)',
-              border: '1px solid var(--border-subtle)',
-              borderLeft: '4px solid var(--brand-primary)',
-              borderRadius: 'var(--radius-sm)',
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: 'rgba(56, 189, 248, 0.12)',
+              color: '#38bdf8',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: '0.8rem',
-              color: 'var(--text-secondary)',
+              justifyContent: 'center',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Info size={16} style={{ color: 'var(--brand-primary)', flexShrink: 0 }} />
-              <span>
-                <strong>Non-Destructive Simulation Mode:</strong> Calculated date shifts and risk metrics are computed in an isolated sandbox. Real Primavera/MS-Project baseline schedule and field evidence remain unaltered.
-              </span>
-            </div>
-            {isScenarioActive && simulatedDelayDays > 0 && (
-              <span className="mono-pill" style={{ background: 'var(--brand-badge-bg)', color: 'var(--brand-badge-fg)', borderColor: 'var(--brand-badge-border)', fontWeight: 700 }}>
-                Scenario Active (+{simulatedDelayDays}d)
-              </span>
-            )}
+            <Sparkles size={18} />
           </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                Delay Risk Simulator & Predictor
+              </h2>
+              <span className="brand-badge" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
+                Deterministic CPM
+              </span>
+            </div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              Forward delay propagation across critical path dependencies
+            </div>
+          </div>
+        </div>
 
-          {/* Configuration Grid: Activity Selection & Delay Parameter Slider */}
-          <div id="demo-target-delay-simulation" style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: '1.25rem' }}>
-            
-            {/* Left Card: Target Activity Details */}
-            <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label className="form-label" style={{ marginBottom: 0, fontSize: '0.8rem' }}>
-                  <span>1. Select Baseline Activity to Simulate:</span>
-                </label>
-                <span className="mono-pill">{selectedActivityObj.discipline}</span>
+        {/* Quick Standard Presets */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginRight: 2 }}>
+            Presets:
+          </span>
+          <button
+            type="button"
+            className={`filter-pill ${selectedActivityId === 'PIP-L6-012' && simulatedDelayDays === 3 ? 'active' : ''}`}
+            onClick={() => handleSelectPreset('PIP-L6-012', 3)}
+            style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+          >
+            ⚡ CW Erection (+3d)
+          </button>
+          <button
+            type="button"
+            className={`filter-pill ${selectedActivityId === 'CIV-L6-002' && simulatedDelayDays === 4 ? 'active' : ''}`}
+            onClick={() => handleSelectPreset('CIV-L6-002', 4)}
+            style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+          >
+            🏗️ Foundation Cure (+4d)
+          </button>
+          <button
+            type="button"
+            className={`filter-pill ${selectedActivityId === 'ELE-L6-021' && simulatedDelayDays === 5 ? 'active' : ''}`}
+            onClick={() => handleSelectPreset('ELE-L6-021', 5)}
+            style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+          >
+            🔌 Cable Tray (+5d)
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={handleResetScenario}
+            title="Reset to 0-day baseline"
+            style={{ fontSize: '0.7rem', padding: '3px 6px', color: 'var(--text-muted)' }}
+          >
+            <RotateCcw size={12} />
+            <span>Reset</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main 2-Column Command Deck: No Manual Scrolling Needed */}
+      {simulationResult && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(310px, 350px) minmax(0, 1fr)',
+            gap: '1rem',
+            alignItems: 'start',
+          }}
+        >
+          {/* LEFT COLUMN: Controls & Selected Target Activity */}
+          <div
+            className="card"
+            style={{
+              padding: '0.95rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                1. Target Activity
+              </span>
+              <span className="mono-pill" style={{ fontSize: '0.65rem' }}>
+                {selectedActivityObj.discipline}
+              </span>
+            </div>
+
+            {/* Target Activity Dropdown */}
+            <select
+              className="form-select"
+              value={selectedActivityId}
+              onChange={e => {
+                setSelectedActivityId(e.target.value);
+                setIsScenarioActive(true);
+              }}
+              style={{ width: '100%', fontSize: '0.8rem', fontWeight: 600, padding: '0.45rem' }}
+            >
+              {enrichedSchedule.map(a => (
+                <option key={a.activityId} value={a.activityId}>
+                  [{a.activityId}] {a.activityName}
+                </option>
+              ))}
+            </select>
+
+            {/* Compact Info Pill */}
+            <div
+              style={{
+                background: 'var(--bg-surface-secondary)',
+                padding: '0.55rem 0.75rem',
+                borderRadius: 'var(--radius-xs)',
+                border: '1px solid var(--border-subtle)',
+                fontSize: '0.725rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.3rem',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Planned Window:</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                  {formatDisplayDate(selectedActivityObj.plannedStart)} &rarr; {formatDisplayDate(selectedActivityObj.plannedFinish)}
+                </span>
               </div>
-
-              <select
-                className="form-select"
-                value={selectedActivityId}
-                onChange={e => {
-                  setSelectedActivityId(e.target.value);
-                  setIsScenarioActive(true);
-                }}
-                style={{ width: '100%', fontSize: '0.85rem', fontWeight: 600 }}
-              >
-                {enrichedSchedule.map(a => (
-                  <option key={a.activityId} value={a.activityId}>
-                    [{a.activityId}] {a.activityName} ({a.area} • WBS {a.wbs})
-                  </option>
-                ))}
-              </select>
-
-              {/* Activity Details Micro-Table */}
-              <div
-                style={{
-                  background: 'var(--bg-subtle)',
-                  padding: '0.75rem 0.9rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.45rem',
-                  fontSize: '0.775rem',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Planned Baseline Dates:</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                    {selectedActivityObj.plannedStart} &rarr; {selectedActivityObj.plannedFinish}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Actual Field Status:</span>
-                  <span style={{ fontWeight: 700, color: selectedActivityObj.status === 'Completed' ? 'var(--status-ready-fg)' : selectedActivityObj.status === 'Delayed' ? 'var(--status-unplanned-fg)' : 'var(--brand-primary)' }}>
-                    {selectedActivityObj.status || 'Not Started'} ({selectedActivityObj.progressPercent || 0}%)
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Current Evidence Links:</span>
-                  <span style={{ fontWeight: 600 }}>
-                    {linkedUpdates.length} Verified Field Updates
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Workfront Area:</span>
-                  <span style={{ fontWeight: 600 }}>{selectedActivityObj.area}</span>
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Area & Status:</span>
+                <span style={{ fontWeight: 700, color: selectedActivityObj.status === 'Completed' ? '#10b981' : selectedActivityObj.status === 'Delayed' ? '#ef4444' : 'var(--brand-primary)' }}>
+                  {selectedActivityObj.area} &bull; {selectedActivityObj.status || 'In Progress'} ({selectedActivityObj.progressPercent || 0}%)
+                </span>
               </div>
             </div>
 
-            {/* Right Card: Delay Parameters & Action Controls */}
-            <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            {/* Slider & Quick Days Selection */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label className="form-label" style={{ marginBottom: 0, fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  <span>2. Assumed Operational Delay (Days):</span>
-                </label>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  2. Assumed Slip:
+                </span>
                 <span
                   style={{
                     fontFamily: 'var(--font-mono)',
-                    fontSize: '0.9rem',
+                    fontSize: '0.8rem',
                     fontWeight: 800,
                     padding: '2px 8px',
-                    borderRadius: '4px',
-                    background: simulatedDelayDays > 0 ? (simulatedDelayDays >= 7 ? 'var(--danger-soft)' : 'var(--warning-soft)') : 'var(--surface-secondary)',
-                    color: simulatedDelayDays > 0 ? (simulatedDelayDays >= 7 ? 'var(--danger)' : 'var(--warning)') : 'var(--text-muted)',
-                    border: `1px solid ${simulatedDelayDays > 0 ? (simulatedDelayDays >= 7 ? '#FECDD3' : '#FDE68A') : 'var(--border-default)'}`,
-                    transition: 'all 0.15s ease',
+                    borderRadius: 4,
+                    background: simulatedDelayDays > 0 ? (simulatedDelayDays >= 7 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)') : 'rgba(255,255,255,0.06)',
+                    color: simulatedDelayDays > 0 ? (simulatedDelayDays >= 7 ? '#ef4444' : '#f59e0b') : 'var(--text-muted)',
+                    border: `1px solid ${simulatedDelayDays > 0 ? (simulatedDelayDays >= 7 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)') : 'var(--border-subtle)'}`,
                   }}
                 >
-                  {simulatedDelayDays === 0 ? '0d (Baseline)' : `+${simulatedDelayDays} ${simulatedDelayDays === 1 ? 'Day' : 'Days'}`}
+                  {simulatedDelayDays === 0 ? '0d (Baseline)' : `+${simulatedDelayDays} Days`}
                 </span>
               </div>
 
-              {/* Enterprise Range Slider Control */}
-              <div style={{ position: 'relative', width: '100%', padding: '0.15rem 0' }}>
-                <input
-                  type="range"
-                  min="0"
-                  max="21"
-                  step="1"
-                  value={simulatedDelayDays}
-                  onChange={e => {
-                    setSimulatedDelayDays(Number(e.target.value));
-                    setIsScenarioActive(true);
-                  }}
-                  className="enterprise-range-slider"
-                  style={{
-                    background: `linear-gradient(to right, var(--primary, #2563EB) 0%, var(--primary, #2563EB) ${((simulatedDelayDays / 21) * 100).toFixed(1)}%, var(--border-default, #E2E8F0) ${((simulatedDelayDays / 21) * 100).toFixed(1)}%, var(--border-default, #E2E8F0) 100%)`,
-                  }}
-                  aria-label="Assumed Operational Delay (Days)"
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.675rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                  <span>0d (Baseline)</span>
-                  <span>+7d</span>
-                  <span>+14d</span>
-                  <span>+21d (Max)</span>
-                </div>
-              </div>
+              <input
+                type="range"
+                min="0"
+                max="21"
+                step="1"
+                value={simulatedDelayDays}
+                onChange={e => {
+                  setSimulatedDelayDays(Number(e.target.value));
+                  setIsScenarioActive(true);
+                }}
+                className="enterprise-range-slider"
+                style={{ width: '100%', height: 6 }}
+              />
 
               {/* Quick Preset Buttons */}
-              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                {[
-                  { label: '0d (Baseline)', val: 0 },
-                  { label: '+2 Days', val: 2 },
-                  { label: '+3 Days', val: 3 },
-                  { label: '+5 Days', val: 5 },
-                  { label: '+7 Days', val: 7 },
-                  { label: '+14 Days', val: 14 },
-                ].map(preset => {
-                  const isPresetActive = simulatedDelayDays === preset.val;
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+                {[0, 2, 3, 5, 7].map(d => {
+                  const isActive = simulatedDelayDays === d;
                   return (
                     <button
-                      key={preset.val}
+                      key={d}
                       type="button"
-                      className={`btn btn-sm ${isPresetActive ? 'btn-primary' : 'btn-secondary'}`}
+                      className={`btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}`}
                       style={{
-                        fontSize: '0.725rem',
-                        padding: '4px 8px',
-                        flex: 1,
-                        fontWeight: isPresetActive ? 700 : 600,
-                        boxShadow: isPresetActive ? '0 1px 3px rgba(37, 99, 235, 0.35)' : 'none',
-                        transition: 'all 0.15s ease',
+                        fontSize: '0.68rem',
+                        padding: '3px 2px',
+                        justifyContent: 'center',
+                        fontWeight: isActive ? 700 : 500,
                       }}
                       onClick={() => {
-                        setSimulatedDelayDays(preset.val);
+                        setSimulatedDelayDays(d);
                         setIsScenarioActive(true);
                       }}
                     >
-                      {preset.label}
+                      {d === 0 ? '0d' : `+${d}d`}
                     </button>
                   );
                 })}
               </div>
-
-              {/* Action Buttons: Run & Reset */}
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '0.5rem' }}>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ flex: 1, justifyContent: 'center' }}
-                  onClick={handleRunScenario}
-                >
-                  <Play size={14} />
-                  <span>Run Scenario Propagation</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={handleResetScenario}
-                  title="Reset simulation to baseline 0 days"
-                >
-                  <RotateCcw size={14} />
-                  <span>Reset</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* KPI Output Strip */}
-          <div className="grid-kpi">
-            <div className="card kpi-card">
-              <div className="kpi-icon" style={{ background: '#f0f7fc', color: '#0284c7' }}>
-                <Calendar size={20} />
-              </div>
-              <div>
-                <div className="kpi-title">Forecast Finish</div>
-                <div className="kpi-value" style={{ fontSize: '1.25rem', fontFamily: 'var(--font-mono)' }}>
-                  {simulationResult.scenarioFinish}
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  Baseline: {simulationResult.baselineFinish}
-                </div>
-              </div>
             </div>
 
-            <div className="card kpi-card">
-              <div
-                className="kpi-icon"
-                style={{
-                  background: simulationResult.impactedCount > 0 ? 'var(--status-review-bg)' : 'var(--status-ready-bg)',
-                  color: simulationResult.impactedCount > 0 ? 'var(--status-review-fg)' : 'var(--status-ready-fg)',
-                }}
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.25rem' }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                style={{ flex: 1, justifyContent: 'center', padding: '0.45rem', fontSize: '0.75rem', fontWeight: 700 }}
+                onClick={handleRunScenario}
               >
-                <Layers size={20} />
-              </div>
-              <div>
-                <div className="kpi-title">Impacted Successors</div>
-                <div
-                  className="kpi-value"
-                  style={{
-                    color: simulationResult.impactedCount > 0 ? 'var(--status-review-fg)' : 'var(--status-ready-fg)',
-                  }}
-                >
-                  {simulationResult.impactedCount}
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  Downstream Milestones
-                </div>
-              </div>
-            </div>
-
-            <div className="card kpi-card">
-              <div
-                className="kpi-icon"
-                style={{
-                  background: simulationResult.maxShiftDays > 0 ? '#fef2f2' : '#f0fdf4',
-                  color: simulationResult.maxShiftDays > 0 ? '#b91c1c' : '#047857',
-                }}
-              >
-                <TrendingDown size={20} />
-              </div>
-              <div>
-                <div className="kpi-title">Max Schedule Slip</div>
-                <div
-                  className="kpi-value"
-                  style={{
-                    color: simulationResult.maxShiftDays > 0 ? '#b91c1c' : '#047857',
-                  }}
-                >
-                  +{simulationResult.maxShiftDays}d
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  Cumulative Project Delta
-                </div>
-              </div>
-            </div>
-
-            <div className="card kpi-card">
-              <div
-                className="kpi-icon"
-                style={{
-                  background:
-                    simulationResult.overallRiskLevel === 'High'
-                      ? '#fff1f2'
-                      : simulationResult.overallRiskLevel === 'Medium'
-                      ? '#fffbeb'
-                      : '#ecfdf5',
-                  color:
-                    simulationResult.overallRiskLevel === 'High'
-                      ? '#991b1b'
-                      : simulationResult.overallRiskLevel === 'Medium'
-                      ? '#b45309'
-                      : '#047857',
-                }}
-              >
-                <AlertTriangle size={20} />
-              </div>
-              <div>
-                <div className="kpi-title">Package Risk Rating</div>
-                <div
-                  className="kpi-value"
-                  style={{
-                    color:
-                      simulationResult.overallRiskLevel === 'High'
-                        ? '#991b1b'
-                        : simulationResult.overallRiskLevel === 'Medium'
-                        ? '#b45309'
-                        : '#047857',
-                  }}
-                >
-                  {simulationResult.overallRiskLevel}
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  {simulationResult.criticalMilestoneImpacted ? 'Critical Milestone Touched' : 'Standard Buffer'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Visual Dependency Chain (Predecessors -> Target -> Successors) */}
-          <div className="card" style={{ padding: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
-              <div>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Layers size={16} style={{ color: 'var(--brand-primary)' }} />
-                  Deterministic Dependency Chain & Date Shifts
-                </h3>
-                <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                  Visualizes Finish-to-Start (FS) logical linkages and cascaded forecast adjustments.
-                </p>
-              </div>
-              <span className="mono-pill">Finish-to-Start (FS)</span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
-              {/* 1. Upstream Predecessor(s) */}
-              {simulationResult.upstreamActivities.length > 0 ? (
-                simulationResult.upstreamActivities.map(pred => (
-                  <React.Fragment key={pred.activityId}>
-                    <div
-                      style={{
-                        minWidth: 190,
-                        padding: '0.75rem 0.85rem',
-                        background: 'var(--bg-surface-secondary)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-sm)',
-                        flexShrink: 0,
-                        cursor: 'pointer',
-                      }}
-                      onClick={() => setSelectedScheduleActivityId(pred.activityId)}
-                      title="Click to view activity in Master Schedule drawer"
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {pred.activityId}
-                        </span>
-                        <span className="mono-pill" style={{ fontSize: '0.65rem' }}>Predecessor</span>
-                      </div>
-                      <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {pred.activityName}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                        Finish: {pred.plannedFinish} (Cleared)
-                      </div>
-                    </div>
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 800 }}>&rarr;</span>
-                  </React.Fragment>
-                ))
-              ) : (
-                <div style={{ padding: '0.5rem 0.75rem', background: 'var(--bg-surface-secondary)', borderRadius: 'var(--radius-xs)', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                  Package Root (No Predecessors)
-                </div>
-              )}
-
-              {/* 2. Target Activity (Highlighted) */}
-              <div
-                style={{
-                  minWidth: 230,
-                  padding: '0.85rem 1rem',
-                  background: 'var(--brand-surface)',
-                  border: '2px solid var(--brand-primary)',
-                  borderRadius: 'var(--radius-md)',
-                  flexShrink: 0,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.825rem', color: 'var(--brand-primary)' }}>
-                    {simulationResult.targetActivityId}
-                  </span>
-                  <span style={{ background: 'var(--brand-primary)', color: '#ffffff', fontSize: '0.65rem', fontWeight: 800, padding: '1px 6px', borderRadius: 'var(--radius-xs)' }}>
-                    Selected Target
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {simulationResult.targetActivityName}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', marginTop: 4 }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Forecast Finish:</span>
-                  <strong style={{ color: simulationResult.simulatedDelayDays > 0 ? 'var(--status-unplanned-fg)' : 'var(--text-primary)' }}>
-                    {simulationResult.scenarioFinish} (+{simulationResult.simulatedDelayDays}d)
-                  </strong>
-                </div>
-              </div>
-
-              {/* 3. Downstream Successor Chain */}
-              {simulationResult.impactedActivities.filter(i => !i.isDirectTarget).length > 0 ? (
-                simulationResult.impactedActivities
-                  .filter(i => !i.isDirectTarget)
-                  .map(succ => (
-                    <React.Fragment key={succ.activityId}>
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 800 }}>&rarr;</span>
-                      <div
-                        style={{
-                          minWidth: 210,
-                          padding: '0.75rem 0.85rem',
-                          background: succ.shiftDays > 0 ? 'var(--status-unplanned-bg)' : 'var(--bg-surface-secondary)',
-                          border: succ.shiftDays > 0 ? '1px solid var(--border-subtle)' : '1px solid var(--border-subtle)',
-                          borderRadius: 'var(--radius-sm)',
-                          flexShrink: 0,
-                          cursor: 'pointer',
-                        }}
-                        onClick={() => setSelectedScheduleActivityId(succ.activityId)}
-                        title="Click to inspect activity in schedule drawer"
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '0.75rem', color: succ.shiftDays > 0 ? 'var(--status-unplanned-fg)' : 'var(--brand-primary)' }}>
-                            {succ.activityId}
-                          </span>
-                          <span
-                            className={`variance-badge ${succ.shiftDays > 0 ? 'delayed' : 'on-track'}`}
-                            style={{ fontSize: '0.65rem', padding: '1px 5px' }}
-                          >
-                            +{succ.shiftDays}d Slip
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {succ.activityName}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                          <span>Forecast:</span>
-                          <strong style={{ color: succ.shiftDays > 0 ? 'var(--status-unplanned-fg)' : 'var(--text-secondary)' }}>
-                            {succ.scenarioFinish}
-                          </strong>
-                        </div>
-                      </div>
-                    </React.Fragment>
-                  ))
-              ) : (
-                <div style={{ padding: '0.5rem 0.75rem', background: 'var(--bg-surface-secondary)', borderRadius: 'var(--radius-xs)', fontSize: '0.725rem', color: 'var(--text-muted)', marginLeft: 8 }}>
-                  End of Chain (No Downstream Successors)
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Impacted Activities Table Breakdown */}
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '0.85rem 1.15rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <TrendingDown size={16} style={{ color: '#b91c1c' }} />
-                Downstream Activity Variance Breakdown
-              </h3>
-              <span className="mono-pill">
-                {simulationResult.impactedActivities.length} Activities Evaluated
-              </span>
-            </div>
-
-            <div className="table-responsive">
-              <table className="industrial-table">
-                <thead>
-                  <tr>
-                    <th>Activity ID</th>
-                    <th>Activity Name</th>
-                    <th>Discipline</th>
-                    <th>Baseline Finish</th>
-                    <th>Scenario Forecast Finish</th>
-                    <th>Calculated Shift</th>
-                    <th>Risk Level</th>
-                    <th>Dependency Rationale</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {simulationResult.impactedActivities.map(act => (
-                    <tr
-                      key={act.activityId}
-                      style={{
-                        background: act.isDirectTarget ? 'var(--bg-subtle)' : 'transparent',
-                        cursor: 'pointer',
-                      }}
-                      onClick={() => setSelectedScheduleActivityId(act.activityId)}
-                      title="Click to inspect activity details"
-                    >
-                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)' }}>
-                        {act.activityId}
-                      </td>
-                      <td style={{ fontWeight: 600 }}>
-                        {act.activityName}
-                        {act.isDirectTarget && (
-                          <span style={{ marginLeft: 6, fontSize: '0.675rem', background: '#0284c7', color: '#ffffff', padding: '1px 5px', borderRadius: 3 }}>
-                            Target
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <span className="mono-pill">{act.discipline}</span>
-                      </td>
-                      <td style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-                        {act.baselineFinish}
-                      </td>
-                      <td style={{ fontSize: '0.775rem', fontWeight: 700, color: act.shiftDays > 0 ? '#b91c1c' : 'var(--text-primary)' }}>
-                        {act.scenarioFinish}
-                      </td>
-                      <td>
-                        <span className={`variance-badge ${act.shiftDays > 0 ? 'delayed' : 'on-track'}`}>
-                          {act.shiftDays > 0 ? `+${act.shiftDays}d` : '0d (On Plan)'}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className={`status-badge ${
-                            act.severity === 'critical' ? 'unplanned' : act.severity === 'medium' ? 'review' : 'ready'
-                          }`}
-                          style={{ fontSize: '0.7rem' }}
-                        >
-                          {act.severity.toUpperCase()}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', maxWidth: 260 }}>
-                        {act.impactExplanation}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Plain-English Executive Briefing Section */}
-          <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.65rem' }}>
-              <div>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Zap size={16} style={{ color: 'var(--brand-primary)' }} />
-                  Automated Executive Briefing & Planning Prompts
-                </h3>
-                <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-                  Grounded narrative derived strictly from deterministic dependency calculations.
-                </p>
-              </div>
+                <Play size={13} />
+                <span>Simulate Delay</span>
+              </button>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={handleCopyBriefing}
+                onClick={handleResetScenario}
+                style={{ padding: '0.45rem 0.65rem', fontSize: '0.75rem' }}
+                title="Reset to 0d"
               >
-                {briefingCopied ? <Check size={13} style={{ color: '#047857' }} /> : <Copy size={13} />}
-                <span>{briefingCopied ? 'Copied!' : 'Copy Briefing'}</span>
+                <RotateCcw size={13} />
               </button>
-            </div>
-
-            <div
-              style={{
-                background: 'var(--bg-surface-secondary)',
-                padding: '1.25rem 1.4rem',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-default)',
-                borderLeft: '4px solid var(--brand-primary)',
-                fontSize: '0.875rem',
-                color: 'var(--text-primary)',
-                lineHeight: 1.75,
-                whiteSpace: 'pre-line',
-                fontFamily: 'var(--font-sans)',
-                letterSpacing: '0.01em',
-              }}
-            >
-              {simulationResult.executiveBriefing}
             </div>
           </div>
 
-        </div>
-      )}
-
-      {/* =========================================================================
-          TAB 2: EXECUTIVE PROGRESS BRIEFING (OVERVIEW MODE)
-          ========================================================================= */}
-      {activeAnalysis === 'briefing' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.25rem' }}>
-          <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.65rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Zap size={16} style={{ color: 'var(--brand-primary)' }} />
-                Live Project Execution Briefing
-              </h3>
-              <span className="mono-pill">L5 / L6 Baseline</span>
-            </div>
-
-            <div style={{ background: 'var(--bg-subtle)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--brand-primary)', fontSize: '0.825rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-              <strong>Executive Overview:</strong> Project execution across <strong>{enrichedSchedule.length} L5/L6 milestone activities</strong> is currently <strong>{Math.round((completedCount / (enrichedSchedule.length || 1)) * 100)}% complete</strong>. A total of <strong>{siteUpdates.length} daily field records</strong> have been reconciled against Primavera WBS baselines.
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--status-ready-bg)', color: 'var(--status-ready-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  ✓
+          {/* RIGHT COLUMN: Immediate Live Prediction Output */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            
+            {/* 4 Compact Prediction KPI Tiles */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.55rem' }}>
+              <div className="card kpi-card" style={{ padding: '0.65rem 0.75rem' }}>
+                <div className="kpi-icon" style={{ background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', width: 28, height: 28 }}>
+                  <Calendar size={14} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Civil & Piping Erection Active in Pump Bay
+                  <div className="kpi-title" style={{ fontSize: '0.65rem' }}>Forecast Finish</div>
+                  <div className="kpi-value" style={{ fontSize: '0.88rem', fontFamily: 'var(--font-mono)' }}>
+                    {formatDisplayDate(simulationResult.scenarioFinish)}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Civil pump foundations and CW pipe spool erection verified with supervisor photo proofs.
+                  <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+                    Plan: {formatDisplayDate(simulationResult.baselineFinish)}
                   </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--status-review-bg)', color: 'var(--status-review-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  !
+              <div className="card kpi-card" style={{ padding: '0.65rem 0.75rem' }}>
+                <div
+                  className="kpi-icon"
+                  style={{
+                    background: simulationResult.maxShiftDays > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                    color: simulationResult.maxShiftDays > 0 ? '#ef4444' : '#10b981',
+                    width: 28,
+                    height: 28,
+                  }}
+                >
+                  <TrendingDown size={14} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {pendingReviews.length} Supervisor Reports Awaiting Lead Planner Confirmation
+                  <div className="kpi-title" style={{ fontSize: '0.65rem' }}>Cumulative Slip</div>
+                  <div
+                    className="kpi-value"
+                    style={{
+                      fontSize: '0.88rem',
+                      color: simulationResult.maxShiftDays > 0 ? '#ef4444' : '#10b981',
+                    }}
+                  >
+                    {simulationResult.maxShiftDays > 0 ? `+${simulationResult.maxShiftDays}d` : '0d On Plan'}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Field updates require 1-click confirmation in the Planner Reconciliation Workbench.
+                  <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+                    Schedule variance
                   </div>
                 </div>
               </div>
 
-              {delayedItems.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--status-unplanned-bg)', color: 'var(--status-unplanned-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    ⚠
+              <div className="card kpi-card" style={{ padding: '0.65rem 0.75rem' }}>
+                <div
+                  className="kpi-icon"
+                  style={{
+                    background: simulationResult.impactedCount > 0 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                    color: simulationResult.impactedCount > 0 ? '#f59e0b' : '#10b981',
+                    width: 28,
+                    height: 28,
+                  }}
+                >
+                  <Layers size={14} />
+                </div>
+                <div>
+                  <div className="kpi-title" style={{ fontSize: '0.65rem' }}>Impacted Tasks</div>
+                  <div className="kpi-value" style={{ fontSize: '0.88rem' }}>
+                    {simulationResult.impactedCount}
                   </div>
-                  <div>
-                    <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--status-unplanned-fg)' }}>
-                      Schedule Variance Alert: {delayedItems.length} Activities Behind Baseline
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      Crane breakdown in Pump Bay workfront causing 3–5 days variance on downstream hydrotest.
-                    </div>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+                    Downstream chain
+                  </div>
+                </div>
+              </div>
+
+              <div className="card kpi-card" style={{ padding: '0.65rem 0.75rem' }}>
+                <div
+                  className="kpi-icon"
+                  style={{
+                    background: simulationResult.overallRiskLevel === 'High' ? 'rgba(239, 68, 68, 0.12)' : simulationResult.overallRiskLevel === 'Medium' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                    color: simulationResult.overallRiskLevel === 'High' ? '#ef4444' : simulationResult.overallRiskLevel === 'Medium' ? '#f59e0b' : '#10b981',
+                    width: 28,
+                    height: 28,
+                  }}
+                >
+                  <AlertTriangle size={14} />
+                </div>
+                <div>
+                  <div className="kpi-title" style={{ fontSize: '0.65rem' }}>Package Risk</div>
+                  <div
+                    className="kpi-value"
+                    style={{
+                      fontSize: '0.88rem',
+                      color: simulationResult.overallRiskLevel === 'High' ? '#ef4444' : simulationResult.overallRiskLevel === 'Medium' ? '#f59e0b' : '#10b981',
+                    }}
+                  >
+                    {simulationResult.overallRiskLevel}
+                  </div>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+                    {simulationResult.criticalMilestoneImpacted ? 'Critical path' : 'Buffer absorptive'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Instant Synthesis Briefing Box */}
+            <div className="card" style={{ padding: '0.75rem 0.95rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Zap size={14} style={{ color: 'var(--brand-primary)' }} />
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+                    Prediction Synthesis & Actionable Guidance
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleCopyBriefing}
+                  style={{ fontSize: '0.68rem', padding: '2px 7px' }}
+                >
+                  {briefingCopied ? <Check size={11} style={{ color: '#047857' }} /> : <Copy size={11} />}
+                  <span>{briefingCopied ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+
+              <div
+                style={{
+                  background: 'var(--bg-surface-secondary)',
+                  padding: '0.6rem 0.75rem',
+                  borderRadius: 'var(--radius-xs)',
+                  border: '1px solid var(--border-subtle)',
+                  borderLeft: '3px solid var(--brand-primary)',
+                  fontSize: '0.75rem',
+                  color: 'var(--text-primary)',
+                  lineHeight: 1.45,
+                }}
+              >
+                {simulationResult.executiveBriefing}
+              </div>
+            </div>
+
+            {/* Compact Impacted Successors Deck */}
+            <div className="card" style={{ padding: '0.75rem 0.95rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <TrendingDown size={14} style={{ color: '#ef4444' }} />
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+                    Downstream Cascade Shifts ({simulationResult.impactedActivities.filter(a => !a.isDirectTarget).length})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowFullTable(!showFullTable)}
+                  style={{ fontSize: '0.68rem', padding: '2px 5px' }}
+                >
+                  {showFullTable ? 'Hide Table ▴' : 'View Full Table ▾'}
+                </button>
+              </div>
+
+              {simulationResult.impactedActivities.filter(a => !a.isDirectTarget).length === 0 ? (
+                <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '0.25rem 0' }}>
+                  No downstream milestones are shifted. Remaining schedule float absorbs this variation.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  {simulationResult.impactedActivities
+                    .filter(a => !a.isDirectTarget)
+                    .slice(0, 3)
+                    .map(act => (
+                      <div
+                        key={act.activityId}
+                        onClick={() => setSelectedScheduleActivityId(act.activityId)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.4rem 0.6rem',
+                          background: 'var(--bg-surface-secondary)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 'var(--radius-xs)',
+                          cursor: 'pointer',
+                          fontSize: '0.725rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)' }}>
+                            {act.activityId}
+                          </span>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {act.activityName}
+                          </span>
+                          <span className="mono-pill" style={{ fontSize: '0.6rem', padding: '1px 5px' }}>
+                            {act.discipline}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                            Forecast: <strong style={{ color: act.shiftDays > 0 ? '#ef4444' : 'inherit' }}>{formatDisplayDate(act.scenarioFinish)}</strong>
+                          </span>
+                          <span className={`variance-badge ${act.shiftDays > 0 ? 'delayed' : 'on-track'}`} style={{ fontSize: '0.625rem', padding: '1px 5px' }}>
+                            +{act.shiftDays}d Slip
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {/* Collapsible Forensic Table */}
+              {showFullTable && (
+                <div style={{ marginTop: '0.65rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.5rem' }}>
+                  <div className="table-responsive">
+                    <table className="industrial-table" style={{ fontSize: '0.7rem' }}>
+                      <thead>
+                        <tr>
+                          <th>Activity ID</th>
+                          <th>Name</th>
+                          <th>Discipline</th>
+                          <th>Plan Finish</th>
+                          <th>Forecast Finish</th>
+                          <th>Shift</th>
+                          <th>Severity</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {simulationResult.impactedActivities.map(act => (
+                          <tr key={act.activityId} onClick={() => setSelectedScheduleActivityId(act.activityId)} style={{ cursor: 'pointer' }}>
+                            <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 800 }}>{act.activityId}</td>
+                            <td>{act.activityName}</td>
+                            <td>{act.discipline}</td>
+                            <td>{formatDisplayDate(act.baselineFinish)}</td>
+                            <td style={{ fontWeight: 700, color: act.shiftDays > 0 ? '#ef4444' : 'inherit' }}>{formatDisplayDate(act.scenarioFinish)}</td>
+                            <td><span className={`variance-badge ${act.shiftDays > 0 ? 'delayed' : 'on-track'}`}>+{act.shiftDays}d</span></td>
+                            <td><span className={`status-badge ${act.severity === 'critical' ? 'unplanned' : act.severity === 'medium' ? 'review' : 'ready'}`}>{act.severity}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
             </div>
 
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => setActiveTab('planner-review')}
-                type="button"
-              >
-                <span>Open Planner Review Queue</span>
-                <ArrowRight size={13} />
-              </button>
-            </div>
-          </div>
-
-          <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              Execution Reliability Indices
-            </h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700 }}>
-                  <span>Matching Engine Precision</span>
-                  <span style={{ color: 'var(--status-ready-fg)' }}>94.2%</span>
-                </div>
-                <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill green" style={{ width: '94.2%' }} />
-                </div>
-              </div>
-
-              <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700 }}>
-                  <span>Photo Evidence Coverage</span>
-                  <span style={{ color: 'var(--brand-primary)' }}>87.5%</span>
-                </div>
-                <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill blue" style={{ width: '87.5%' }} />
-                </div>
-              </div>
-
-              <div style={{ padding: '0.75rem', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700 }}>
-                  <span>Baseline Adherence Score</span>
-                  <span style={{ color: 'var(--status-review-fg)' }}>81.0%</span>
-                </div>
-                <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill amber" style={{ width: '81%' }} />
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
-
-      {/* =========================================================================
-          TAB 3: FORENSIC PROVENANCE MODEL
-          ========================================================================= */}
-      {activeAnalysis === 'provenance' && (
-        <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.65rem' }}>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <ShieldCheck size={16} style={{ color: 'var(--brand-primary)' }} />
-              Forensic Evidence Provenance & Audit Integrity
-            </h3>
-            <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-              Verifiable chain of evidence connecting supervisor raw logs & photos directly to Primavera/MS-Project baseline deliverables.
-            </p>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
-            <div style={{ background: 'var(--bg-subtle)', padding: '0.85rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-              <div className="mono-pill" style={{ marginBottom: 4 }}>Step 1: Source Ingestion</div>
-              <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)' }}>Raw Text & Photo Upload</div>
-              <p style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                Unstructured logs, piping Excel, and photo timestamps stored immutably.
-              </p>
-            </div>
-
-            <div style={{ background: 'var(--bg-subtle)', padding: '0.85rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-              <div className="mono-pill" style={{ marginBottom: 4 }}>Step 2: 4-Factor Matching</div>
-              <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)' }}>Deterministic Multi-Score</div>
-              <p style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                Keyword (50%), Discipline (20%), Area (15%), and Fuzzy string matching (15%).
-              </p>
-            </div>
-
-            <div style={{ background: 'var(--bg-subtle)', padding: '0.85rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-              <div className="mono-pill" style={{ marginBottom: 4 }}>Step 3: Human Verification</div>
-              <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)' }}>Planner Review Workbench</div>
-              <p style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                Lead planners inspect NLP breakdown and photo proofs with 1-click approve/relink.
-              </p>
-            </div>
-
-            <div style={{ background: 'var(--bg-subtle)', padding: '0.85rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-              <div className="mono-pill" style={{ marginBottom: 4 }}>Step 4: Baseline Alignment</div>
-              <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)' }}>WBS Schedule Enrichment</div>
-              <p style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                Actual start/finish dates and delay variance updated in master Primavera baseline.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 };

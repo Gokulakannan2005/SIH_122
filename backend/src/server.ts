@@ -6,6 +6,9 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import {
   initSchema,
   seedBenchmarkData,
@@ -37,8 +40,11 @@ import {
   markNotificationRead,
   acknowledgeSupervisorScheduleUpdates,
   clearProjectData,
+  getAllProjects,
+  createProject,
+  deleteProject,
 } from './db.ts';
-import type { PlannerDecision, AuditLog, UserAccount, ScheduleVersion, FieldSubmissionInboxItem, SystemNotification } from './db.ts';
+import type { PlannerDecision, AuditLog, UserAccount, ScheduleVersion, FieldSubmissionInboxItem, SystemNotification, ProjectRecord } from './db.ts';
 import { parseScheduleCSV, parseDailyReportTXT, parsePipingProgressXLSX } from './parsers.ts';
 import { processAllMatches } from './matchingEngine.ts';
 
@@ -53,7 +59,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Initialize database schema and seed if empty
 initSchema();
-const existingSchedule = getScheduleActivities();
+const existingSchedule = getScheduleActivities('iocl-p4');
 if (existingSchedule.length === 0) {
   console.log('Database empty. Seeding initial SIH benchmark dataset...');
   seedBenchmarkData();
@@ -63,15 +69,19 @@ if (existingSchedule.length === 0) {
  * 1. Health & Status
  */
 app.get('/api/health', (req, res) => {
-  const schedule = getScheduleActivities();
-  const siteUpdates = getSiteUpdates();
-  const decisions = getPlannerDecisions();
-  const auditLogs = getAuditLogs();
+  const projectId = (req.query.projectId as string) || 'iocl-p4';
+  const projects = getAllProjects();
+  const schedule = getScheduleActivities(projectId);
+  const siteUpdates = getSiteUpdates(projectId);
+  const decisions = getPlannerDecisions(projectId);
+  const auditLogs = getAuditLogs(projectId);
 
   res.json({
     status: 'online',
     engine: 'node:sqlite embedded',
     timestamp: new Date().toISOString(),
+    currentProject: projectId,
+    totalProjects: projects.length,
     metrics: {
       scheduleActivities: schedule.length,
       siteUpdates: siteUpdates.length,
@@ -82,11 +92,47 @@ app.get('/api/health', (req, res) => {
 });
 
 /**
+ * 1.5 Projects Management Endpoints
+ */
+app.get('/api/projects', (req, res) => {
+  try {
+    const projects = getAllProjects();
+    res.json(projects);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects/create', (req, res) => {
+  try {
+    const projectData = req.body;
+    if (!projectData || !projectData.name) {
+      return res.status(400).json({ error: 'Project name is required' });
+    }
+    const created = createProject(projectData);
+    res.json({ success: true, project: created });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/projects/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    deleteProject(id);
+    res.json({ success: true, message: `Project ${id} deleted successfully` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * 2. Get enriched schedule (with variance and actual dates)
  */
 app.get('/api/schedule', (req, res) => {
   try {
-    const enriched = getEnrichedSchedule();
+    const projectId = (req.query.projectId as string) || 'iocl-p4';
+    const enriched = getEnrichedSchedule(projectId);
     res.json(enriched);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -98,7 +144,8 @@ app.get('/api/schedule', (req, res) => {
  */
 app.get('/api/site-updates', (req, res) => {
   try {
-    const updates = getSiteUpdates();
+    const projectId = (req.query.projectId as string) || 'iocl-p4';
+    const updates = getSiteUpdates(projectId);
     res.json(updates);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -112,14 +159,15 @@ app.put('/api/site-updates/:id', (req, res) => {
   try {
     const { id } = req.params;
     const fields = req.body;
-    const updated = updateSiteUpdate(id, fields);
+    const projectId = (req.query.projectId as string) || req.body.projectId || 'iocl-p4';
+    const updated = updateSiteUpdate(id, fields, projectId);
     if (!updated) {
       return res.status(404).json({ error: 'Site update not found' });
     }
     res.json({
       success: true,
       siteUpdate: updated,
-      matchResult: getMatchResults()[id],
+      matchResult: getMatchResults(projectId)[id],
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -131,7 +179,8 @@ app.put('/api/site-updates/:id', (req, res) => {
  */
 app.get('/api/matches', (req, res) => {
   try {
-    const matches = getMatchResults();
+    const projectId = (req.query.projectId as string) || 'iocl-p4';
+    const matches = getMatchResults(projectId);
     res.json(matches);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -143,7 +192,8 @@ app.get('/api/matches', (req, res) => {
  */
 app.get('/api/planner/decisions', (req, res) => {
   try {
-    const decisions = getPlannerDecisions();
+    const projectId = (req.query.projectId as string) || 'iocl-p4';
+    const decisions = getPlannerDecisions(projectId);
     res.json(decisions);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -219,10 +269,11 @@ app.get('/api/auth/users', (req, res) => {
  */
 app.get('/api/approvals/history', (req, res) => {
   try {
-    const decisions = getPlannerDecisions();
-    const siteUpdates = getSiteUpdates();
-    const auditLogs = getAuditLogs();
-    const schedule = getScheduleActivities();
+    const projectId = (req.query.projectId as string) || 'iocl-p4';
+    const decisions = getPlannerDecisions(projectId);
+    const siteUpdates = getSiteUpdates(projectId);
+    const auditLogs = getAuditLogs(projectId);
+    const schedule = getScheduleActivities(projectId);
 
     const history = Object.values(decisions).map(d => {
       const update = siteUpdates.find(u => u.id === d.updateId);
@@ -419,10 +470,11 @@ app.post('/api/notifications/acknowledge-updates', (req, res) => {
  */
 app.post('/api/projects/new', (req, res) => {
   try {
-    clearProjectData();
+    const projectId = req.body.projectId || 'iocl-p4';
+    clearProjectData(projectId);
     res.json({
       success: true,
-      message: 'Clean project context initialized. Upload master schedule to begin.',
+      message: `Clean project context initialized for ${projectId}. Upload master schedule to begin.`,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -431,9 +483,10 @@ app.post('/api/projects/new', (req, res) => {
 
 app.post('/api/match/reverify', (req, res) => {
   try {
-    const { updateId } = req.body;
-    const schedule = getScheduleActivities();
-    const siteUpdates = getSiteUpdates();
+    const { updateId, projectId: reqProjectId } = req.body;
+    const projectId = reqProjectId || 'iocl-p4';
+    const schedule = getScheduleActivities(projectId);
+    const siteUpdates = getSiteUpdates(projectId);
     const targetUpdate = siteUpdates.find(u => u.id === updateId);
 
     if (!targetUpdate) {
@@ -441,7 +494,7 @@ app.post('/api/match/reverify', (req, res) => {
     }
 
     const allMatches = processAllMatches(siteUpdates, schedule);
-    saveMatchResults(allMatches);
+    saveMatchResults(allMatches, projectId);
 
     res.json({
       success: true,
@@ -458,11 +511,12 @@ app.post('/api/match/reverify', (req, res) => {
  */
 app.post('/api/planner/action', (req, res) => {
   try {
-    const { updateId, actionType, targetActivityId, note, userId, userName, userRole } = req.body;
-    const siteUpdates = getSiteUpdates();
-    const schedule = getScheduleActivities();
+    const { updateId, actionType, targetActivityId, note, userId, userName, userRole, projectId: reqProjectId } = req.body;
+    const projectId = reqProjectId || 'iocl-p4';
+    const siteUpdates = getSiteUpdates(projectId);
+    const schedule = getScheduleActivities(projectId);
     const update = siteUpdates.find(u => u.id === updateId);
-    const match = getMatchResults()[updateId];
+    const match = getMatchResults(projectId)[updateId];
 
     if (!update) {
       return res.status(404).json({ error: 'Site update not found' });
@@ -530,7 +584,7 @@ app.post('/api/planner/action', (req, res) => {
       digitalSignature,
     };
 
-    savePlannerDecision(decision);
+    savePlannerDecision(decision, projectId);
 
     // Record in immutable audit log with cryptographic evidence verification
     const auditLog: AuditLog = {
@@ -553,7 +607,7 @@ app.post('/api/planner/action', (req, res) => {
       digitalSignature,
     };
 
-    saveAuditLog(auditLog);
+    saveAuditLog(auditLog, projectId);
 
     res.json({
       success: true,
@@ -570,7 +624,8 @@ app.post('/api/planner/action', (req, res) => {
  */
 app.get('/api/audit-trail', (req, res) => {
   try {
-    const logs = getAuditLogs();
+    const projectId = (req.query.projectId as string) || 'iocl-p4';
+    const logs = getAuditLogs(projectId);
     res.json(logs);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -589,14 +644,15 @@ app.post(
   ]),
   (req, res) => {
     try {
+      const projectId = (req.body.projectId as string) || 'iocl-p4';
       const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-      let schedule = getScheduleActivities();
-      let siteUpdates = getSiteUpdates();
+      let schedule = getScheduleActivities(projectId);
+      let siteUpdates = getSiteUpdates(projectId);
 
       if (files?.scheduleCsv && files.scheduleCsv[0]) {
         const csvText = files.scheduleCsv[0].buffer.toString('utf8');
         schedule = parseScheduleCSV(csvText);
-        saveScheduleActivities(schedule);
+        saveScheduleActivities(schedule, projectId);
       }
 
       const addedUpdates = [];
@@ -612,8 +668,8 @@ app.post(
       }
 
       if (addedUpdates.length > 0) {
-        saveSiteUpdates(addedUpdates);
-        siteUpdates = getSiteUpdates();
+        saveSiteUpdates(addedUpdates, projectId);
+        siteUpdates = getSiteUpdates(projectId);
       }
 
       // Re-run matching engine for all site updates
@@ -622,7 +678,7 @@ app.post(
       matchesMap.forEach((val, key) => {
         matchesRecord[key] = val;
       });
-      saveMatchResults(matchesRecord);
+      saveMatchResults(matchesRecord, projectId);
 
       res.json({
         success: true,
@@ -653,9 +709,10 @@ app.post('/api/reset-demo', (req, res) => {
  */
 app.get('/api/export/csv', (req, res) => {
   try {
-    const siteUpdates = getSiteUpdates();
-    const matchResults = getMatchResults();
-    const decisions = getPlannerDecisions();
+    const projectId = (req.query.projectId as string) || 'iocl-p4';
+    const siteUpdates = getSiteUpdates(projectId);
+    const matchResults = getMatchResults(projectId);
+    const decisions = getPlannerDecisions(projectId);
 
     const rows = [
       [
@@ -699,7 +756,7 @@ app.get('/api/export/csv', (req, res) => {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="SIH_122_Schedule_Alignment_${new Date().toISOString().split('T')[0]}.csv"`
+      `attachment; filename="SIH_122_Schedule_Alignment_${projectId}_${new Date().toISOString().split('T')[0]}.csv"`
     );
     res.send(csvContent);
   } catch (err: any) {
@@ -711,8 +768,6 @@ app.get('/api/export/csv', (req, res) => {
 /**
  * 11. Speech-to-Text Audio Transcription & Status Endpoints
  */
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Helper to determine active Python executable
 function getPythonCommand(): string {
@@ -845,6 +900,16 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// 12. Serve Compiled Frontend Application & Assets for unified single-port access
+const frontendDist = path.resolve(__dirname, '../../frontend/dist');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
 
 // Intelligent server launcher with auto-port conflict resolution
 function startServer(initialPort: number) {

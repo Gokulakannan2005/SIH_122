@@ -7,6 +7,9 @@ import {
   Sparkles,
   Building2,
   X,
+  Layers,
+  Check,
+  Trash2,
 } from 'lucide-react';
 
 export const ProjectSelectionModal: React.FC = () => {
@@ -16,6 +19,10 @@ export const ProjectSelectionModal: React.FC = () => {
     createNewProject,
     loadExistingDemoProject,
     theme,
+    currentProject,
+    availableProjects,
+    switchProject,
+    deleteUserProject,
   } = useProject();
 
   const isDark = theme === 'dark';
@@ -31,7 +38,7 @@ export const ProjectSelectionModal: React.FC = () => {
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await createNewProject(projectName, contractId);
+    await createNewProject(projectName, contractId, targetUnit);
     setIsSubmitting(false);
   };
 
@@ -274,6 +281,113 @@ export const ProjectSelectionModal: React.FC = () => {
                 </div>
                 <ArrowRight size={18} style={{ color: isDark ? '#34d399' : '#16a34a', marginTop: 12 }} />
               </button>
+
+              {/* Section: Your Registered & Created Projects */}
+              <div style={{ marginTop: '0.25rem', borderTop: isDark ? '1px solid #1f2937' : '1px solid #e2e8f0', paddingTop: '0.85rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Layers size={14} style={{ color: isDark ? '#38bdf8' : '#0284c7' }} />
+                    <span style={{ fontSize: '0.78rem', fontWeight: 800, color: isDark ? '#f1f5f9' : '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Registered Workspaces ({availableProjects?.length || 0})
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.68rem', color: isDark ? '#94a3b8' : '#64748b' }}>
+                    Click any project to switch workspace
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: 180, overflowY: 'auto' }}>
+                  {(availableProjects || []).map(proj => {
+                    const isCurrent = proj.id === currentProject?.id;
+                    return (
+                      <div
+                        key={proj.id}
+                        onClick={() => {
+                          switchProject(proj.id);
+                          setIsProjectSelectionModalOpen(false);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.55rem 0.75rem',
+                          borderRadius: 8,
+                          border: isCurrent
+                            ? (isDark ? '1.5px solid #38bdf8' : '1.5px solid #0284c7')
+                            : (isDark ? '1px solid #1f2937' : '1px solid #e2e8f0'),
+                          background: isCurrent
+                            ? (isDark ? 'rgba(14, 165, 233, 0.15)' : '#f0f9ff')
+                            : (isDark ? '#0f172a' : '#f8fafc'),
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                          <div
+                            style={{
+                              width: 30,
+                              height: 30,
+                              borderRadius: 6,
+                              background: isCurrent
+                                ? (isDark ? 'rgba(14, 165, 233, 0.25)' : '#e0f2fe')
+                                : (isDark ? '#1e293b' : '#e2e8f0'),
+                              color: isCurrent ? (isDark ? '#38bdf8' : '#0284c7') : (isDark ? '#94a3b8' : '#64748b'),
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Building2 size={15} />
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isDark ? '#f8fafc' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280 }}>
+                                {proj.name}
+                              </span>
+                              {isCurrent && (
+                                <span style={{ fontSize: '0.6rem', padding: '1px 5px', borderRadius: 4, background: '#10b981', color: '#ffffff', fontWeight: 800 }}>
+                                  Active
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.66rem', color: isDark ? '#94a3b8' : '#64748b', marginTop: 1 }}>
+                              {proj.shortCode || proj.code} &bull; {proj.location}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: isDark ? '#38bdf8' : '#0284c7' }}>
+                            {isCurrent ? 'Current' : 'Open →'}
+                          </span>
+                          {!isCurrent && deleteUserProject && proj.id !== 'iocl-p4' && proj.id !== 'ongc-delta' && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteUserProject(proj.id);
+                              }}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: '2px 4px',
+                                borderRadius: 4,
+                              }}
+                              title="Delete this project"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
             </div>
           ) : (
             <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>

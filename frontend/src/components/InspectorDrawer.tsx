@@ -29,6 +29,7 @@ import {
 import { PlannerActionType } from '../types';
 import { formatDisplayDate, diffDaysBetweenDates, formatVarianceBadge } from '../utils/scheduleSimulator';
 import { evaluateMatch } from '../utils/matchingEngine';
+import { MatchScoreRadarChart } from './MatchScoreRadarChart';
 
 export const InspectorDrawer: React.FC = () => {
   const {
@@ -85,7 +86,7 @@ export const InspectorDrawer: React.FC = () => {
       const firstImg = update.images && update.images.length > 0 ? update.images[0] : null;
       setSelectedTagInput(firstImg?.confirmedTag || update.confirmedTag || '');
     }
-  }, [selectedInspectorUpdateId, siteUpdates, matchResults, plannerDecisions]);
+  }, [selectedInspectorUpdateId]);
 
   if (!update || !match) return null;
 
@@ -254,43 +255,71 @@ export const InspectorDrawer: React.FC = () => {
                   />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '140px', overflowY: 'auto' }}>
-                  {filteredSchedule.slice(0, 12).map(act => {
-                    const isSelected = act.activityId === selectedActivityId;
-                    const isRec = match.candidateActivityId === act.activityId;
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '160px', overflowY: 'auto' }}>
+                  {filteredSchedule
+                    .map(act => ({ act, evalRes: evaluateMatch(update, act) }))
+                    .sort((a, b) => {
+                      if (searchSchedule.trim()) return b.evalRes.score - a.evalRes.score;
+                      return 0;
+                    })
+                    .slice(0, 15)
+                    .map(({ act, evalRes }) => {
+                      const isSelected = act.activityId === selectedActivityId;
+                      const isRec = match.candidateActivityId === act.activityId;
+                      const score = evalRes.score;
 
-                    return (
-                      <div
-                        key={act.activityId}
-                        onClick={() => setSelectedActivityId(act.activityId)}
-                        className={`schedule-select-item ${isSelected ? 'selected' : ''}`}
-                      >
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)', fontSize: '0.775rem' }}>
-                              {act.activityId}
-                            </span>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>WBS {act.wbs}</span>
-                            {isRec && (
-                              <span style={{ fontSize: '0.65rem', background: 'var(--status-ready-bg)', color: 'var(--status-ready-fg)', border: '1px solid var(--status-ready-border)', padding: '1px 5px', borderRadius: '3px', fontWeight: 700 }}>
-                                ★ Algorithm Recommended
+                      const scoreBadgeBg = score >= 70 ? 'rgba(16, 185, 129, 0.12)' : score >= 40 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.1)';
+                      const scoreBadgeColor = score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#ef4444';
+                      const scoreBadgeBorder = score >= 70 ? 'rgba(16, 185, 129, 0.3)' : score >= 40 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.2)';
+
+                      return (
+                        <div
+                          key={act.activityId}
+                          onClick={() => setSelectedActivityId(act.activityId)}
+                          className={`schedule-select-item ${isSelected ? 'selected' : ''}`}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', cursor: 'pointer' }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--brand-primary)', fontSize: '0.775rem' }}>
+                                {act.activityId}
                               </span>
-                            )}
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>WBS {act.wbs}</span>
+                              {isRec && (
+                                <span style={{ fontSize: '0.65rem', background: 'var(--status-ready-bg)', color: 'var(--status-ready-fg)', border: '1px solid var(--status-ready-border)', padding: '1px 5px', borderRadius: '3px', fontWeight: 700 }}>
+                                  ★ Suggested
+                                </span>
+                              )}
+                              <span
+                                style={{
+                                  fontSize: '0.68rem',
+                                  fontWeight: 700,
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  fontFamily: 'var(--font-mono)',
+                                  background: scoreBadgeBg,
+                                  color: scoreBadgeColor,
+                                  border: `1px solid ${scoreBadgeBorder}`,
+                                }}
+                              >
+                                {score}%
+                              </span>
+                            </div>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.775rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {act.activityName}
+                            </div>
                           </div>
-                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.775rem' }}>
-                            {act.activityName}
-                          </div>
-                        </div>
 
-                        <input
-                          type="radio"
-                          name="drawerScheduleMatch"
-                          checked={isSelected}
-                          onChange={() => setSelectedActivityId(act.activityId)}
-                        />
-                      </div>
-                    );
-                  })}
+                          <input
+                            type="radio"
+                            name="drawerScheduleMatch"
+                            checked={isSelected}
+                            onChange={() => setSelectedActivityId(act.activityId)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -547,67 +576,18 @@ export const InspectorDrawer: React.FC = () => {
             </div>
           )}
 
-          {/* Section 4: AI Multi-Factor Match Score Radar */}
-          <div className="inspector-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="inspector-card-title">
-                <Sparkles size={15} style={{ color: 'var(--brand-primary)' }} />
-                <span>Multi-Factor Match Score Radar</span>
-              </div>
-              <span className={`status-badge ${match.category}`} style={{ fontSize: '0.75rem', padding: '2px 8px' }}>
-                {activeConfidence}% Confidence
-              </span>
-            </div>
+          {/* Section 4: AI Multi-Factor Match Score Radar (Dynamic for Selected Schedule Item) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+            <MatchScoreRadarChart
+              score={activeConfidence}
+              scoreBreakdown={activeScoreBreakdown}
+              activityId={selectedActivityObj?.activityId || 'UNLINKED'}
+              activityName={selectedActivityObj?.activityName || 'No Target Activity Selected'}
+              isAlternative={selectedActivityId !== match.candidateActivityId}
+              reasons={activeReasons}
+            />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              <div style={{ background: 'var(--bg-surface-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)', padding: '6px 8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
-                  <span>Keyword Weight</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{activeScoreBreakdown.keywordScore}/50</span>
-                </div>
-                <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill blue" style={{ width: `${(activeScoreBreakdown.keywordScore / 50) * 100}%` }} />
-                </div>
-              </div>
-
-              <div style={{ background: 'var(--bg-surface-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)', padding: '6px 8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
-                  <span>Discipline Match</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{activeScoreBreakdown.disciplineScore}/20</span>
-                </div>
-                <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill green" style={{ width: `${(activeScoreBreakdown.disciplineScore / 20) * 100}%` }} />
-                </div>
-              </div>
-
-              <div style={{ background: 'var(--bg-surface-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)', padding: '6px 8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
-                  <span>Spatial / Area</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{activeScoreBreakdown.areaScore}/15</span>
-                </div>
-                <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill amber" style={{ width: `${(activeScoreBreakdown.areaScore / 15) * 100}%` }} />
-                </div>
-              </div>
-
-              <div style={{ background: 'var(--bg-surface-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)', padding: '6px 8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
-                  <span>Fuzzy Similarity</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{activeScoreBreakdown.fuzzyScore}/15</span>
-                </div>
-                <div className="progress-bar-container" style={{ marginTop: 4 }}>
-                  <div className="progress-bar-fill blue" style={{ width: `${(activeScoreBreakdown.fuzzyScore / 15) * 100}%` }} />
-                </div>
-              </div>
-            </div>
-
-            {activeReasons.length > 0 && (
-              <div style={{ fontSize: '0.75rem', color: 'var(--brand-primary)', marginTop: '0.25rem', fontWeight: 600, background: 'var(--brand-surface)', padding: '6px 8px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-default)' }}>
-                💡 Rationale: <i>{activeReasons[0]}</i>
-              </div>
-            )}
-
-            <div style={{ marginTop: '0.65rem', display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 onClick={() => reverifyMatch(update.id)}

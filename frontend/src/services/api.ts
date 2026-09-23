@@ -162,9 +162,51 @@ export const api = {
   },
 
   /**
-   * Fetch all initial state from SQLite backend
+   * Fetch all projects from SQLite database
    */
-  async fetchInitialData(): Promise<{
+  async fetchProjects(): Promise<import('../types').ProjectOption[]> {
+    try {
+      const res = await apiFetch('/projects');
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Create new project in SQLite database
+   */
+  async createProject(project: import('../types').ProjectOption): Promise<{ success: boolean; project?: import('../types').ProjectOption }> {
+    try {
+      const res = await apiFetch('/projects/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(project),
+      });
+      if (!res.ok) return { success: false };
+      return await res.json();
+    } catch {
+      return { success: false };
+    }
+  },
+
+  /**
+   * Delete project and its scoped data from SQLite database
+   */
+  async deleteProject(projectId: string): Promise<boolean> {
+    try {
+      const res = await apiFetch(`/projects/${projectId}`, { method: 'DELETE' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Fetch all initial state from SQLite backend for a given project
+   */
+  async fetchInitialData(projectId?: string): Promise<{
     schedule: ScheduleActivity[];
     siteUpdates: SiteUpdate[];
     matchResults: Record<string, MatchResult>;
@@ -172,12 +214,13 @@ export const api = {
     auditLogs: AuditLog[];
   } | null> {
     try {
+      const pParam = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
       const [scheduleRes, updatesRes, matchesRes, decisionsRes, auditRes] = await Promise.all([
-        apiFetch('/schedule'),
-        apiFetch('/site-updates'),
-        apiFetch('/matches'),
-        apiFetch('/planner/decisions'),
-        apiFetch('/audit-trail'),
+        apiFetch(`/schedule${pParam}`),
+        apiFetch(`/site-updates${pParam}`),
+        apiFetch(`/matches${pParam}`),
+        apiFetch(`/planner/decisions${pParam}`),
+        apiFetch(`/audit-trail${pParam}`),
       ]);
 
       if (!scheduleRes.ok || !updatesRes.ok || !matchesRes.ok) {
@@ -211,7 +254,8 @@ export const api = {
     actionType: string,
     targetActivityId?: string | null,
     note?: string,
-    userContext?: { userId?: string; userName?: string; userRole?: string }
+    userContext?: { userId?: string; userName?: string; userRole?: string },
+    projectId?: string
   ): Promise<{ success: boolean; decision: PlannerDecision; auditLog: AuditLog } | null> {
     try {
       const res = await apiFetch('/planner/action', {
@@ -225,6 +269,7 @@ export const api = {
           userId: userContext?.userId,
           userName: userContext?.userName,
           userRole: userContext?.userRole,
+          projectId: projectId || 'iocl-p4',
         }),
       });
 
@@ -294,12 +339,18 @@ export const api = {
   /**
    * Upload site raw files to backend for ingestion
    */
-  async uploadFiles(files: {
-    dailyReportTxt?: File | string;
-    pipingProgressXlsx?: File | ArrayBuffer;
-  }): Promise<boolean> {
+  async uploadFiles(
+    files: {
+      dailyReportTxt?: File | string;
+      pipingProgressXlsx?: File | ArrayBuffer;
+    },
+    projectId?: string
+  ): Promise<boolean> {
     try {
       const formData = new FormData();
+      if (projectId) {
+        formData.append('projectId', projectId);
+      }
       if (files.dailyReportTxt) {
         const blob = typeof files.dailyReportTxt === 'string'
           ? new Blob([files.dailyReportTxt], { type: 'text/plain' })

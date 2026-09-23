@@ -1,28 +1,26 @@
-DAILY PROGRESS REPORT — IOCL Paradip Refinery Expansion (Cooling Water Package)
-Date: 2026-09-05
-Project Code: IOCL-EPCC-PKG-04
+DAILY PROGRESS REPORT — IOCL Refinery Expansion (Cooling Water & Infrastructure Package)
+Date: 2026-09-22
+Project: IOCL-EPCC-PKG-04
 Lead Supervisor: Rajesh Kumar (Field Operations)
-Shift: General Day Shift (07:00 - 17:30)
+Shift: Day Shift A (07:00 - 17:30)
 
 Civil Works
-1. Pump foundation excavation completed at Pump Bay.
-2. PCC started for the pump foundation after inspection.
-3. Excavated cable trench depth reached 1.2m at Substation perimeter.
+1. Cast pump foundation concrete (CIV-L6-002) completed at Pump Bay; 25 cum M35 pour cured.
+2. Excavated cable trench reached 1.2m final invert level along Substation perimeter.
+3. Emergency temporary bypass trench for rainwater routing around pump pit. [Unplanned activity - non-baseline field modification]
 
 Piping Works
-4. CW 24-inch spool was erected near Pump Bay today; alignment is in progress.
-5. Fabrication of one more cooling-water spool completed in the yard.
-6. Fire-water spool erection at Filter Bay has started.
-7. A small-bore drain line was installed near the pump. [Not in baseline]
+4. Erect Line 24-CW-017 heavy cooling water spool at inlet bay; alignment completed, ready for fit-up.
+5. Erected pipe spool near pump bay inlet without specific isometric line tag.
+6. Small-bore utility drain piping installed near pump casing. [Not in baseline schedule - field instruction #14]
 
 Electrical Works
-8. Cable tray work completed in Pump Bay.
-9. Earthing strip installation started around motor foundation.
-10. Crew reported cable pulling, but feeder number was not mentioned.
+7. Erect perforated galvanized cable tray Tier-1 completed in Pump Bay.
+8. Pull heavy armored feeder cable without specified feeder tag in Pump Bay cable trench.
+9. Motor earthing copper strip installation completed around pump foundation perimeter.
 
-Equipment & HSE Safety
-11. Crane lifting safety inspection completed before spool erection.
-12. Preliminary baseplate positioning inspected for cooling water pump P-101A.
+HSE Safety & Rigging
+10. Crane lifting permit safety inspection conducted for 75T mobile crane before heavy spool lift.
 
-Supervisor General Note:
-Heavy monsoon rain delayed morning crane mobilization by 2.0 hours. High safety protocols maintained.
+Supervisor Shift Summary:
+Morning heavy crane mobilization completed smoothly under standard PTW safety protocol. Weather clear, productivity high.

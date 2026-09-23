@@ -687,7 +687,7 @@ export function getProjectDatasetBundle(projectId: string): ProjectDatasetBundle
         status: 'approved',
         actionType: 'approve',
         plannerNote: `Auto-verified against ${contractCode} schedule baseline`,
-        updatedAt: '2026-09-08T08:00:00Z',
+        updatedAt: new Date().toISOString(),
         l5Code: candidateActivity?.l5Code || 'IOCL.P4.L5.001',
         taskHash: candidateActivity?.taskHash || 'A1B2C3D4',
         digitalSignature: `SIG-${(candidateActivity?.taskHash || 'BASE').substring(0, 6)}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
@@ -695,7 +695,7 @@ export function getProjectDatasetBundle(projectId: string): ProjectDatasetBundle
 
       auditLogs.push({
         id: `AUDIT-INIT-${update.id}`,
-        timestamp: '2026-09-08T08:00:00Z',
+        timestamp: new Date().toISOString(),
         updateId: update.id,
         rawText: update.rawText,
         sourceFile: update.sourceFile,
@@ -712,7 +712,7 @@ export function getProjectDatasetBundle(projectId: string): ProjectDatasetBundle
     } else if (match.category === 'unplanned') {
       auditLogs.push({
         id: `AUDIT-UNP-${update.id}`,
-        timestamp: '2026-09-07T16:45:00Z',
+        timestamp: new Date().toISOString(),
         updateId: update.id,
         rawText: update.rawText,
         sourceFile: update.sourceFile,

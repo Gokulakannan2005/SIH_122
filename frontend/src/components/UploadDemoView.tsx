@@ -23,6 +23,7 @@ import {
   FolderPlus,
 } from 'lucide-react';
 import { formatDisplayDate } from '../utils/scheduleSimulator';
+import { FilePreviewModal, PreviewFileType } from './FilePreviewModal';
 
 export const UploadDemoView: React.FC = () => {
   const {
@@ -56,6 +57,7 @@ export const UploadDemoView: React.FC = () => {
   // Active post-parsing sub-tab
   const [activeResultsTab, setActiveResultsTab] = useState<'auto_matched' | 'human_verification'>('auto_matched');
   const [searchQuery, setSearchQuery] = useState('');
+  const [previewModalFile, setPreviewModalFile] = useState<PreviewFileType | null>(null);
 
   const scheduleInputRef = useRef<HTMLInputElement>(null);
   const reportTxtInputRef = useRef<HTMLInputElement>(null);
@@ -236,11 +238,16 @@ export const UploadDemoView: React.FC = () => {
             <UploadCloud size={22} />
           </div>
           <div>
-            <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary, #fff)' }}>
-              Project Data Ingestion & Auto-Matching Suite
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary, #fff)' }}>
+                Project Data Ingestion & Auto-Matching Suite
+              </h2>
+              <span className="mono-pill" style={{ fontSize: '0.68rem', background: 'rgba(14, 165, 233, 0.15)', color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.3)', fontWeight: 700 }}>
+                {currentProject?.name} [{currentProject?.shortCode || currentProject?.code}]
+              </span>
+            </div>
             <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted, #94a3b8)' }}>
-              Upload master schedules and daily execution logs. AI automatically maps progress to Level-5/Level-6 activities.
+              Active Site: <strong style={{ color: 'var(--text-primary)' }}>{currentProject?.location}</strong> &bull; Upload master schedules and daily execution logs. AI automatically maps progress to Level-5/Level-6 activities.
             </p>
           </div>
         </div>
@@ -248,28 +255,7 @@ export const UploadDemoView: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <button
             type="button"
-            onClick={() => setIsSystemTourOpen(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.45rem',
-              padding: '0.5rem 0.85rem',
-              borderRadius: 8,
-              border: '1px solid var(--border-default, #334155)',
-              background: 'rgba(255,255,255,0.05)',
-              color: 'var(--text-secondary, #cbd5e1)',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            <BookOpen size={14} />
-            <span>Guidebook</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('calendar')}
+            onClick={() => setActiveTab('project-info')}
             disabled={schedule.length === 0}
             style={{
               display: 'flex',
@@ -285,30 +271,30 @@ export const UploadDemoView: React.FC = () => {
               cursor: schedule.length > 0 ? 'pointer' : 'not-allowed',
             }}
           >
-            <Calendar size={14} />
-            <span>Master Calendar & Clock</span>
+            <Layers size={14} />
+            <span>Master Schedule (Project Info)</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setIsProjectAnalyticsOpen(true)}
-            disabled={siteUpdates.length === 0}
+            onClick={() => setActiveTab('calendar')}
+            disabled={schedule.length === 0}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.45rem',
               padding: '0.5rem 0.85rem',
               borderRadius: 8,
-              border: 'none',
-              background: siteUpdates.length > 0 ? '#10b981' : '#334155',
-              color: '#fff',
+              border: '1px solid var(--border-default, #334155)',
+              background: 'rgba(255,255,255,0.05)',
+              color: schedule.length > 0 ? 'var(--text-secondary, #cbd5e1)' : 'var(--text-muted, #64748b)',
               fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: siteUpdates.length > 0 ? 'pointer' : 'not-allowed',
+              fontWeight: 600,
+              cursor: schedule.length > 0 ? 'pointer' : 'not-allowed',
             }}
           >
-            <BarChart3 size={14} />
-            <span>Analytics & Export CSV</span>
+            <Calendar size={14} />
+            <span>Master Calendar & Clock</span>
           </button>
         </div>
       </div>
@@ -354,9 +340,9 @@ export const UploadDemoView: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <a
-            href="/demo_sample_files/01_Master_Schedule_P6_Baseline.csv"
-            download="01_Master_Schedule_P6_Baseline.csv"
+          <button
+            type="button"
+            onClick={() => setPreviewModalFile('schedule')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -368,18 +354,17 @@ export const UploadDemoView: React.FC = () => {
               color: '#38bdf8',
               fontSize: '0.74rem',
               fontWeight: 700,
-              textDecoration: 'none',
               cursor: 'pointer',
             }}
-            title="Download Step 1 Master Schedule Baseline CSV"
+            title="Preview Step 1 Master Schedule Baseline CSV in Modal"
           >
-            <Download size={12} />
-            <span>1. Baseline Schedule (.csv)</span>
-          </a>
+            <Eye size={12} />
+            <span>Preview Baseline (.csv)</span>
+          </button>
 
-          <a
-            href="/demo_sample_files/02_Daily_Site_Report_Field_Log.txt"
-            download="02_Daily_Site_Report_Field_Log.txt"
+          <button
+            type="button"
+            onClick={() => setPreviewModalFile('daily_report')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -391,18 +376,17 @@ export const UploadDemoView: React.FC = () => {
               color: '#34d399',
               fontSize: '0.74rem',
               fontWeight: 700,
-              textDecoration: 'none',
               cursor: 'pointer',
             }}
-            title="Download Step 2 Daily Site Report Field Log TXT"
+            title="Preview Step 2 Daily Site Report Field Log TXT in Modal"
           >
-            <Download size={12} />
-            <span>2. Daily Report (.txt)</span>
-          </a>
+            <Eye size={12} />
+            <span>Preview Daily Report (.txt)</span>
+          </button>
 
-          <a
-            href="/demo_sample_files/03_Contractor_Daily_Progress_Sheet.xlsx"
-            download="03_Contractor_Daily_Progress_Sheet.xlsx"
+          <button
+            type="button"
+            onClick={() => setPreviewModalFile('contractor_sheet')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -414,14 +398,13 @@ export const UploadDemoView: React.FC = () => {
               color: '#fbbf24',
               fontSize: '0.74rem',
               fontWeight: 700,
-              textDecoration: 'none',
               cursor: 'pointer',
             }}
-            title="Download Step 2 Contractor Progress Sheet XLSX"
+            title="Preview Step 2 Contractor Progress Sheet XLSX/CSV in Modal"
           >
-            <Download size={12} />
-            <span>3. Contractor Sheet (.xlsx)</span>
-          </a>
+            <Eye size={12} />
+            <span>Preview Contractor Sheet (.xlsx)</span>
+          </button>
         </div>
       </div>
 
@@ -462,28 +445,52 @@ export const UploadDemoView: React.FC = () => {
             </div>
           </div>
 
-          {schedule.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <button
               type="button"
-              onClick={() => scheduleInputRef.current?.click()}
+              onClick={() => setPreviewModalFile('schedule')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.4rem',
                 padding: '0.45rem 0.85rem',
                 borderRadius: 6,
-                border: '1px solid #0284c7',
-                background: 'rgba(2, 132, 199, 0.12)',
+                border: '1px solid rgba(56, 189, 248, 0.4)',
+                background: 'rgba(14, 165, 233, 0.1)',
                 color: '#38bdf8',
                 fontSize: '0.78rem',
                 fontWeight: 700,
                 cursor: 'pointer',
               }}
+              title="Preview Schedule CSV before or after uploading"
             >
-              <RefreshCw size={13} />
-              <span>Update Schedule Anytime</span>
+              <Eye size={13} />
+              <span>Preview Baseline File</span>
             </button>
-          )}
+
+            {schedule.length > 0 && (
+              <button
+                type="button"
+                onClick={() => scheduleInputRef.current?.click()}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.45rem 0.85rem',
+                  borderRadius: 6,
+                  border: '1px solid #0284c7',
+                  background: 'rgba(2, 132, 199, 0.12)',
+                  color: '#38bdf8',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                <RefreshCw size={13} />
+                <span>Update Schedule Anytime</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {schedule.length === 0 ? (
@@ -573,16 +580,38 @@ export const UploadDemoView: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', color: '#cbd5e1' }}>
-                Civil ({schedule.filter(a => a.discipline === 'Civil').length})
-              </span>
-              <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', color: '#cbd5e1' }}>
-                Piping ({schedule.filter(a => a.discipline === 'Piping').length})
-              </span>
-              <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', color: '#cbd5e1' }}>
-                Electrical ({schedule.filter(a => a.discipline === 'Electrical').length})
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', color: '#cbd5e1' }}>
+                  Civil ({schedule.filter(a => a.discipline === 'Civil').length})
+                </span>
+                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', color: '#cbd5e1' }}>
+                  Piping ({schedule.filter(a => a.discipline === 'Piping').length})
+                </span>
+                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', color: '#cbd5e1' }}>
+                  Electrical ({schedule.filter(a => a.discipline === 'Electrical').length})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('project-info')}
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: 6,
+                  border: '1px solid rgba(56, 189, 248, 0.4)',
+                  background: 'rgba(14, 165, 233, 0.15)',
+                  color: '#38bdf8',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <span>View in Project Info</span>
+                <ArrowRight size={12} />
+              </button>
             </div>
           </div>
         )}
@@ -627,26 +656,72 @@ export const UploadDemoView: React.FC = () => {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleLoadSampleData}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.45rem',
-              padding: '0.45rem 0.85rem',
-              borderRadius: 6,
-              border: '1px solid rgba(16, 185, 129, 0.4)',
-              background: 'rgba(16, 185, 129, 0.1)',
-              color: '#34d399',
-              fontSize: '0.78rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            <Sparkles size={13} />
-            <span>Load Sample 3-Scenario Report</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setPreviewModalFile('daily_report')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.45rem 0.85rem',
+                borderRadius: 6,
+                border: '1px solid rgba(16, 185, 129, 0.4)',
+                background: 'rgba(16, 185, 129, 0.1)',
+                color: '#34d399',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+              title="Preview 02_Daily_Site_Report_Field_Log.txt"
+            >
+              <Eye size={13} />
+              <span>Preview Daily Report (.txt)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPreviewModalFile('contractor_sheet')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.45rem 0.85rem',
+                borderRadius: 6,
+                border: '1px solid rgba(245, 158, 11, 0.4)',
+                background: 'rgba(245, 158, 11, 0.1)',
+                color: '#fbbf24',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+              title="Preview 03_Contractor_Daily_Progress_Sheet.xlsx"
+            >
+              <Eye size={13} />
+              <span>Preview Contractor Sheet (.xlsx)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleLoadSampleData}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                padding: '0.45rem 0.85rem',
+                borderRadius: 6,
+                border: '1px solid rgba(56, 189, 248, 0.4)',
+                background: 'rgba(14, 165, 233, 0.1)',
+                color: '#38bdf8',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <Sparkles size={13} />
+              <span>Load Sample 3-Scenario Report</span>
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -730,6 +805,58 @@ export const UploadDemoView: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Step 2 Bottom Confirmation & Direct Redirection to Matching Queue */}
+        {siteUpdates.length > 0 && (
+          <div
+            style={{
+              marginTop: '1rem',
+              padding: '0.85rem 1.15rem',
+              borderRadius: 8,
+              background: 'rgba(16, 185, 129, 0.08)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <CheckCircle2 size={18} style={{ color: '#34d399' }} />
+              <div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#34d399' }}>
+                  Field Progress Ingested: {siteUpdates.length} Records Parsed Across {new Set(siteUpdates.map(u => u.discipline)).size} Disciplines
+                </div>
+                <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+                  {autoMatchedReports.length} Auto-Matched (≥85%) • {uncertainReports.length} In Review Queue / Unplanned Scope
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('planner-review')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.6rem 1.25rem',
+                borderRadius: 8,
+                border: 'none',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                color: '#ffffff',
+                fontSize: '0.84rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 2px 10px rgba(16, 185, 129, 0.3)',
+              }}
+            >
+              <span>Review AI Matches & Verification Queue</span>
+              <ArrowRight size={15} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Mini Parsing Progress Bar Animation */}
@@ -1166,6 +1293,14 @@ export const UploadDemoView: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* File Preview Modal */}
+      <FilePreviewModal
+        isOpen={previewModalFile !== null}
+        initialFile={previewModalFile || 'schedule'}
+        onClose={() => setPreviewModalFile(null)}
+        onLoadDataset={handleLoadSampleData}
+      />
     </div>
   );
 };

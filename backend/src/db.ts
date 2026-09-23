@@ -29,6 +29,22 @@ export interface UserAccount {
   lastLogin?: string;
 }
 
+export interface ProjectRecord {
+  id: string;
+  name: string;
+  shortCode: string;
+  code?: string;
+  client: string;
+  contractId: string;
+  location: string;
+  progress: number;
+  progressDelta: string;
+  status: 'Active' | 'Staging' | 'Planning';
+  statusColor: string;
+  workfronts: string;
+  createdAt?: string;
+}
+
 export interface PlannerDecision {
   updateId: string;
   linkedActivityId: string | null;
@@ -143,6 +159,22 @@ export function generateEvidenceChainHash(taskHash: string, updateId: string, us
  */
 export function initSchema() {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      short_code TEXT,
+      code TEXT,
+      client TEXT,
+      contract_id TEXT,
+      location TEXT,
+      progress REAL DEFAULT 0,
+      progress_delta TEXT DEFAULT '',
+      status TEXT DEFAULT 'Active',
+      status_color TEXT DEFAULT 'var(--status-ready-fg)',
+      workfronts TEXT DEFAULT '18 / 24 active',
+      created_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT UNIQUE,
@@ -290,10 +322,14 @@ export function initSchema() {
     }
   };
 
+  ensureColumn('schedule_activities', 'project_id', "TEXT DEFAULT 'iocl-p4'");
   ensureColumn('schedule_activities', 'l5_code', 'TEXT');
   ensureColumn('schedule_activities', 'task_hash', 'TEXT');
+  ensureColumn('site_updates', 'project_id', "TEXT DEFAULT 'iocl-p4'");
   ensureColumn('site_updates', 'task_hash', 'TEXT');
   ensureColumn('site_updates', 'l5_code', 'TEXT');
+  ensureColumn('match_results', 'project_id', "TEXT DEFAULT 'iocl-p4'");
+  ensureColumn('planner_decisions', 'project_id', "TEXT DEFAULT 'iocl-p4'");
   ensureColumn('planner_decisions', 'user_id', 'TEXT');
   ensureColumn('planner_decisions', 'user_name', 'TEXT');
   ensureColumn('planner_decisions', 'user_role', 'TEXT');
@@ -301,6 +337,7 @@ export function initSchema() {
   ensureColumn('planner_decisions', 'task_hash', 'TEXT');
   ensureColumn('planner_decisions', 'evidence_hash', 'TEXT');
   ensureColumn('planner_decisions', 'digital_signature', 'TEXT');
+  ensureColumn('audit_logs', 'project_id', "TEXT DEFAULT 'iocl-p4'");
   ensureColumn('audit_logs', 'user_id', 'TEXT');
   ensureColumn('audit_logs', 'user_name', 'TEXT');
   ensureColumn('audit_logs', 'user_role', 'TEXT');
@@ -308,6 +345,145 @@ export function initSchema() {
   ensureColumn('audit_logs', 'task_hash', 'TEXT');
   ensureColumn('audit_logs', 'evidence_hash', 'TEXT');
   ensureColumn('audit_logs', 'digital_signature', 'TEXT');
+
+  seedProjects();
+}
+
+/**
+ * Seed initial projects
+ */
+export function seedProjects() {
+  const defaultProjects: ProjectRecord[] = [
+    {
+      id: 'iocl-p4',
+      name: 'IOCL Refinery Expansion',
+      shortCode: 'IOCL-P4',
+      code: 'PR-2026-P4',
+      client: 'Indian Oil Corporation Ltd.',
+      contractId: 'IOCL/PJ/EPCC-04/2024/7829',
+      location: 'Paradip, Odisha, India',
+      progress: 43.8,
+      progressDelta: '+2.4% this week',
+      status: 'Active',
+      statusColor: 'var(--status-ready-fg)',
+      workfronts: '18 / 24 active',
+      createdAt: '2026-08-01T08:00:00Z',
+    },
+    {
+      id: 'ongc-delta',
+      name: 'ONGC Delta Offshore Gas Compression Platform',
+      shortCode: 'ONGC-D3',
+      code: 'OG-2026-D3',
+      client: 'Oil and Natural Gas Corporation',
+      contractId: 'ONGC/OFF/COMP-03/2024/4412',
+      location: 'KG Basin, Andhra Pradesh, India',
+      progress: 61.2,
+      progressDelta: '+1.1% this week',
+      status: 'Active',
+      statusColor: 'var(--status-ready-fg)',
+      workfronts: '12 / 14 active',
+      createdAt: '2026-08-15T08:00:00Z',
+    },
+    {
+      id: 'bpcl-kochi',
+      name: 'BPCL Kochi MS Block Hydrotreater Expansion',
+      shortCode: 'BPCL-K2',
+      code: 'BP-2026-K2',
+      client: 'Bharat Petroleum Corp. Ltd.',
+      contractId: 'BPCL/KCH/REF-02/2025/1104',
+      location: 'Kochi Refinery, Kerala, India',
+      progress: 28.5,
+      progressDelta: '+3.8% this week',
+      status: 'Planning',
+      statusColor: 'var(--status-review-fg)',
+      workfronts: '8 / 16 active',
+      createdAt: '2026-09-01T08:00:00Z',
+    },
+  ];
+
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO projects
+    (id, name, short_code, code, client, contract_id, location, progress, progress_delta, status, status_color, workfronts, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const p of defaultProjects) {
+    insert.run(
+      p.id,
+      p.name,
+      p.shortCode,
+      p.code || p.shortCode,
+      p.client,
+      p.contractId,
+      p.location,
+      p.progress,
+      p.progressDelta,
+      p.status,
+      p.statusColor,
+      p.workfronts,
+      p.createdAt || new Date().toISOString()
+    );
+  }
+}
+
+/**
+ * Get all projects from SQLite database
+ */
+export function getAllProjects(): ProjectRecord[] {
+  const stmt = db.prepare('SELECT * FROM projects ORDER BY created_at DESC');
+  const rows = stmt.all() as any[];
+  return rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    shortCode: r.short_code,
+    code: r.code || r.short_code,
+    client: r.client,
+    contractId: r.contract_id,
+    location: r.location,
+    progress: Number(r.progress || 0),
+    progressDelta: r.progress_delta || '',
+    status: r.status as any,
+    statusColor: r.status_color || 'var(--status-ready-fg)',
+    workfronts: r.workfronts || '0 / 0 active',
+    createdAt: r.created_at,
+  }));
+}
+
+/**
+ * Create or save a project to SQLite database
+ */
+export function createProject(project: ProjectRecord): ProjectRecord {
+  const insert = db.prepare(`
+    INSERT OR REPLACE INTO projects
+    (id, name, short_code, code, client, contract_id, location, progress, progress_delta, status, status_color, workfronts, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  insert.run(
+    project.id,
+    project.name,
+    project.shortCode || project.id.toUpperCase(),
+    project.code || project.shortCode || project.id.toUpperCase(),
+    project.client || 'Enterprise Client',
+    project.contractId || `CNT-${Date.now()}`,
+    project.location || 'Site Location',
+    project.progress || 0,
+    project.progressDelta || '+0% this week',
+    project.status || 'Active',
+    project.statusColor || 'var(--status-ready-fg)',
+    project.workfronts || '0 / 0 active',
+    project.createdAt || new Date().toISOString()
+  );
+
+  return project;
+}
+
+/**
+ * Delete a project and its associated data
+ */
+export function deleteProject(projectId: string): void {
+  db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+  clearProjectData(projectId);
 }
 
 /**
@@ -485,11 +661,11 @@ export function createUser(userData: {
 }
 
 /**
- * Get all baseline schedule activities with L5 & Task Hashes
+ * Get baseline schedule activities with L5 & Task Hashes
  */
-export function getScheduleActivities(): ScheduleActivity[] {
-  const stmt = db.prepare('SELECT * FROM schedule_activities ORDER BY wbs ASC');
-  const rows = stmt.all() as any[];
+export function getScheduleActivities(projectId: string = 'iocl-p4'): ScheduleActivity[] {
+  const stmt = db.prepare('SELECT * FROM schedule_activities WHERE project_id = ? ORDER BY wbs ASC');
+  const rows = stmt.all(projectId) as any[];
   return rows.map(r => {
     const l5Code = r.l5_code || generateL5Code(r.activity_id, r.area, r.discipline, r.wbs);
     const taskHash = r.task_hash || generateTaskHash(r.activity_id, r.activity_name, r.planned_start, r.planned_finish, r.discipline);
@@ -513,11 +689,11 @@ export function getScheduleActivities(): ScheduleActivity[] {
 /**
  * Save schedule activities with deterministic L5 codes and SHA-256 fingerprints
  */
-export function saveScheduleActivities(activities: ScheduleActivity[]) {
+export function saveScheduleActivities(activities: ScheduleActivity[], projectId: string = 'iocl-p4') {
   const insert = db.prepare(`
     INSERT OR REPLACE INTO schedule_activities 
-    (activity_id, wbs, activity_name, discipline, planned_start, planned_finish, area, aliases, raw_aliases, l5_code, task_hash)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (activity_id, project_id, wbs, activity_name, discipline, planned_start, planned_finish, area, aliases, raw_aliases, l5_code, task_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const act of activities) {
@@ -526,6 +702,7 @@ export function saveScheduleActivities(activities: ScheduleActivity[]) {
 
     insert.run(
       act.activityId,
+      projectId,
       act.wbs,
       act.activityName,
       act.discipline,
@@ -541,11 +718,11 @@ export function saveScheduleActivities(activities: ScheduleActivity[]) {
 }
 
 /**
- * Get all site updates
+ * Get all site updates for a project
  */
-export function getSiteUpdates(): SiteUpdate[] {
-  const stmt = db.prepare('SELECT * FROM site_updates ORDER BY report_date DESC');
-  const rows = stmt.all() as any[];
+export function getSiteUpdates(projectId: string = 'iocl-p4'): SiteUpdate[] {
+  const stmt = db.prepare('SELECT * FROM site_updates WHERE project_id = ? ORDER BY report_date DESC');
+  const rows = stmt.all(projectId) as any[];
   return rows.map(r => ({
     id: r.id,
     sourceFile: r.source_file,
@@ -568,18 +745,19 @@ export function getSiteUpdates(): SiteUpdate[] {
 }
 
 /**
- * Save site updates
+ * Save site updates for a project
  */
-export function saveSiteUpdates(updates: SiteUpdate[]) {
+export function saveSiteUpdates(updates: SiteUpdate[], projectId: string = 'iocl-p4') {
   const insert = db.prepare(`
     INSERT OR REPLACE INTO site_updates 
-    (id, source_file, source_type, entry_id, discipline, report_date, raw_text, extracted_description, event_status, area, quantity, unit, supervisor, line_evidence, is_explicit_unplanned, task_hash, l5_code)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, project_id, source_file, source_type, entry_id, discipline, report_date, raw_text, extracted_description, event_status, area, quantity, unit, supervisor, line_evidence, is_explicit_unplanned, task_hash, l5_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const u of updates) {
     insert.run(
       u.id,
+      projectId,
       u.sourceFile,
       u.sourceType,
       u.entryId || null,
@@ -603,30 +781,30 @@ export function saveSiteUpdates(updates: SiteUpdate[]) {
 /**
  * Update single site update parameters
  */
-export function updateSiteUpdate(id: string, fields: Partial<SiteUpdate>) {
-  const existing = getSiteUpdates().find(u => u.id === id);
+export function updateSiteUpdate(id: string, fields: Partial<SiteUpdate>, projectId: string = 'iocl-p4') {
+  const existing = getSiteUpdates(projectId).find(u => u.id === id);
   if (!existing) return null;
 
   const merged = { ...existing, ...fields };
-  saveSiteUpdates([merged]);
+  saveSiteUpdates([merged], projectId);
 
   // Recalculate match for this item
-  const schedule = getScheduleActivities();
+  const schedule = getScheduleActivities(projectId);
   const matchesMap = processAllMatches([merged], schedule);
   const newMatch = matchesMap.get(id);
   if (newMatch) {
-    saveMatchResults({ [id]: newMatch });
+    saveMatchResults({ [id]: newMatch }, projectId);
   }
 
   return merged;
 }
 
 /**
- * Get match results
+ * Get match results for a project
  */
-export function getMatchResults(): Record<string, MatchResult> {
-  const stmt = db.prepare('SELECT * FROM match_results');
-  const rows = stmt.all() as any[];
+export function getMatchResults(projectId: string = 'iocl-p4'): Record<string, MatchResult> {
+  const stmt = db.prepare('SELECT * FROM match_results WHERE project_id = ?');
+  const rows = stmt.all(projectId) as any[];
   const result: Record<string, MatchResult> = {};
   for (const r of rows) {
     result[r.update_id] = {
@@ -643,18 +821,19 @@ export function getMatchResults(): Record<string, MatchResult> {
 }
 
 /**
- * Save match results
+ * Save match results for a project
  */
-export function saveMatchResults(matches: Record<string, MatchResult>) {
+export function saveMatchResults(matches: Record<string, MatchResult>, projectId: string = 'iocl-p4') {
   const insert = db.prepare(`
     INSERT OR REPLACE INTO match_results 
-    (update_id, candidate_activity_id, confidence_score, category, match_reasons, score_breakdown, suggested_activities)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    (update_id, project_id, candidate_activity_id, confidence_score, category, match_reasons, score_breakdown, suggested_activities)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const [updateId, m] of Object.entries(matches)) {
     insert.run(
       updateId,
+      projectId,
       m.candidateActivityId || null,
       m.confidenceScore,
       m.category,
@@ -666,11 +845,11 @@ export function saveMatchResults(matches: Record<string, MatchResult>) {
 }
 
 /**
- * Get planner decisions
+ * Get planner decisions for a project
  */
-export function getPlannerDecisions(): Record<string, PlannerDecision> {
-  const stmt = db.prepare('SELECT * FROM planner_decisions');
-  const rows = stmt.all() as any[];
+export function getPlannerDecisions(projectId: string = 'iocl-p4'): Record<string, PlannerDecision> {
+  const stmt = db.prepare('SELECT * FROM planner_decisions WHERE project_id = ?');
+  const rows = stmt.all(projectId) as any[];
   const result: Record<string, PlannerDecision> = {};
   for (const r of rows) {
     result[r.update_id] = {
@@ -693,17 +872,18 @@ export function getPlannerDecisions(): Record<string, PlannerDecision> {
 }
 
 /**
- * Save planner decision
+ * Save planner decision for a project
  */
-export function savePlannerDecision(decision: PlannerDecision) {
+export function savePlannerDecision(decision: PlannerDecision, projectId: string = 'iocl-p4') {
   const insert = db.prepare(`
     INSERT OR REPLACE INTO planner_decisions 
-    (update_id, linked_activity_id, status, action_type, planner_note, updated_at, user_id, user_name, user_role, l5_code, task_hash, evidence_hash, digital_signature)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (update_id, project_id, linked_activity_id, status, action_type, planner_note, updated_at, user_id, user_name, user_role, l5_code, task_hash, evidence_hash, digital_signature)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   insert.run(
     decision.updateId,
+    projectId,
     decision.linkedActivityId || null,
     decision.status,
     decision.actionType,
@@ -720,11 +900,11 @@ export function savePlannerDecision(decision: PlannerDecision) {
 }
 
 /**
- * Get audit logs
+ * Get audit logs for a project
  */
-export function getAuditLogs(): AuditLog[] {
-  const stmt = db.prepare('SELECT * FROM audit_logs ORDER BY timestamp DESC');
-  const rows = stmt.all() as any[];
+export function getAuditLogs(projectId: string = 'iocl-p4'): AuditLog[] {
+  const stmt = db.prepare('SELECT * FROM audit_logs WHERE project_id = ? ORDER BY timestamp DESC');
+  const rows = stmt.all(projectId) as any[];
   return rows.map(r => ({
     id: r.id,
     timestamp: r.timestamp,
@@ -747,17 +927,18 @@ export function getAuditLogs(): AuditLog[] {
 }
 
 /**
- * Save audit log
+ * Save audit log for a project
  */
-export function saveAuditLog(log: AuditLog) {
+export function saveAuditLog(log: AuditLog, projectId: string = 'iocl-p4') {
   const insert = db.prepare(`
     INSERT OR REPLACE INTO audit_logs 
-    (id, timestamp, update_id, raw_text, source_file, action, original_confidence, original_category, final_activity_id, planner_note, user_id, user_name, user_role, l5_code, task_hash, evidence_hash, digital_signature)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, project_id, timestamp, update_id, raw_text, source_file, action, original_confidence, original_category, final_activity_id, planner_note, user_id, user_name, user_role, l5_code, task_hash, evidence_hash, digital_signature)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   insert.run(
     log.id,
+    projectId,
     log.timestamp,
     log.updateId,
     log.rawText,
@@ -780,11 +961,11 @@ export function saveAuditLog(log: AuditLog) {
 /**
  * Get enriched schedule with actual dates, progress percentage, and delay variance
  */
-export function getEnrichedSchedule(): ScheduleActivity[] {
-  const schedule = getScheduleActivities();
-  const siteUpdates = getSiteUpdates();
-  const plannerDecisions = getPlannerDecisions();
-  const matchResults = getMatchResults();
+export function getEnrichedSchedule(projectId: string = 'iocl-p4'): ScheduleActivity[] {
+  const schedule = getScheduleActivities(projectId);
+  const siteUpdates = getSiteUpdates(projectId);
+  const plannerDecisions = getPlannerDecisions(projectId);
+  const matchResults = getMatchResults(projectId);
 
   let maxDate = '2026-09-05';
   siteUpdates.forEach(u => {
@@ -863,6 +1044,7 @@ export function seedBenchmarkData() {
   const pipingProgressXlsxPath = path.join(demoDataDir, 'piping_progress.xlsx');
 
   seedUsers();
+  seedProjects();
 
   if (!fs.existsSync(scheduleCsvPath)) {
     console.warn('Demo data directory not found at', demoDataDir);
@@ -885,18 +1067,12 @@ export function seedBenchmarkData() {
     matchesRecord[key] = val;
   });
 
-  // Clear existing tables
-  db.exec(`
-    DELETE FROM schedule_activities;
-    DELETE FROM site_updates;
-    DELETE FROM match_results;
-    DELETE FROM planner_decisions;
-    DELETE FROM audit_logs;
-  `);
+  // Only clear IOCL-P4 benchmark data when re-seeding benchmark
+  clearProjectData('iocl-p4');
 
-  saveScheduleActivities(parsedSchedule);
-  saveSiteUpdates(allUpdates);
-  saveMatchResults(matchesRecord);
+  saveScheduleActivities(parsedSchedule, 'iocl-p4');
+  saveSiteUpdates(allUpdates, 'iocl-p4');
+  saveMatchResults(matchesRecord, 'iocl-p4');
 
   // Initialize auto-approved decisions for high-confidence items
   for (const update of allUpdates) {
@@ -922,7 +1098,7 @@ export function seedBenchmarkData() {
         taskHash,
         evidenceHash,
         digitalSignature: digitalSig,
-      });
+      }, 'iocl-p4');
 
       saveAuditLog({
         id: `AUDIT-INIT-${update.id}`,
@@ -942,7 +1118,7 @@ export function seedBenchmarkData() {
         taskHash,
         evidenceHash,
         digitalSignature: digitalSig,
-      });
+      }, 'iocl-p4');
     }
   }
 
@@ -1246,11 +1422,20 @@ export function acknowledgeSupervisorScheduleUpdates() {
   db.exec('UPDATE notifications SET acknowledged = 1 WHERE target_role = "supervisor" AND type = "update"');
 }
 
-export function clearProjectData() {
-  db.exec('DELETE FROM schedule_activities');
-  db.exec('DELETE FROM site_updates');
-  db.exec('DELETE FROM match_results');
-  db.exec('DELETE FROM planner_decisions');
+export function clearProjectData(projectId?: string) {
+  if (projectId) {
+    db.prepare('DELETE FROM schedule_activities WHERE project_id = ?').run(projectId);
+    db.prepare('DELETE FROM site_updates WHERE project_id = ?').run(projectId);
+    db.prepare('DELETE FROM match_results WHERE project_id = ?').run(projectId);
+    db.prepare('DELETE FROM planner_decisions WHERE project_id = ?').run(projectId);
+    db.prepare('DELETE FROM audit_logs WHERE project_id = ?').run(projectId);
+  } else {
+    db.exec('DELETE FROM schedule_activities');
+    db.exec('DELETE FROM site_updates');
+    db.exec('DELETE FROM match_results');
+    db.exec('DELETE FROM planner_decisions');
+    db.exec('DELETE FROM audit_logs');
+  }
 }
 
 

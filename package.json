@@ -2,6 +2,10 @@
   "name": "datum-platform",
   "private": true,
   "scripts": {
+    "dev": "node scripts/start-dev.mjs",
+    "start": "node --experimental-strip-types backend/src/server.ts",
+    "server": "cd backend && npm run dev",
+    "client": "cd frontend && npm run dev",
     "build": "cd frontend && npm install && npm run build"
   }
 }

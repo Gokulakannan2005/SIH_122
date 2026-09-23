@@ -1,22 +1,33 @@
-import { ProjectMemoryPattern, ProjectMemoryQueryAnswer, SihPsCoverageItem, SiteUpdate, ScheduleActivity, PlannerDecision } from '../types';
+import type { ProjectMemoryPattern, ProjectMemoryQueryAnswer, SihPsCoverageItem, SiteUpdate, ScheduleActivity, PlannerDecision } from '../types';
 
 /**
  * Computes structured Project Memory patterns dynamically from actual execution records,
  * planner decisions, and schedule baseline.
  */
 export function deriveProjectMemory(
-  siteUpdates: SiteUpdate[],
-  schedule: ScheduleActivity[],
-  plannerDecisions: Record<string, PlannerDecision>
+  siteUpdates: SiteUpdate[] = [],
+  schedule: ScheduleActivity[] = [],
+  plannerDecisions: Record<string, PlannerDecision> = {}
 ): ProjectMemoryPattern[] {
+  // Defensive check in case parameters are swapped or undefined
+  let actualUpdates: any[] = Array.isArray(siteUpdates) ? siteUpdates : [];
+  let actualSchedule: any[] = Array.isArray(schedule) ? schedule : [];
+
+  if (actualUpdates.length > 0 && 'activityId' in actualUpdates[0] && !('rawText' in actualUpdates[0])) {
+    // Arguments were swapped
+    const temp = actualUpdates;
+    actualUpdates = actualSchedule;
+    actualSchedule = temp;
+  }
+
   // Count verified piping alignment issues or updates
-  const pipingUpdates = siteUpdates.filter(u => u.discipline.toLowerCase() === 'piping');
-  const alignmentUpdates = siteUpdates.filter(u =>
-    u.rawText.toLowerCase().includes('align') ||
-    u.extractedDescription.toLowerCase().includes('align')
+  const pipingUpdates = actualUpdates.filter(u => (u?.discipline || '').toLowerCase() === 'piping');
+  const alignmentUpdates = actualUpdates.filter(u =>
+    (u?.rawText || '').toLowerCase().includes('align') ||
+    (u?.extractedDescription || '').toLowerCase().includes('align')
   );
 
-  const cwAct = schedule.find(s => s.activityId === 'PIP-L6-012');
+  const cwAct = actualSchedule.find(s => s?.activityId === 'PIP-L6-012');
   const plannedCwDuration = 3;
   const observedCwDuration = cwAct?.varianceDays ? plannedCwDuration + Math.max(1, cwAct.varianceDays) : 5;
   const cwVariance = observedCwDuration - plannedCwDuration;
@@ -83,17 +94,20 @@ export function deriveProjectMemory(
  */
 export function queryProjectMemory(
   query: string,
-  siteUpdates: SiteUpdate[],
-  schedule: ScheduleActivity[],
-  patterns: ProjectMemoryPattern[]
+  siteUpdates: SiteUpdate[] = [],
+  schedule: ScheduleActivity[] = [],
+  patterns: ProjectMemoryPattern[] = []
 ): ProjectMemoryQueryAnswer {
-  const q = query.toLowerCase().trim();
+  const q = (query || '').toLowerCase().trim();
+  const updates = Array.isArray(siteUpdates) ? siteUpdates : [];
+  const sched = Array.isArray(schedule) ? schedule : [];
+  const pat = Array.isArray(patterns) ? patterns : [];
 
   if (q.includes('piping') && (q.includes('exceed') || q.includes('duration') || q.includes('delay') || q.includes('longer'))) {
     return {
       query,
       matchedDiscipline: 'Piping',
-      recordsAnalyzed: siteUpdates.length,
+      recordsAnalyzed: updates.length,
       answer:
         'CW Spool Erection (PIP-L6-012) and Pump Suction Piping (PIP-L6-016) repeatedly exceeded planned durations in the benchmark dataset. Average planned duration was 3.0 days, while observed actual duration reached 5.0 days (+2.0 days variance), driven primarily by alignment holds.',
       evidencePoints: [

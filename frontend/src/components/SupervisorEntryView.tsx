@@ -41,6 +41,7 @@ import { runLocalOCR, calculateImageFingerprint, normalizeEquipmentTag, OCRScanR
 import { speechService, SpeechLanguage, VoicePreset, SAMPLE_VOICE_PRESETS, isOperaBrowser, RecordedAudioData, transcribeAudioBlob } from '../utils/speechService';
 import { parseSpokenUpdate } from '../utils/speechParser';
 import { SpokenParseResult, ExtractedHandwrittenTask, ScheduleActivity } from '../types';
+import { useLiveISTClock } from '../utils/istTimeService';
 
 const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8 MB
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -65,7 +66,30 @@ export const SupervisorEntryView: React.FC = () => {
     setSelectedInspectorUpdateId,
     setSelectedReviewUpdateId,
     loadDemoData,
+    currentProject,
   } = useProject();
+
+  const istClock = useLiveISTClock();
+
+  const weatherContext = useMemo(() => {
+    const loc = (currentProject?.location || '').toLowerCase();
+    if (loc.includes('ongc') || loc.includes('basin') || loc.includes('offshore')) {
+      return { temp: '29°C', condition: 'Coastal Breeze', icon: '🌊', humidity: '74%' };
+    }
+    if (loc.includes('mathura') || loc.includes('refinery') || loc.includes('up')) {
+      return { temp: '33°C', condition: 'Clear & Sunny', icon: '☀️', humidity: '44%' };
+    }
+    return { temp: '31°C', condition: 'Partly Cloudy', icon: '⛅', humidity: '52%' };
+  }, [currentProject?.location]);
+
+  const liveDateFormatted = useMemo(() => {
+    return istClock.currentISTDate.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  }, [istClock.dateIsoString]);
 
   const [selectedDisciplineFilter, setSelectedDisciplineFilter] = useState<string>('ALL');
   const [taskStatusTab, setTaskStatusTab] = useState<'today' | 'upcoming' | 'completed'>('today');
@@ -382,58 +406,74 @@ export const SupervisorEntryView: React.FC = () => {
 
   // Voice Recording Toggle
   const handleToggleVoiceRecording = async (lang: SpeechLanguage = voiceLang) => {
-    if (isVoiceRecording || isMicActive) {
-      const audioData = await speechService.stop();
-      setIsVoiceRecording(false);
-      setIsMicActive(false);
-      setAudioLevel(0);
-      if (audioData) {
-        setRecordedAudio(audioData);
-        if (!voiceTranscript && audioData.durationSec >= 0.8) {
-          handleTranscribeRecordedAudio(audioData.blob, lang);
+    try {
+      if (isVoiceRecording || isMicActive) {
+        const audioData = await speechService.stop().catch(() => null);
+        setIsVoiceRecording(false);
+        setIsMicActive(false);
+        setAudioLevel(0);
+        if (audioData) {
+          setRecordedAudio(audioData);
+          if (!voiceTranscript && audioData.durationSec >= 0.8) {
+            handleTranscribeRecordedAudio(audioData.blob, lang);
+          }
         }
+        return;
       }
-      return;
-    }
 
-    setVoiceErrorMsg(null);
-    setVoiceTranscript('');
-    setInterimVoiceText('');
-    setParsedVoiceResult(null);
-    setRecordedAudio(null);
+      setVoiceErrorMsg(null);
+      setVoiceTranscript('');
+      setInterimVoiceText('');
+      setParsedVoiceResult(null);
+      setRecordedAudio(null);
 
-    const started = await speechService.start(lang, {
-      onAudioLevel: lvl => setAudioLevel(lvl),
-      onMicConnected: connected => setIsMicActive(connected),
-      onInterimTranscript: text => {
-        setInterimVoiceText(text);
-        const parsed = parseSpokenUpdate(text, lang);
-        setParsedVoiceResult(parsed);
-        autoApplyParsedVoice(parsed, false);
-      },
-      onFinalTranscript: text => {
-        setVoiceTranscript(prev => {
-          const full = prev ? `${prev} ${text}` : text;
-          const parsed = parseSpokenUpdate(full, lang);
-          setParsedVoiceResult(parsed);
-          autoApplyParsedVoice(parsed, false);
-          return full;
-        });
-        setInterimVoiceText('');
-      },
-      onAudioRecorded: audio => setRecordedAudio(audio),
-      onStateChange: state => {
-        setIsVoiceRecording(state === 'listening');
-        if (state === 'transcribing') setIsTranscribing(true);
-        else if (state !== 'listening' && !isMicActive) setAudioLevel(0);
-      },
-      onError: err => setVoiceErrorMsg(err),
-    });
+      const started = await speechService.start(lang, {
+        onAudioLevel: lvl => setAudioLevel(lvl),
+        onMicConnected: connected => setIsMicActive(connected),
+        onInterimTranscript: text => {
+          try {
+            setInterimVoiceText(text);
+            const parsed = parseSpokenUpdate(text, lang);
+            setParsedVoiceResult(parsed);
+            autoApplyParsedVoice(parsed, false);
+          } catch (e) {
+            console.warn('Interim speech parsing warning:', e);
+          }
+        },
+        onFinalTranscript: text => {
+          try {
+            setVoiceTranscript(prev => {
+              const full = prev ? `${prev} ${text}` : text;
+              const parsed = parseSpokenUpdate(full, lang);
+              setParsedVoiceResult(parsed);
+              autoApplyParsedVoice(parsed, false);
+              return full;
+            });
+            setInterimVoiceText('');
+          } catch (e) {
+            console.warn('Final speech parsing warning:', e);
+          }
+        },
+        onAudioRecorded: audio => setRecordedAudio(audio),
+        onStateChange: state => {
+          setIsVoiceRecording(state === 'listening');
+          if (state === 'transcribing') setIsTranscribing(true);
+          else if (state !== 'listening' && !isMicActive) setAudioLevel(0);
+        },
+        onError: err => setVoiceErrorMsg(err),
+      });
 
-    if (!started) {
+      if (!started) {
+        setIsVoiceRecording(false);
+        setIsMicActive(false);
+        setAudioLevel(0);
+      }
+    } catch (err: any) {
+      console.error('Failed to toggle voice recording:', err);
       setIsVoiceRecording(false);
       setIsMicActive(false);
       setAudioLevel(0);
+      setVoiceErrorMsg(err?.message || 'Microphone error. You can type or use sample voice presets.');
     }
   };
 
@@ -441,34 +481,43 @@ export const SupervisorEntryView: React.FC = () => {
     setVoiceTranscript(newText);
     setInterimVoiceText('');
     if (newText.trim()) {
-      const parsed = parseSpokenUpdate(newText, voiceLang);
-      setParsedVoiceResult(parsed);
-      autoApplyParsedVoice(parsed, false);
+      try {
+        const parsed = parseSpokenUpdate(newText, voiceLang);
+        setParsedVoiceResult(parsed);
+        autoApplyParsedVoice(parsed, false);
+      } catch (e) {
+        console.warn('Spoken update manual change parse warning:', e);
+      }
     } else {
       setParsedVoiceResult(null);
     }
   };
 
   const handleSelectVoicePreset = (preset: VoicePreset) => {
-    speechService.stop();
-    setIsVoiceRecording(false);
-    setIsMicActive(false);
-    setAudioLevel(0);
-    setVoiceLang(preset.language);
-    setVoiceTranscript(preset.transcript);
-    setInterimVoiceText('');
-    setVoiceErrorMsg(null);
-    setRecordedAudio(null);
+    try {
+      speechService.stop().catch(() => null);
+      setIsVoiceRecording(false);
+      setIsMicActive(false);
+      setAudioLevel(0);
+      setVoiceLang(preset.language);
+      setVoiceTranscript(preset.transcript);
+      setInterimVoiceText('');
+      setVoiceErrorMsg(null);
+      setRecordedAudio(null);
 
-    const parsed = parseSpokenUpdate(preset.transcript, preset.language);
-    setParsedVoiceResult(parsed);
-    autoApplyParsedVoice(parsed, false);
+      const parsed = parseSpokenUpdate(preset.transcript, preset.language);
+      setParsedVoiceResult(parsed);
+      autoApplyParsedVoice(parsed, false);
 
-    addToast({
-      type: 'info',
-      title: `Voice Preset Loaded & Applied (${preset.langLabel})`,
-      message: `Form populated: "${preset.transcript}".`,
-    });
+      addToast({
+        type: 'info',
+        title: `Voice Preset Loaded & Applied (${preset.langLabel})`,
+        message: `Form populated: "${preset.transcript}".`,
+      });
+    } catch (err: any) {
+      console.error('Error applying voice preset:', err);
+      setVoiceErrorMsg(err?.message || 'Failed to parse voice preset.');
+    }
   };
 
   const handleApplyVoiceToForm = () => {
@@ -769,10 +818,10 @@ export const SupervisorEntryView: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Mon, 8 Sep 2026
+              {liveDateFormatted}
             </div>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-              Pump Bay, Unit 01
+              {currentProject?.location || 'Mathura Refinery, UP'} • {currentProject?.workfronts || 'Unit 01'}
             </div>
           </div>
           <div
@@ -787,10 +836,10 @@ export const SupervisorEntryView: React.FC = () => {
               boxShadow: 'var(--shadow-xs)',
             }}
           >
-            <span style={{ fontSize: '1rem' }}>⛅</span>
+            <span style={{ fontSize: '1rem' }}>{weatherContext.icon}</span>
             <div>
-              <div style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>32°C</div>
-              <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>Partly cloudy</div>
+              <div style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-primary)' }}>{weatherContext.temp}</div>
+              <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>{weatherContext.condition}</div>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-export type NavigationTab = 'home' | 'dashboard' | 'site-updates' | 'schedule-activities' | 'planner-review' | 'upload' | 'supervisor-entry' | 'copilot' | 'audit-trail' | 'calendar' | 'project-memory';
+export type NavigationTab = 'home' | 'dashboard' | 'project-info' | 'site-updates' | 'schedule-activities' | 'planner-review' | 'upload' | 'supervisor-entry' | 'copilot' | 'audit-trail' | 'calendar' | 'project-memory';
 
 export type AppSystemMode = 'enterprise' | 'executive';
 
@@ -29,6 +29,7 @@ export interface ProjectOption {
   id: string;
   name: string;
   shortCode: string;
+  code?: string;
   client: string;
   contractId: string;
   location: string;
@@ -42,7 +43,7 @@ export interface ProjectOption {
 export const AVAILABLE_PROJECTS: ProjectOption[] = [
   {
     id: 'iocl-p4',
-    name: 'IOCL Refinery Expansion - P4',
+    name: 'IOCL Refinery Expansion',
     shortCode: 'IOCL-P4',
     client: 'Indian Oil Corporation Ltd',
     contractId: 'IOCL-EPCC-2024-P4',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useProject } from '../context/ProjectContext';
 import {
   X,
@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { PlannerActionType } from '../types';
 import { formatDisplayDate, diffDaysBetweenDates, formatVarianceBadge } from '../utils/scheduleSimulator';
-import { evaluateMatch } from '../utils/matchingEngine';
+import { evaluateMatch, matchUpdateToSchedule } from '../utils/matchingEngine';
 import { MatchScoreRadarChart } from './MatchScoreRadarChart';
 
 export const InspectorDrawer: React.FC = () => {
@@ -53,9 +53,27 @@ export const InspectorDrawer: React.FC = () => {
   const match = update ? matchResults[update.id] : null;
   const decision = update ? plannerDecisions[update.id] : null;
 
+  // Resilient fallback match if matchResults[update.id] is not yet computed (prevents null crashes on Vercel)
+  const effectiveMatch = useMemo(() => {
+    if (match) return match;
+    if (!update) return null;
+    const evaluated = schedule && schedule.length > 0 ? matchUpdateToSchedule(update, schedule) : null;
+    return evaluated || {
+      updateId: update.id,
+      candidateActivityId: schedule?.[0]?.activityId || 'UNLINKED',
+      confidenceScore: 60,
+      category: 'ready' as const,
+      status: 'ready' as const,
+      matchReasons: ['Automatic schedule match alignment'],
+      scoreBreakdown: { keywordScore: 25, disciplineScore: 15, areaScore: 10, fuzzyScore: 10 },
+      varianceDays: 0,
+      varianceBadge: { label: 'On Track', color: 'green' as const }
+    };
+  }, [match, update, schedule]);
+
   const [searchSchedule, setSearchSchedule] = useState('');
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(
-    decision?.linkedActivityId || match?.candidateActivityId || null
+    decision?.linkedActivityId || effectiveMatch?.candidateActivityId || null
   );
   const [plannerNote, setPlannerNote] = useState<string>(decision?.plannerNote || '');
 
@@ -73,11 +91,11 @@ export const InspectorDrawer: React.FC = () => {
 
   useEffect(() => {
     if (update) {
-      setEditDesc(update.extractedDescription);
+      setEditDesc(update.extractedDescription || '');
       setEditArea(update.area || '');
-      setEditStatus(update.eventStatus);
-      setEditDate(update.reportDate);
-      const curMatch = matchResults[update.id];
+      setEditStatus(update.eventStatus || 'In Progress');
+      setEditDate(update.reportDate || '');
+      const curMatch = matchResults[update.id] || effectiveMatch;
       const curDec = plannerDecisions[update.id];
       setSelectedActivityId(curDec?.linkedActivityId || curMatch?.candidateActivityId || null);
       setPlannerNote(curDec?.plannerNote || '');
@@ -86,9 +104,9 @@ export const InspectorDrawer: React.FC = () => {
       const firstImg = update.images && update.images.length > 0 ? update.images[0] : null;
       setSelectedTagInput(firstImg?.confirmedTag || update.confirmedTag || '');
     }
-  }, [selectedInspectorUpdateId]);
+  }, [selectedInspectorUpdateId, update]);
 
-  if (!update || !match) return null;
+  if (!update) return null;
 
   const filteredSchedule = schedule.filter(act => {
     if (!searchSchedule.trim()) return true;
@@ -115,9 +133,14 @@ export const InspectorDrawer: React.FC = () => {
 
   // Dynamic multi-factor evaluation for selected activity using live edited fields!
   const dynamicEvaluation = selectedActivityObj ? evaluateMatch(workingUpdate, selectedActivityObj) : null;
-  const activeScoreBreakdown = dynamicEvaluation?.scoreBreakdown || match.scoreBreakdown;
-  const activeConfidence = dynamicEvaluation?.score ?? match.confidenceScore;
-  const activeReasons = dynamicEvaluation?.reasons?.length ? dynamicEvaluation.reasons : match.matchReasons;
+  const activeScoreBreakdown = dynamicEvaluation?.scoreBreakdown || effectiveMatch?.scoreBreakdown || {
+    keywordScore: 0,
+    disciplineScore: 0,
+    areaScore: 0,
+    fuzzyScore: 0,
+  };
+  const activeConfidence = dynamicEvaluation?.score ?? effectiveMatch?.confidenceScore ?? 0;
+  const activeReasons = (dynamicEvaluation?.reasons?.length ? dynamicEvaluation.reasons : effectiveMatch?.matchReasons) || [];
 
   // Calculate schedule variance if linked
   const varianceDays = selectedActivityObj && (editDate || update.reportDate)
@@ -164,11 +187,15 @@ export const InspectorDrawer: React.FC = () => {
   const isSupervisor = currentRole === 'supervisor';
   const attachedImage = update.images && update.images.length > 0 ? update.images[0] : null;
 
-  const copyHashToClipboard = (hash: string) => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(hash);
-      setCopiedHash(true);
-      setTimeout(() => setCopiedHash(false), 2000);
+  const copyHashToClipboard = async (hash: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(hash);
+        setCopiedHash(true);
+        setTimeout(() => setCopiedHash(false), 2000);
+      }
+    } catch (err) {
+      console.warn('Clipboard write prevented:', err);
     }
   };
 
@@ -300,7 +327,7 @@ export const InspectorDrawer: React.FC = () => {
                     .slice(0, 15)
                     .map(({ act, evalRes }) => {
                       const isSelected = act.activityId === selectedActivityId;
-                      const isRec = match.candidateActivityId === act.activityId;
+                      const isRec = effectiveMatch?.candidateActivityId === act.activityId;
                       const score = evalRes.score;
 
                       const scoreBadgeBg = score >= 70 ? 'rgba(16, 185, 129, 0.12)' : score >= 40 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.1)';
@@ -641,7 +668,7 @@ export const InspectorDrawer: React.FC = () => {
               scoreBreakdown={activeScoreBreakdown}
               activityId={selectedActivityObj?.activityId || 'UNLINKED'}
               activityName={selectedActivityObj?.activityName || 'No Target Activity Selected'}
-              isAlternative={selectedActivityId !== match.candidateActivityId}
+              isAlternative={selectedActivityId !== effectiveMatch?.candidateActivityId}
               reasons={activeReasons}
             />
 

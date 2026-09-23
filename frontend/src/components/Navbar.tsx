@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import {
   LayoutDashboard,
@@ -18,6 +18,7 @@ import {
   WifiOff
 } from 'lucide-react';
 import { NavigationTab, UserRole } from '../types';
+import { BackendStatusModal } from './BackendStatusModal';
 
 export const Navbar: React.FC = () => {
   const {
@@ -38,6 +39,8 @@ export const Navbar: React.FC = () => {
     offlineSyncQueue,
     syncOfflineQueue,
   } = useProject();
+
+  const [isBackendModalOpen, setIsBackendModalOpen] = useState(false);
 
   // Pending review items count
   const pendingReviewCount = siteUpdates.filter(update => {
@@ -203,26 +206,39 @@ export const Navbar: React.FC = () => {
             </button>
           )}
 
-          {!offlineMode && backendStatus === 'connected' && (
-            <div
-              className="mono-pill"
+          {/* Backend / Database Connection Status Pill (Always Visible & Interactive) */}
+          <button
+            type="button"
+            onClick={() => setIsBackendModalOpen(true)}
+            className="mono-pill"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              background: !offlineMode && backendStatus === 'connected' ? 'var(--status-ready-bg)' : 'rgba(56, 189, 248, 0.1)',
+              borderColor: !offlineMode && backendStatus === 'connected' ? 'var(--status-ready-border)' : 'rgba(56, 189, 248, 0.3)',
+              color: !offlineMode && backendStatus === 'connected' ? 'var(--status-ready-fg)' : '#38bdf8',
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              padding: '2px 8px',
+              cursor: 'pointer',
+              borderStyle: 'solid',
+              borderWidth: 1,
+            }}
+            title="Click to check backend & SQLite database status, diagnostics, or connect remote API"
+          >
+            <span
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                background: 'var(--status-ready-bg)',
-                borderColor: 'var(--status-ready-border)',
-                color: 'var(--status-ready-fg)',
-                fontSize: '0.7rem',
-                fontWeight: 600,
-                padding: '2px 6px',
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: !offlineMode && backendStatus === 'connected' ? '#10b981' : '#38bdf8',
+                display: 'inline-block',
               }}
-              title="Connected to SQLite REST API Engine"
-            >
-              <Database size={11} />
-              <span>SQLite</span>
-            </div>
-          )}
+            />
+            <Database size={11} />
+            <span>{!offlineMode && backendStatus === 'connected' ? 'SQLite Live' : 'Client Engine'}</span>
+          </button>
         </div>
 
         {/* Primary Navigation Tabs */}
@@ -290,6 +306,12 @@ export const Navbar: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Backend & Database Connectivity Diagnostics Modal */}
+      <BackendStatusModal
+        isOpen={isBackendModalOpen}
+        onClose={() => setIsBackendModalOpen(false)}
+      />
     </header>
   );
 };

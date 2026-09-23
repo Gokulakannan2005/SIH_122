@@ -27,11 +27,14 @@ export const MatchScoreRadarChart: React.FC<MatchScoreRadarChartProps> = ({
   const cy = 110;
   const maxR = 68;
 
-  // Normalized values clamped between 0 and 1
-  const kNorm = Math.min(1, Math.max(0, (scoreBreakdown?.keywordScore || 0) / 50));
-  const dNorm = Math.min(1, Math.max(0, (scoreBreakdown?.disciplineScore || 0) / 20));
-  const aNorm = Math.min(1, Math.max(0, (scoreBreakdown?.areaScore || 0) / 15));
-  const fNorm = Math.min(1, Math.max(0, (scoreBreakdown?.fuzzyScore || 0) / 15));
+  const sb = scoreBreakdown || { keywordScore: 0, disciplineScore: 0, areaScore: 0, fuzzyScore: 0 };
+  const safeScore = Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : 0;
+
+  // Normalized values clamped between 0 and 1 with NaN protection
+  const kNorm = Number.isFinite(sb.keywordScore) ? Math.min(1, Math.max(0, sb.keywordScore / 50)) : 0;
+  const dNorm = Number.isFinite(sb.disciplineScore) ? Math.min(1, Math.max(0, sb.disciplineScore / 20)) : 0;
+  const aNorm = Number.isFinite(sb.areaScore) ? Math.min(1, Math.max(0, sb.areaScore / 15)) : 0;
+  const fNorm = Number.isFinite(sb.fuzzyScore) ? Math.min(1, Math.max(0, sb.fuzzyScore / 15)) : 0;
 
   // Coordinates:
   // Top: Keyword
@@ -52,9 +55,9 @@ export const MatchScoreRadarChart: React.FC<MatchScoreRadarChartProps> = ({
   // Rings
   const rings = [0.25, 0.5, 0.75, 1.0];
 
-  const badgeColor = score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#ef4444';
-  const badgeBg = score >= 70 ? 'rgba(16, 185, 129, 0.12)' : score >= 40 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)';
-  const badgeBorder = score >= 70 ? 'rgba(16, 185, 129, 0.3)' : score >= 40 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+  const badgeColor = safeScore >= 70 ? '#10b981' : safeScore >= 40 ? '#f59e0b' : '#ef4444';
+  const badgeBg = safeScore >= 70 ? 'rgba(16, 185, 129, 0.12)' : safeScore >= 40 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+  const badgeBorder = safeScore >= 70 ? 'rgba(16, 185, 129, 0.3)' : safeScore >= 40 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)';
 
   return (
     <div
@@ -102,7 +105,7 @@ export const MatchScoreRadarChart: React.FC<MatchScoreRadarChartProps> = ({
               border: `1px solid ${badgeBorder}`,
             }}
           >
-            {score}% Apt Confidence
+            {safeScore}% Apt Confidence
           </span>
         </div>
       </div>
@@ -149,16 +152,16 @@ export const MatchScoreRadarChart: React.FC<MatchScoreRadarChartProps> = ({
 
             {/* Axis Labels */}
             <text x={cx} y={cy - maxR - 8} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
-              Keyword ({scoreBreakdown?.keywordScore || 0}/50)
+              Keyword ({sb.keywordScore || 0}/50)
             </text>
             <text x={cx + maxR + 6} y={cy + 4} textAnchor="start" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
-              Discipline ({scoreBreakdown?.disciplineScore || 0}/20)
+              Discipline ({sb.disciplineScore || 0}/20)
             </text>
             <text x={cx} y={cy + maxR + 18} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
-              Area ({scoreBreakdown?.areaScore || 0}/15)
+              Area ({sb.areaScore || 0}/15)
             </text>
             <text x={cx - maxR - 6} y={cy + 4} textAnchor="end" fontSize="10" fontWeight="700" fill="var(--text-secondary)">
-              Fuzzy ({scoreBreakdown?.fuzzyScore || 0}/15)
+              Fuzzy ({sb.fuzzyScore || 0}/15)
             </text>
           </svg>
         </div>
@@ -168,40 +171,40 @@ export const MatchScoreRadarChart: React.FC<MatchScoreRadarChartProps> = ({
           <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
               <span style={{ color: 'var(--text-muted)' }}>Keyword Weight</span>
-              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown?.keywordScore || 0}/50</strong>
+              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{sb.keywordScore || 0}/50</strong>
             </div>
             <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
-              <div className="progress-bar-fill blue" style={{ width: `${((scoreBreakdown?.keywordScore || 0) / 50) * 100}%`, transition: 'width 0.3s ease' }} />
+              <div className="progress-bar-fill blue" style={{ width: `${((sb.keywordScore || 0) / 50) * 100}%`, transition: 'width 0.3s ease' }} />
             </div>
           </div>
 
           <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
               <span style={{ color: 'var(--text-muted)' }}>Discipline Match</span>
-              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown?.disciplineScore || 0}/20</strong>
+              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{sb.disciplineScore || 0}/20</strong>
             </div>
             <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
-              <div className="progress-bar-fill green" style={{ width: `${((scoreBreakdown?.disciplineScore || 0) / 20) * 100}%`, transition: 'width 0.3s ease' }} />
+              <div className="progress-bar-fill green" style={{ width: `${((sb.disciplineScore || 0) / 20) * 100}%`, transition: 'width 0.3s ease' }} />
             </div>
           </div>
 
           <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
               <span style={{ color: 'var(--text-muted)' }}>Spatial / Area</span>
-              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown?.areaScore || 0}/15</strong>
+              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{sb.areaScore || 0}/15</strong>
             </div>
             <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
-              <div className="progress-bar-fill amber" style={{ width: `${((scoreBreakdown?.areaScore || 0) / 15) * 100}%`, transition: 'width 0.3s ease' }} />
+              <div className="progress-bar-fill amber" style={{ width: `${((sb.areaScore || 0) / 15) * 100}%`, transition: 'width 0.3s ease' }} />
             </div>
           </div>
 
           <div style={{ background: 'var(--bg-surface)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', fontWeight: 600 }}>
               <span style={{ color: 'var(--text-muted)' }}>Fuzzy Similarity</span>
-              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{scoreBreakdown?.fuzzyScore || 0}/15</strong>
+              <strong style={{ color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{sb.fuzzyScore || 0}/15</strong>
             </div>
             <div className="progress-bar-container" style={{ marginTop: 5, height: 6 }}>
-              <div className="progress-bar-fill blue" style={{ width: `${((scoreBreakdown?.fuzzyScore || 0) / 15) * 100}%`, transition: 'width 0.3s ease' }} />
+              <div className="progress-bar-fill blue" style={{ width: `${((sb.fuzzyScore || 0) / 15) * 100}%`, transition: 'width 0.3s ease' }} />
             </div>
           </div>
         </div>

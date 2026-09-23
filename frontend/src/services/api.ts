@@ -11,17 +11,65 @@ import type {
 
 let cachedApiBase = '/api';
 
+/**
+ * Build prioritized list of backend candidates:
+ * 1. Explicitly configured VITE_API_URL env variable or window override
+ * 2. Cached working API base
+ * 3. Default relative '/api'
+ * 4. Local development ports (5000, 5001, 5002, 5050)
+ */
+export const getCandidateUrls = (): string[] => {
+  const envUrl = (
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
+    (typeof window !== 'undefined' && (window as any).__DATUM_API_URL__) ||
+    ''
+  ).trim().replace(/\/$/, '');
+
+  const list: string[] = [];
+  if (envUrl) {
+    list.push(envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`);
+    list.push(envUrl);
+  }
+  if (cachedApiBase) list.push(cachedApiBase);
+  list.push('/api');
+  list.push('http://localhost:5000/api');
+  list.push('http://localhost:5001/api');
+  list.push('http://localhost:5002/api');
+  list.push('http://localhost:5050/api');
+  return Array.from(new Set(list.filter(Boolean)));
+};
+
+/**
+ * Ping candidate URL and verify it returns legitimate JSON with status=ok or engine,
+ * avoiding Vercel's SPA rewrites (which return index.html with status 200).
+ */
+async function pingCandidate(url: string): Promise<HealthResponse | null> {
+  try {
+    const res = await fetch(`${url}/health`, { method: 'GET', cache: 'no-store' });
+    if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      // Returned HTML (e.g. Vercel SPA rewrite) instead of JSON
+      return null;
+    }
+    const data = await res.json();
+    if (data && (data.status === 'ok' || data.engine)) {
+      return data as HealthResponse;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export const getApiBase = async (): Promise<string> => {
-  const candidates = [cachedApiBase, '/api', 'http://localhost:5000/api', 'http://localhost:5001/api', 'http://localhost:5002/api', 'http://localhost:5050/api'];
-  const unique = Array.from(new Set(candidates));
-  for (const c of unique) {
-    try {
-      const res = await fetch(`${c}/health`, { method: 'GET', cache: 'no-store' });
-      if (res.ok) {
-        cachedApiBase = c;
-        return c;
-      }
-    } catch {}
+  const candidates = getCandidateUrls();
+  for (const c of candidates) {
+    const health = await pingCandidate(c);
+    if (health) {
+      cachedApiBase = c;
+      return c;
+    }
   }
   return cachedApiBase;
 };
@@ -53,6 +101,15 @@ export interface HealthResponse {
   };
 }
 
+export interface BackendDiagnostics {
+  connected: boolean;
+  activeApiBase: string;
+  configuredEnvUrl: string | null;
+  engine?: string;
+  metrics?: HealthResponse['metrics'];
+  testedCandidates: Array<{ url: string; reachable: boolean; error?: string }>;
+}
+
 export interface AuthResponse {
   success: boolean;
   user?: UserAccount;
@@ -65,18 +122,67 @@ export const api = {
    * Check if backend REST API is responsive across candidate ports
    */
   async checkHealth(): Promise<HealthResponse | null> {
-    const candidates = [cachedApiBase, '/api', 'http://localhost:5000/api', 'http://localhost:5001/api', 'http://localhost:5002/api', 'http://localhost:5050/api'];
-    const unique = Array.from(new Set(candidates));
-    for (const c of unique) {
-      try {
-        const res = await fetch(`${c}/health`, { method: 'GET', cache: 'no-store' });
-        if (res.ok) {
-          cachedApiBase = c;
-          return await res.json();
-        }
-      } catch {}
+    const candidates = getCandidateUrls();
+    for (const c of candidates) {
+      const data = await pingCandidate(c);
+      if (data) {
+        cachedApiBase = c;
+        return data;
+      }
     }
     return null;
+  },
+
+  /**
+   * Comprehensive backend connectivity diagnostics for hosted verification
+   */
+  async getDiagnostics(): Promise<BackendDiagnostics> {
+    const configuredEnvUrl = (
+      (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
+      (typeof window !== 'undefined' && (window as any).__DATUM_API_URL__) ||
+      ''
+    ).trim() || null;
+
+    const candidates = getCandidateUrls();
+    const testedCandidates: Array<{ url: string; reachable: boolean; error?: string }> = [];
+    let healthyData: HealthResponse | null = null;
+    let healthyBase = '';
+
+    for (const c of candidates) {
+      try {
+        const res = await fetch(`${c}/health`, { method: 'GET', cache: 'no-store' });
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const json = await res.json();
+          if (json && (json.status === 'ok' || json.engine)) {
+            testedCandidates.push({ url: c, reachable: true });
+            if (!healthyData) {
+              healthyData = json;
+              healthyBase = c;
+            }
+            continue;
+          }
+        }
+        testedCandidates.push({
+          url: c,
+          reachable: false,
+          error: !contentType.includes('application/json')
+            ? 'Returned HTML instead of JSON (Vercel SPA route rewrite)'
+            : `HTTP ${res.status}`,
+        });
+      } catch (err: any) {
+        testedCandidates.push({ url: c, reachable: false, error: err?.message || 'Connection refused / offline' });
+      }
+    }
+
+    return {
+      connected: !!healthyData,
+      activeApiBase: healthyBase || cachedApiBase,
+      configuredEnvUrl,
+      engine: healthyData?.engine,
+      metrics: healthyData?.metrics,
+      testedCandidates,
+    };
   },
 
   /**

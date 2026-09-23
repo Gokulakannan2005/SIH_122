@@ -4,6 +4,9 @@
   "description": "DATUM REST API with Embedded SQLite Engine",
   "type": "module",
   "main": "src/server.ts",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "start": "node --experimental-strip-types src/server.ts",
     "dev": "node --experimental-strip-types --watch src/server.ts"

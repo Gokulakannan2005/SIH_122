@@ -251,8 +251,9 @@ export function initSchema() {
 
     CREATE TABLE IF NOT EXISTS audit_logs (
       id TEXT PRIMARY KEY,
+      project_id TEXT DEFAULT 'iocl-p4',
       timestamp TEXT,
-      updateId TEXT,
+      update_id TEXT,
       raw_text TEXT,
       source_file TEXT,
       action TEXT,
@@ -338,6 +339,7 @@ export function initSchema() {
   ensureColumn('planner_decisions', 'evidence_hash', 'TEXT');
   ensureColumn('planner_decisions', 'digital_signature', 'TEXT');
   ensureColumn('audit_logs', 'project_id', "TEXT DEFAULT 'iocl-p4'");
+  ensureColumn('audit_logs', 'update_id', 'TEXT');
   ensureColumn('audit_logs', 'user_id', 'TEXT');
   ensureColumn('audit_logs', 'user_name', 'TEXT');
   ensureColumn('audit_logs', 'user_role', 'TEXT');
@@ -345,6 +347,16 @@ export function initSchema() {
   ensureColumn('audit_logs', 'task_hash', 'TEXT');
   ensureColumn('audit_logs', 'evidence_hash', 'TEXT');
   ensureColumn('audit_logs', 'digital_signature', 'TEXT');
+
+  // If table was previously created with camelCase 'updateId', copy values to 'update_id'
+  try {
+    const auditCols = db.prepare(`PRAGMA table_info(audit_logs)`).all() as any[];
+    const hasCamel = auditCols.some(c => c.name === 'updateId');
+    const hasSnake = auditCols.some(c => c.name === 'update_id');
+    if (hasCamel && hasSnake) {
+      db.exec(`UPDATE audit_logs SET update_id = updateId WHERE update_id IS NULL AND updateId IS NOT NULL`);
+    }
+  } catch {}
 
   seedProjects();
 }

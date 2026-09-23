@@ -17,14 +17,29 @@ import {
   FileCheck,
   CheckCircle2,
   Zap,
+  BarChart3,
+  Calendar,
+  Check,
+  ExternalLink,
+  Flame,
+  Info,
 } from 'lucide-react';
-import { deriveProjectMemory, queryProjectMemory } from '../utils/projectMemoryData';
+import {
+  deriveProjectMemory,
+  queryProjectMemory,
+  CROSS_PROJECT_DELAY_PATTERNS,
+  INSTITUTIONAL_PROJECTS_MEMORY,
+} from '../utils/projectMemoryData';
 
 export const ProjectMemoryView: React.FC = () => {
-  const { currentProject, enrichedSchedule, siteUpdates, plannerDecisions } = useProject();
+  const { currentProject, enrichedSchedule, siteUpdates, plannerDecisions, switchProject } = useProject();
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<'all' | 'variance' | 'bottleneck' | 'productivity' | 'lessons'>('all');
+  const [projectMemoryFilter, setProjectMemoryFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [selectedDelayCategory, setSelectedDelayCategory] = useState<string | null>(null);
+  const [selectedProjectCard, setSelectedProjectCard] = useState<string | null>(null);
+
 
   // Safely derive memory patterns from active project data
   const memoryPatterns = useMemo(() => {
@@ -106,7 +121,367 @@ export const ProjectMemoryView: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Interactive Semantic Search Bar */}
+      {/* 2. OVERALL GRAPH: Cross-Project Execution Intelligence & Recurring Delays */}
+      <div
+        className="card"
+        style={{
+          padding: '1.25rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+          borderTop: '3px solid var(--brand-primary)',
+          background: 'linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-subtle) 100%)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <TrendingUp size={16} style={{ color: 'var(--brand-primary)' }} />
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--brand-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Overall Cross-Project Delay Intelligence
+              </span>
+            </div>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Recurring Schedule Bottlenecks Across Capital Projects
+            </h3>
+            <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)', maxWidth: 760 }}>
+              When projects build up over time, institutional memory aggregates historical field telemetry to expose systematic delay patterns. <strong>Knowledge does not disappear when a project finishes</strong>—it directly calibrates future baseline buffers and contractor float.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-surface-secondary)', padding: '0.45rem 0.85rem', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700 }}>PORTFOLIO DELAYS MAPPED</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f43f5e' }}>161 Days</div>
+            </div>
+            <div style={{ height: 24, width: 1, background: 'var(--border-subtle)' }} />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700 }}>COMMERCIAL CLAIMS SAVED</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#10b981' }}>₹9.84 Cr</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Dual Visualizer: Delay Root Cause Bar Graph + Historical Learning Curve */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(320px, 1fr)', gap: '1.25rem', marginTop: 4 }}>
+          {/* Left: Interactive Delay Root Causes Bar Graph */}
+          <div style={{ background: 'var(--bg-surface)', padding: '1rem', borderRadius: 8, border: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Cumulative Delay Impact by Root Cause (All 7 Projects)
+              </span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                Click bar to inspect root cause
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+              {CROSS_PROJECT_DELAY_PATTERNS.map(pattern => {
+                const maxDays = 50;
+                const pct = Math.round((pattern.totalDelayDaysAcrossProjects / maxDays) * 100);
+                const isSelected = selectedDelayCategory === pattern.id;
+
+                return (
+                  <div
+                    key={pattern.id}
+                    onClick={() => setSelectedDelayCategory(isSelected ? null : pattern.id)}
+                    style={{
+                      cursor: 'pointer',
+                      padding: '0.5rem 0.65rem',
+                      borderRadius: 6,
+                      background: isSelected ? 'rgba(14, 165, 233, 0.08)' : 'var(--bg-surface-secondary)',
+                      border: isSelected ? '1px solid var(--brand-primary)' : '1px solid transparent',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {pattern.category}
+                        </span>
+                        <span className="mono-pill" style={{ fontSize: '0.62rem', padding: '1px 5px' }}>
+                          {pattern.discipline}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f43f5e' }}>
+                        {pattern.totalDelayDaysAcrossProjects} Days
+                      </span>
+                    </div>
+
+                    {/* Progress Track */}
+                    <div style={{ width: '100%', height: 6, background: 'var(--bg-subtle)', borderRadius: 999, overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          width: `${pct}%`,
+                          height: '100%',
+                          background: pattern.discipline === 'Piping' ? '#f43f5e' : pattern.discipline === 'Civil' ? '#f59e0b' : '#38bdf8',
+                          borderRadius: 999,
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                      <span>Impacted: {pattern.projectsImpacted.join(', ')}</span>
+                      <span>Freq: {pattern.recurrenceFrequency}</span>
+                    </div>
+
+                    {isSelected && (
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border-subtle)', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                        <div style={{ color: 'var(--brand-primary)', fontWeight: 700, marginBottom: 2 }}>
+                          Empirical Recommendation:
+                        </div>
+                        <div>{pattern.recommendation}</div>
+                        <div style={{ marginTop: 4, color: '#10b981', fontWeight: 600 }}>
+                          Historical Calibration Result: {pattern.historicalTrend}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right: Institutional Variance Reduction Learning Curve */}
+          <div style={{ background: 'var(--bg-surface)', padding: '1rem', borderRadius: 8, border: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <History size={15} style={{ color: '#10b981' }} />
+              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Institutional Learning Curve & Variance Reduction
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+              Demonstrating the power of Project Memory: As historical turnarounds completed, empirical lessons were locked into DATUM&apos;s calibration matrix, reducing schedule slippage on successive projects.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+              {[
+                { proj: 'Vizag Refinery VR-3', year: '2024 (Finished)', variance: '+26 Days', spi: '0.95', color: '#f43f5e' },
+                { proj: 'Panipat Naphtha Cracker 2', year: '2025 (Finished)', variance: '+18 Days', spi: '0.97', color: '#f59e0b' },
+                { proj: 'Paradip Hydrocracker P1', year: '2025 (Finished)', variance: '+14 Days', spi: '0.98', color: '#f59e0b' },
+                { proj: 'BPCL Kochi Clean Fuel', year: '2026 (Active)', variance: '+5 Days', spi: '0.94', color: '#10b981' },
+                { proj: 'IOCL Refinery Expansion', year: '2026 (Active)', variance: '+3 Days', spi: '0.88', color: '#10b981' },
+              ].map((item, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0.65rem', background: 'var(--bg-surface-secondary)', borderRadius: 6, fontSize: '0.73rem' }}>
+                  <div>
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{item.proj}</span>
+                    <span style={{ fontSize: '0.67rem', color: 'var(--text-muted)', marginLeft: 6 }}>{item.year}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>SPI {item.spi}</span>
+                    <span style={{ fontWeight: 800, color: item.color }}>{item.variance}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding: '0.65rem', borderRadius: 6, background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', fontSize: '0.72rem', color: '#059669', lineHeight: 1.4 }}>
+              <strong>Execution Intelligence ROI:</strong> Preserving completed project telemetry reduced average schedule slippage from <strong>+26 days down to +3 days</strong> across 24 months.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. PROJECT-BY-PROJECT MEMORY & INSIGHTS ("Insights Under Each Project's Name") */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Layers size={17} style={{ color: 'var(--brand-primary)' }} />
+              <span>Project Memory Bank: Learned Insights by Project</span>
+            </h3>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Information never disappears upon project completion. Permanent institutional records directly accessible under each project:
+            </span>
+          </div>
+
+          {/* Filter Pills */}
+          <div className="filter-pill-group">
+            <button
+              type="button"
+              className={`filter-pill ${projectMemoryFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setProjectMemoryFilter('all')}
+              style={{ fontSize: '0.725rem' }}
+            >
+              All Projects ({INSTITUTIONAL_PROJECTS_MEMORY.length})
+            </button>
+            <button
+              type="button"
+              className={`filter-pill ${projectMemoryFilter === 'active' ? 'active' : ''}`}
+              onClick={() => setProjectMemoryFilter('active')}
+              style={{ fontSize: '0.725rem' }}
+            >
+              Active Execution (4)
+            </button>
+            <button
+              type="button"
+              className={`filter-pill ${projectMemoryFilter === 'completed' ? 'active' : ''}`}
+              onClick={() => setProjectMemoryFilter('completed')}
+              style={{ fontSize: '0.725rem' }}
+            >
+              Finished (Memory Retained) (3)
+            </button>
+          </div>
+        </div>
+
+        {/* Project Memory Cards Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1rem' }}>
+          {INSTITUTIONAL_PROJECTS_MEMORY
+            .filter(p => {
+              if (projectMemoryFilter === 'active') return p.status === 'active';
+              if (projectMemoryFilter === 'completed') return p.status === 'completed';
+              return true;
+            })
+            .map(proj => {
+              const isCurrent = currentProject?.id === proj.id;
+              const isFinished = proj.status === 'completed';
+
+              return (
+                <div
+                  key={proj.id}
+                  className="card"
+                  style={{
+                    padding: '1.15rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.85rem',
+                    borderLeft: `4px solid ${isFinished ? '#8b5cf6' : '#10b981'}`,
+                    background: isCurrent ? 'var(--bg-surface)' : 'var(--bg-surface)',
+                    boxShadow: isCurrent ? '0 0 0 1.5px var(--brand-primary)' : undefined,
+                  }}
+                >
+                  {/* Card Header: Project Name & Status */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
+                      <span className="mono-pill" style={{ color: isFinished ? '#8b5cf6' : 'var(--brand-primary)', fontWeight: 800 }}>
+                        {proj.shortCode}
+                      </span>
+                      <span
+                        className="status-pill"
+                        style={{
+                          fontSize: '0.65rem',
+                          background: isFinished ? 'rgba(139, 92, 246, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                          color: isFinished ? '#8b5cf6' : '#10b981',
+                          border: `1px solid ${isFinished ? 'rgba(139, 92, 246, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {isFinished ? 'Finished • Memory Preserved' : 'Active Execution'}
+                      </span>
+                    </div>
+
+                    <h4 style={{ margin: '4px 0 2px', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      {proj.name}
+                    </h4>
+                    <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+                      {proj.client} &bull; {proj.location} ({proj.executionWindow})
+                    </div>
+                  </div>
+
+                  {/* Execution Telemetry Ribbon */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: 6,
+                      background: 'var(--bg-surface-secondary)',
+                      padding: '0.5rem 0.65rem',
+                      borderRadius: 6,
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Progress</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>{proj.progress}%</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>SPI</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: Number(proj.spi) >= 0.95 ? '#10b981' : '#f59e0b' }}>{proj.spi}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Delay Flagged</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#f43f5e' }}>+{proj.totalDelayDays}d</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Field Logs</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--brand-primary)' }}>{proj.recordsAnalyzed}</div>
+                    </div>
+                  </div>
+
+                  {/* INSIGHTS UNDER PROJECT'S NAME: Surfaced Recurring Delays */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#f43f5e', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <AlertTriangle size={12} />
+                      <span>Recurring Delays Identified in this Project:</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {proj.recurringDelayTriggers.map((trig, tIdx) => (
+                        <div
+                          key={tIdx}
+                          style={{
+                            padding: '0.45rem 0.6rem',
+                            borderRadius: 4,
+                            background: 'rgba(244, 63, 94, 0.05)',
+                            borderLeft: '3px solid #f43f5e',
+                            fontSize: '0.72rem',
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {trig.trigger} ({trig.recurrenceRate})
+                          </div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', marginTop: 2 }}>
+                            Root Cause: {trig.rootCause} &bull; <strong style={{ color: '#f43f5e' }}>+{trig.impactDays} Days</strong>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Institutional Insights Under Project's Name */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--brand-primary)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Sparkles size={12} />
+                      <span>Preserved Institutional Lessons:</span>
+                    </div>
+                    {proj.institutionalInsights.map((ins, iIdx) => (
+                      <div key={iIdx} style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'flex-start', gap: 5, lineHeight: 1.35 }}>
+                        <span style={{ color: 'var(--brand-primary)', fontWeight: 800 }}>•</span>
+                        <span>{ins}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Calibrated Rule & Financial Protection */}
+                  <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6, borderTop: '1px solid var(--border-subtle)' }}>
+                    <div style={{ padding: '0.45rem 0.6rem', borderRadius: 4, background: 'rgba(14, 165, 233, 0.08)', border: '1px solid rgba(14, 165, 233, 0.2)', fontSize: '0.7rem', color: 'var(--brand-primary)' }}>
+                      <strong>AI Baseline Rule:</strong> {proj.calibratedBaselineRule}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem' }}>
+                      <span style={{ color: '#059669', fontWeight: 700 }}>
+                        {proj.claimsPrevented}
+                      </span>
+
+                      {!isFinished && !isCurrent && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => switchProject(proj.id)}
+                          style={{ fontSize: '0.7rem', padding: '3px 8px' }}
+                          title="Switch active project context"
+                        >
+                          Switch Context
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      </div>
+
+      {/* 4. Interactive Semantic Search Bar */}
       <div
         className="card"
         style={{

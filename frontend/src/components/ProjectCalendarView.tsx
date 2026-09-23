@@ -13,6 +13,15 @@ import {
   ExternalLink,
   Sparkles,
   Info,
+  List,
+  Grid,
+  Check,
+  Flag,
+  ArrowRight,
+  HardHat,
+  FileText,
+  MapPin,
+  CalendarCheck,
 } from 'lucide-react';
 import { ScheduleActivity } from '../types';
 
@@ -29,11 +38,14 @@ export const ProjectCalendarView: React.FC = () => {
 
   const istClock = useLiveISTClock();
 
-  // Target view month: Default to current IST date
-  const [currentYear, setCurrentYear] = useState<number>(() => istClock.currentISTDate.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState<number>(() => istClock.currentISTDate.getMonth());
+  // Target view month: Default to September 2026 (Data Date window) or current IST
+  const [currentYear, setCurrentYear] = useState<number>(2026);
+  const [currentMonth, setCurrentMonth] = useState<number>(8); // September (0-indexed)
   const [selectedDiscipline, setSelectedDiscipline] = useState<string>('ALL');
   const [selectedActivity, setSelectedActivity] = useState<ScheduleActivity | null>(null);
+  const [viewMode, setViewMode] = useState<'matrix' | 'agenda'>('matrix');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'milestones' | 'in_progress' | 'delayed'>('all');
+  const [selectedDayDate, setSelectedDayDate] = useState<string | null>('2026-09-22');
 
   // Month navigation
   const handlePrevMonth = () => {
@@ -76,7 +88,12 @@ export const ProjectCalendarView: React.FC = () => {
       dateStr: string; // YYYY-MM-DD
       isCurrentMonth: boolean;
       isToday: boolean;
-      tasks: ScheduleActivity[];
+      isDataDate: boolean;
+      activeTasks: ScheduleActivity[];
+      startingTasks: ScheduleActivity[];
+      finishingTasks: ScheduleActivity[];
+      delayedTasks: ScheduleActivity[];
+      fieldLogsCount: number;
     }[] = [];
 
     // Helper to format YYYY-MM-DD
@@ -86,83 +103,121 @@ export const ProjectCalendarView: React.FC = () => {
       return `${y}-${mm}-${dd}`;
     };
 
-    // Days from previous month to fill first row
+    const dataDateStr = '2026-09-22';
+    const todayStr = istClock.dateIsoString;
+
+    // Previous month padding
     const prevMonthDays = new Date(currentYear, currentMonth, 0).getDate();
     for (let i = firstDayOfWeek - 1; i >= 0; i--) {
       const d = prevMonthDays - i;
       const prevM = currentMonth === 0 ? 11 : currentMonth - 1;
       const prevY = currentMonth === 0 ? currentYear - 1 : currentYear;
+      const dateStr = formatDate(prevY, prevM, d);
       days.push({
         dayNumber: d,
-        dateStr: formatDate(prevY, prevM, d),
+        dateStr,
         isCurrentMonth: false,
         isToday: false,
-        tasks: [],
+        isDataDate: dateStr === dataDateStr,
+        activeTasks: [],
+        startingTasks: [],
+        finishingTasks: [],
+        delayedTasks: [],
+        fieldLogsCount: 0,
       });
     }
 
     // Days in current month
-    const todayStr = istClock.dateIsoString;
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = formatDate(currentYear, currentMonth, d);
       const isToday = dateStr === todayStr;
+      const isDataDate = dateStr === dataDateStr;
 
-      // Match tasks spanning this date: plannedStart <= dateStr <= plannedFinish
-      const matchingTasks = enrichedSchedule.filter(act => {
-        if (selectedDiscipline !== 'ALL' && act.discipline !== selectedDiscipline) {
-          return false;
-        }
+      // Filter tasks active on this day
+      const activeTasks = enrichedSchedule.filter(act => {
+        if (selectedDiscipline !== 'ALL' && act.discipline !== selectedDiscipline) return false;
         if (!act.plannedStart || !act.plannedFinish) return false;
         return dateStr >= act.plannedStart && dateStr <= act.plannedFinish;
       });
+
+      // Starting tasks
+      const startingTasks = activeTasks.filter(act => act.plannedStart === dateStr);
+
+      // Finishing milestone tasks
+      const finishingTasks = activeTasks.filter(act => act.plannedFinish === dateStr);
+
+      // Delayed tasks
+      const delayedTasks = activeTasks.filter(
+        act => (act.varianceDays && act.varianceDays < -2) || act.delayRisk === 'High' || act.status === 'Delayed'
+      );
+
+      // Field logs on this day
+      const fieldLogsCount = siteUpdates.filter(u => u.reportDate === dateStr).length;
 
       days.push({
         dayNumber: d,
         dateStr,
         isCurrentMonth: true,
         isToday,
-        tasks: matchingTasks,
+        isDataDate,
+        activeTasks,
+        startingTasks,
+        finishingTasks,
+        delayedTasks,
+        fieldLogsCount,
       });
     }
 
-    // Days from next month to complete the 6-row grid (42 cells total)
+    // Days from next month to complete 42 cells grid
     const remaining = 42 - days.length;
     for (let d = 1; d <= remaining; d++) {
       const nextM = currentMonth === 11 ? 0 : currentMonth + 1;
       const nextY = currentMonth === 11 ? currentYear + 1 : currentYear;
+      const dateStr = formatDate(nextY, nextM, d);
       days.push({
         dayNumber: d,
-        dateStr: formatDate(nextY, nextM, d),
+        dateStr,
         isCurrentMonth: false,
         isToday: false,
-        tasks: [],
+        isDataDate: dateStr === dataDateStr,
+        activeTasks: [],
+        startingTasks: [],
+        finishingTasks: [],
+        delayedTasks: [],
+        fieldLogsCount: 0,
       });
     }
 
     return days;
-  }, [currentYear, currentMonth, enrichedSchedule, selectedDiscipline, istClock.dateIsoString]);
+  }, [currentYear, currentMonth, enrichedSchedule, siteUpdates, selectedDiscipline, istClock.dateIsoString]);
+
+  // Selected Day Details for the Day Quick Inspector
+  const selectedDayInfo = useMemo(() => {
+    if (!selectedDayDate) return null;
+    return calendarDays.find(d => d.dateStr === selectedDayDate) || null;
+  }, [calendarDays, selectedDayDate]);
 
   // Discipline badge color
   const getDisciplineColor = (disc: string) => {
     switch (disc) {
       case 'Civil':
-        return { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' };
+        return { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' };
       case 'Piping':
-        return { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0' };
+        return { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0', dot: '#10b981' };
       case 'Electrical':
-        return { bg: '#fffbeb', text: '#b45309', border: '#fde68a' };
+        return { bg: '#fffbeb', text: '#b45309', border: '#fde68a', dot: '#f59e0b' };
       case 'Instrumentation':
-        return { bg: '#f5f3ff', text: '#7c3aed', border: '#ddd6fe' };
+        return { bg: '#f5f3ff', text: '#7c3aed', border: '#ddd6fe', dot: '#8b5cf6' };
       case 'HSE':
-        return { bg: '#fff1f2', text: '#be123c', border: '#fecdd3' };
+        return { bg: '#fff1f2', text: '#be123c', border: '#fecdd3', dot: '#f43f5e' };
       default:
-        return { bg: 'var(--bg-surface-secondary)', text: 'var(--text-secondary)', border: 'var(--border-subtle)' };
+        return { bg: 'var(--bg-surface-secondary)', text: 'var(--text-secondary)', border: 'var(--border-subtle)', dot: '#64748b' };
     }
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
-      {/* 0. Live Clock & Dynamic Project Day Counter */}
+      {/* 0. Live Clock & Project Calendar Header Ribbon */}
       <div
         style={{
           display: 'flex',
@@ -187,65 +242,43 @@ export const ProjectCalendarView: React.FC = () => {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', background: 'rgba(14, 165, 233, 0.2)', padding: '2px 8px', borderRadius: 4 }}>
-              DAY COUNTER:
+              DATA DATE:
             </span>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary, #fff)' }}>
-              Day 22 of 90 • 24.4% Time Elapsed
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+              September 22, 2026 (Live Progress Reconciled)
             </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted, #94a3b8)' }}>
-              (Baseline Window: Sep 01 - Nov 30, 2026)
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              &bull; {enrichedSchedule.length} Master Schedule Activities
             </span>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted, #94a3b8)' }}>
-            Schedule Tasks Mapped:
-          </span>
-          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#34d399' }}>
-            {enrichedSchedule.length} Activities
-          </span>
+        {/* View Mode Toggle: Monthly Matrix vs Workfront Agenda */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-surface)', padding: 3, borderRadius: 8, border: '1px solid var(--border-default)' }}>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'matrix' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setViewMode('matrix')}
+            style={{ fontSize: '0.75rem', padding: '4px 10px', gap: 5 }}
+            title="Monthly Calendar Matrix"
+          >
+            <Grid size={14} />
+            <span>Monthly Matrix</span>
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'agenda' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setViewMode('agenda')}
+            style={{ fontSize: '0.75rem', padding: '4px 10px', gap: 5 }}
+            title="Workfront Agenda & Timeline List"
+          >
+            <List size={14} />
+            <span>Workfront Agenda</span>
+          </button>
         </div>
       </div>
 
-      {/* Empty State Banner if no schedule is uploaded */}
-      {enrichedSchedule.length === 0 && (
-        <div
-          style={{
-            padding: '3rem 2rem',
-            textAlign: 'center',
-            background: 'var(--bg-surface)',
-            border: '1px dashed var(--border-default)',
-            borderRadius: 12,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '1rem',
-          }}
-        >
-          <CalendarIcon size={40} style={{ color: '#38bdf8', opacity: 0.8 }} />
-          <div>
-            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              No Baseline Schedule Uploaded Yet
-            </h3>
-            <p style={{ margin: '0.35rem 0 0', fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: 460 }}>
-              Upload your Primavera P6 or MS Project schedule in the Ingestion Suite to automatically populate this calendar with planned activity dates and disciplines.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setActiveTab('upload')}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}
-          >
-            <span>Go to Ingestion Suite</span>
-            <ExternalLink size={15} />
-          </button>
-        </div>
-      )}
-
-      {/* 1. Header Toolbar */}
+      {/* 1. Header Toolbar & Month Navigation */}
       <div
         className="card"
         style={{
@@ -265,15 +298,18 @@ export const ProjectCalendarView: React.FC = () => {
               SCHEDULE EXECUTION CALENDAR
             </span>
             <span className="mono-pill" style={{ fontSize: '0.7rem' }}>
-              {currentProject?.name || 'Active Project'} • P6 Planned Windows
+              {currentProject?.name || 'Active Project'} • P6 Planned Execution
             </span>
           </div>
           <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-            Planned Task Windows & Milestones
+            Planned Task Windows & Key Milestones
           </h2>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Click any day box to inspect all scheduled activities, task start/finish milestones, and field evidence.
+          </span>
         </div>
 
-        {/* Month Navigation & Today Jump */}
+        {/* Month Navigation & Data Date Jump */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg-surface-secondary)', borderRadius: 'var(--radius-sm)', padding: '2px 4px', border: '1px solid var(--border-default)' }}>
             <button
@@ -285,7 +321,7 @@ export const ProjectCalendarView: React.FC = () => {
             >
               <ChevronLeft size={16} />
             </button>
-            <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)', minWidth: 140, textAlign: 'center' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)', minWidth: 150, textAlign: 'center' }}>
               {monthName}
             </span>
             <button
@@ -305,15 +341,16 @@ export const ProjectCalendarView: React.FC = () => {
             onClick={() => {
               setCurrentYear(2026);
               setCurrentMonth(8);
+              setSelectedDayDate('2026-09-22');
             }}
             style={{ fontSize: '0.75rem', fontWeight: 700 }}
           >
-            Today (IST)
+            Data Date (Sep 2026)
           </button>
         </div>
       </div>
 
-      {/* 2. Filter Bar & Status Legend */}
+      {/* 2. Filter Bar & Clear Visual Legend */}
       <div
         style={{
           display: 'flex',
@@ -327,7 +364,7 @@ export const ProjectCalendarView: React.FC = () => {
           border: '1px solid var(--border-subtle)',
         }}
       >
-        {/* Discipline Filter Pills */}
+        {/* Discipline Filters */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
             Discipline:
@@ -368,180 +405,462 @@ export const ProjectCalendarView: React.FC = () => {
           })}
         </div>
 
-        {/* Legend */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.725rem' }}>
+        {/* Clear Visual Legend */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: '0.725rem', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: '#059669', display: 'inline-block' }} />
-            <span style={{ color: 'var(--text-muted)' }}>Completed (100%)</span>
+            <span style={{ fontSize: '0.85rem' }}>🚀</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Activity Start</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--brand-primary)', display: 'inline-block' }} />
-            <span style={{ color: 'var(--text-muted)' }}>In Progress</span>
+            <span style={{ fontSize: '0.85rem' }}>🏁</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Milestone Finish</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: '#e11d48', display: 'inline-block' }} />
-            <span style={{ color: 'var(--text-muted)' }}>Delayed Task</span>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />
+            <span style={{ color: '#ef4444', fontWeight: 700 }}>Critical Delay</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
-            <span style={{ color: 'var(--text-muted)' }}>Today's Date</span>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--brand-primary)' }} />
+            <span style={{ color: 'var(--brand-primary)', fontWeight: 700 }}>Data Date</span>
           </div>
         </div>
       </div>
 
-      {/* 3. Main Monthly Calendar Grid */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        {/* Day of Week Headers */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(7, 1fr)',
-            background: 'var(--bg-surface-secondary)',
-            borderBottom: '1px solid var(--border-subtle)',
-            textAlign: 'center',
-            fontWeight: 800,
-            fontSize: '0.75rem',
-            color: 'var(--text-secondary)',
-            padding: '0.65rem 0',
-          }}
-        >
-          <div>SUN</div>
-          <div>MON</div>
-          <div>TUE</div>
-          <div>WED</div>
-          <div>THU</div>
-          <div>FRI</div>
-          <div>SAT</div>
-        </div>
+      {/* VIEW 1: MONTHLY MATRIX VIEW */}
+      {viewMode === 'matrix' && (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Day of Week Headers */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, 1fr)',
+              background: 'var(--bg-surface-secondary)',
+              borderBottom: '1px solid var(--border-subtle)',
+              textAlign: 'center',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              color: 'var(--text-secondary)',
+              padding: '0.65rem 0',
+            }}
+          >
+            <div>SUN</div>
+            <div>MON</div>
+            <div>TUE</div>
+            <div>WED</div>
+            <div>THU</div>
+            <div>FRI</div>
+            <div>SAT</div>
+          </div>
 
-        {/* 42-Cell Grid */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(7, 1fr)',
-            gridAutoRows: 'minmax(110px, auto)',
-            borderCollapse: 'collapse',
-          }}
-        >
-          {calendarDays.map((day, idx) => {
-            const isWeekend = idx % 7 === 0 || idx % 7 === 6;
+          {/* 42-Cell Clean Monthly Grid */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, 1fr)',
+              gridAutoRows: 'minmax(115px, auto)',
+              borderCollapse: 'collapse',
+            }}
+          >
+            {calendarDays.map((day, idx) => {
+              const isWeekend = idx % 7 === 0 || idx % 7 === 6;
+              const isSelected = selectedDayDate === day.dateStr;
 
-            return (
-              <div
-                key={idx}
-                style={{
-                  padding: '6px',
-                  borderRight: (idx + 1) % 7 === 0 ? 'none' : '1px solid var(--border-subtle)',
-                  borderBottom: '1px solid var(--border-subtle)',
-                  background: day.isToday
-                    ? 'rgba(245, 158, 11, 0.07)'
-                    : day.isCurrentMonth
-                    ? isWeekend
-                      ? 'rgba(255, 255, 255, 0.02)'
-                      : 'var(--bg-surface)'
-                    : 'var(--bg-surface-secondary)',
-                  opacity: day.isCurrentMonth ? 1 : 0.45,
-                  minHeight: 110,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                  position: 'relative',
-                }}
-              >
-                {/* Day Number Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span
-                    style={{
-                      fontSize: '0.775rem',
-                      fontWeight: day.isToday ? 800 : 600,
-                      color: day.isToday ? '#b45309' : 'var(--text-primary)',
-                      width: 22,
-                      height: 22,
-                      borderRadius: '50%',
-                      background: day.isToday ? '#fef3c7' : 'transparent',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {day.dayNumber}
-                  </span>
-
-                  {day.isToday && (
+              return (
+                <div
+                  key={idx}
+                  onClick={() => {
+                    setSelectedDayDate(day.dateStr);
+                    if (day.activeTasks.length > 0) {
+                      setSelectedActivity(day.activeTasks[0]);
+                    }
+                  }}
+                  style={{
+                    padding: '8px',
+                    borderRight: (idx + 1) % 7 === 0 ? 'none' : '1px solid var(--border-subtle)',
+                    borderBottom: '1px solid var(--border-subtle)',
+                    background: isSelected
+                      ? 'rgba(14, 165, 233, 0.12)'
+                      : day.isDataDate
+                      ? 'rgba(14, 165, 233, 0.06)'
+                      : day.isCurrentMonth
+                      ? isWeekend
+                        ? 'rgba(255, 255, 255, 0.015)'
+                        : 'var(--bg-surface)'
+                      : 'var(--bg-surface-secondary)',
+                    opacity: day.isCurrentMonth ? 1 : 0.4,
+                    minHeight: 115,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 5,
+                    position: 'relative',
+                    cursor: 'pointer',
+                    boxShadow: isSelected ? 'inset 0 0 0 2px var(--brand-primary)' : undefined,
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {/* Day Number Header & Data Date Tag */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span
                       style={{
-                        fontSize: '0.6rem',
-                        fontWeight: 800,
-                        color: '#b45309',
-                        background: '#fef3c7',
-                        padding: '1px 5px',
-                        borderRadius: 3,
-                        textTransform: 'uppercase',
+                        fontSize: '0.8rem',
+                        fontWeight: day.isDataDate ? 800 : day.isToday ? 800 : 600,
+                        color: day.isDataDate ? '#ffffff' : day.isToday ? '#b45309' : 'var(--text-primary)',
+                        width: 24,
+                        height: 24,
+                        borderRadius: '50%',
+                        background: day.isDataDate ? 'var(--brand-primary)' : day.isToday ? '#fef3c7' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
-                      Today IST
+                      {day.dayNumber}
                     </span>
+
+                    {day.isDataDate && (
+                      <span
+                        style={{
+                          fontSize: '0.6rem',
+                          fontWeight: 800,
+                          color: '#ffffff',
+                          background: 'var(--brand-primary)',
+                          padding: '1px 5px',
+                          borderRadius: 3,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        DATA DATE
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Clean Content Summary: Milestone Badges & Density Count */}
+                  {day.isCurrentMonth && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+                      {/* Milestone: Starting Activity */}
+                      {day.startingTasks.slice(0, 1).map(act => (
+                        <div
+                          key={`start-${act.activityId}`}
+                          style={{
+                            fontSize: '0.675rem',
+                            fontWeight: 700,
+                            padding: '2px 5px',
+                            borderRadius: 4,
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            color: '#10b981',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={`Starts: ${act.activityId} ${act.activityName}`}
+                        >
+                          🚀 {act.activityId} Start
+                        </div>
+                      ))}
+
+                      {/* Milestone: Finishing Activity */}
+                      {day.finishingTasks.slice(0, 1).map(act => (
+                        <div
+                          key={`fin-${act.activityId}`}
+                          style={{
+                            fontSize: '0.675rem',
+                            fontWeight: 700,
+                            padding: '2px 5px',
+                            borderRadius: 4,
+                            background: 'rgba(139, 92, 246, 0.15)',
+                            color: '#8b5cf6',
+                            border: '1px solid rgba(139, 92, 246, 0.3)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={`Milestone Finish: ${act.activityId} ${act.activityName}`}
+                        >
+                          🏁 {act.activityId} Finish
+                        </div>
+                      ))}
+
+                      {/* Delay Warning Flag if tasks are in critical float */}
+                      {day.delayedTasks.length > 0 && (
+                        <div
+                          style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            padding: '1px 4px',
+                            borderRadius: 3,
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            color: '#f43f5e',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 3,
+                          }}
+                        >
+                          <AlertTriangle size={10} />
+                          <span>{day.delayedTasks.length} Delayed</span>
+                        </div>
+                      )}
+
+                      {/* Workload Indicator: Total Active Tasks & Discipline Dots */}
+                      {day.activeTasks.length > 0 && (
+                        <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 2 }}>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                            {day.activeTasks.length} {day.activeTasks.length === 1 ? 'task' : 'tasks'}
+                          </span>
+                          <div style={{ display: 'flex', gap: 3 }}>
+                            {Array.from(new Set(day.activeTasks.map(t => t.discipline))).slice(0, 3).map(disc => {
+                              const c = getDisciplineColor(disc);
+                              return (
+                                <span
+                                  key={disc}
+                                  style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: '50%',
+                                    background: c.dot,
+                                    display: 'inline-block',
+                                  }}
+                                  title={disc}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-                {/* Task Bars in Day */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, overflowY: 'auto', maxHeight: 85 }}>
-                  {day.tasks.slice(0, 3).map(task => {
-                    const isComplete = task.status === 'Completed' || (task.progressPercent || 0) >= 100;
-                    const isDelayed = (task.varianceDays || 0) > 0 || task.status === 'Delayed';
-                    const colors = getDisciplineColor(task.discipline);
+      {/* VIEW 2: WORKFRONT AGENDA & TIMELINE VIEW */}
+      {viewMode === 'agenda' && (
+        <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Chronological Workfront Execution Schedule
+            </h3>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Showing {enrichedSchedule.filter(s => selectedDiscipline === 'ALL' || s.discipline === selectedDiscipline).length} activities
+            </span>
+          </div>
 
-                    return (
-                      <div
-                        key={task.activityId}
-                        onClick={() => setSelectedActivity(task)}
-                        style={{
-                          fontSize: '0.675rem',
-                          padding: '2px 5px',
-                          borderRadius: 3,
-                          cursor: 'pointer',
-                          background: isComplete
-                            ? 'rgba(5, 150, 105, 0.15)'
-                            : isDelayed
-                            ? 'rgba(225, 29, 72, 0.15)'
-                            : colors.bg,
-                          borderLeft: `3px solid ${
-                            isComplete ? '#059669' : isDelayed ? '#e11d48' : colors.text
-                          }`,
-                          color: 'var(--text-primary)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 4,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                        title={`${task.activityId}: ${task.activityName} (${task.progressPercent || 0}%)`}
-                      >
-                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.65rem' }}>
-                          {task.activityId}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+            {enrichedSchedule
+              .filter(s => selectedDiscipline === 'ALL' || s.discipline === selectedDiscipline)
+              .map(act => {
+                const colors = getDisciplineColor(act.discipline);
+                const isDelayed = (act.varianceDays && act.varianceDays < -2) || act.delayRisk === 'High' || act.status === 'Delayed';
+                const isSelected = selectedActivity?.activityId === act.activityId;
+
+                return (
+                  <div
+                    key={act.activityId}
+                    onClick={() => setSelectedActivity(act)}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      borderRadius: 8,
+                      background: isSelected ? 'var(--bg-surface-secondary)' : 'var(--bg-surface)',
+                      border: isSelected ? '1px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.75rem',
+                      cursor: 'pointer',
+                      borderLeft: `4px solid ${isDelayed ? '#f43f5e' : colors.text}`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 260 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="mono-pill" style={{ color: 'var(--brand-primary)', fontWeight: 800 }}>
+                          {act.activityId}
                         </span>
-                        <span style={{ fontWeight: 800, fontSize: '0.625rem', opacity: 0.85 }}>
-                          {task.progressPercent || 0}%
+                        <span className="mono-pill" style={{ fontSize: '0.65rem' }}>
+                          WBS {act.wbs}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: colors.bg,
+                            color: colors.text,
+                          }}
+                        >
+                          {act.discipline}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {act.area}
                         </span>
                       </div>
-                    );
-                  })}
 
-                  {day.tasks.length > 3 && (
-                    <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', fontWeight: 700, paddingLeft: 2 }}>
-                      +{day.tasks.length - 3} more tasks
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                        {act.activityName}
+                      </div>
+
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                        Planned Window: <strong>{act.plannedStart}</strong> &rarr; <strong>{act.plannedFinish}</strong>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar & Status */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 140 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: 700, marginBottom: 3 }}>
+                          <span>Progress</span>
+                          <span>{act.progressPercent || 0}%</span>
+                        </div>
+                        <div style={{ width: '100%', height: 6, background: 'var(--bg-subtle)', borderRadius: 999, overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${act.progressPercent || 0}%`,
+                              height: '100%',
+                              background: (act.progressPercent || 0) >= 100 ? '#10b981' : isDelayed ? '#f43f5e' : 'var(--brand-primary)',
+                              borderRadius: 999,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: 'right', minWidth: 90 }}>
+                        <span
+                          className={`status-pill ${
+                            (act.progressPercent || 0) >= 100 ? 'status-ready' : isDelayed ? 'status-review' : 'status-ready'
+                          }`}
+                          style={{ fontSize: '0.68rem' }}
+                        >
+                          {act.status}
+                        </span>
+                        {isDelayed && (
+                          <div style={{ fontSize: '0.65rem', color: '#f43f5e', fontWeight: 700, marginTop: 2 }}>
+                            Variance: {act.varianceDays || -3}d
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* 4. Selected Activity Detail Drawer / Card */}
+      {/* 3. INTERACTIVE DAY QUICK-INSPECTOR PANEL */}
+      {selectedDayInfo && (
+        <div
+          className="card"
+          style={{
+            padding: '1.25rem 1.4rem',
+            background: 'var(--bg-surface)',
+            border: '1.5px solid var(--brand-primary)',
+            boxShadow: 'var(--shadow-md)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.85rem',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CalendarCheck size={18} style={{ color: 'var(--brand-primary)' }} />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Workfront Schedule for {selectedDayInfo.dateStr}
+              </h3>
+              {selectedDayInfo.isDataDate && (
+                <span className="mono-pill" style={{ background: 'var(--brand-primary)', color: '#ffffff', fontWeight: 800 }}>
+                  CURRENT DATA DATE
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setSelectedDayDate(null)}
+              style={{ fontSize: '0.75rem' }}
+            >
+              Close Day View
+            </button>
+          </div>
+
+          {selectedDayInfo.activeTasks.length === 0 ? (
+            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+              No master schedule activities active or scheduled on {selectedDayInfo.dateStr}.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem' }}>
+              {selectedDayInfo.activeTasks.map(task => {
+                const colors = getDisciplineColor(task.discipline);
+                const isStartingToday = task.plannedStart === selectedDayInfo.dateStr;
+                const isFinishingToday = task.plannedFinish === selectedDayInfo.dateStr;
+
+                return (
+                  <div
+                    key={task.activityId}
+                    style={{
+                      padding: '0.75rem',
+                      background: 'var(--bg-surface-secondary)',
+                      borderRadius: 6,
+                      border: '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <span className="mono-pill" style={{ color: 'var(--brand-primary)', fontWeight: 800 }}>
+                        {task.activityId}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          padding: '1px 5px',
+                          borderRadius: 3,
+                          background: colors.bg,
+                          color: colors.text,
+                        }}
+                      >
+                        {task.discipline}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      {task.activityName}
+                    </div>
+
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      Window: {task.plannedStart} &rarr; {task.plannedFinish}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      {isStartingToday && (
+                        <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#10b981', background: 'rgba(16, 185, 129, 0.12)', padding: '2px 6px', borderRadius: 4 }}>
+                          🚀 Starting Today
+                        </span>
+                      )}
+                      {isFinishingToday && (
+                        <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.12)', padding: '2px 6px', borderRadius: 4 }}>
+                          🏁 Finishing Today
+                        </span>
+                      )}
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                        Progress: <strong>{task.progressPercent || 0}%</strong>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 4. Selected Activity Detail Drawer */}
       {selectedActivity && (
         <div
           className="card"
@@ -549,7 +868,7 @@ export const ProjectCalendarView: React.FC = () => {
             padding: '1.15rem 1.4rem',
             background: 'var(--bg-surface)',
             border: '1.5px solid var(--brand-primary)',
-            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+            boxShadow: 'var(--shadow-md)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
@@ -573,7 +892,7 @@ export const ProjectCalendarView: React.FC = () => {
                 {selectedActivity.activityName}
               </h3>
               <p style={{ margin: '4px 0 0', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-                Planned Window: <strong>{selectedActivity.plannedStart}</strong> &rarr; <strong>{selectedActivity.plannedFinish}</strong> ({selectedActivity.plannedDurationDays} days) • Progress: <strong>{selectedActivity.progressPercent || 0}%</strong>
+                Planned Window: <strong>{selectedActivity.plannedStart}</strong> &rarr; <strong>{selectedActivity.plannedFinish}</strong> ({selectedActivity.plannedDurationDays || 14} days) • Progress: <strong>{selectedActivity.progressPercent || 0}%</strong>
               </p>
             </div>
 

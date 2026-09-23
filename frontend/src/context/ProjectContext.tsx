@@ -213,7 +213,7 @@ interface ProjectContextType {
   setIsProjectSelectionModalOpen: (open: boolean) => void;
   createNewProject: (projectName?: string, contractId?: string, location?: string) => Promise<void>;
   loadExistingDemoProject: () => Promise<void>;
-  reverifyMatch: (updateId: string) => Promise<void>;
+  reverifyMatch: (updateId: string, updatedFields?: Partial<SiteUpdate>) => Promise<any>;
   isProjectAnalyticsOpen: boolean;
   setIsProjectAnalyticsOpen: (open: boolean) => void;
   isSystemTourOpen: boolean;
@@ -1960,15 +1960,26 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   /**
-   * Re-verify single match with AI
+   * Re-verify single match with AI (supports live edited fields from Inspector)
    */
-  const reverifyMatch = async (updateId: string) => {
+  const reverifyMatch = async (updateId: string, updatedFields?: Partial<SiteUpdate>) => {
     setIsLoading(true);
     try {
       const targetUpdate = siteUpdates.find(u => u.id === updateId);
-      if (!targetUpdate) return;
+      if (!targetUpdate) return null;
 
-      const singleMatch = matchUpdateToSchedule(targetUpdate, schedule);
+      const mergedUpdate: SiteUpdate = updatedFields
+        ? { ...targetUpdate, ...updatedFields }
+        : targetUpdate;
+
+      if (updatedFields) {
+        setSiteUpdates(prev => prev.map(u => (u.id === updateId ? mergedUpdate : u)));
+        if (backendStatus === 'connected' && !offlineMode) {
+          api.updateSiteUpdate(updateId, updatedFields).catch(console.error);
+        }
+      }
+
+      const singleMatch = matchUpdateToSchedule(mergedUpdate, schedule);
       setMatchResults(prev => ({
         ...prev,
         [updateId]: singleMatch,
@@ -1976,19 +1987,23 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       addToast({
         type: 'success',
-        title: 'Match Re-verified with AI',
-        message: `Update ${updateId} re-evaluated: ${singleMatch.confidenceScore}% (${singleMatch.category.toUpperCase()}).`,
+        title: 'Match Re-analyzed with AI',
+        message: `Update ${updateId} re-evaluated: ${singleMatch.confidenceScore}% (${singleMatch.category.toUpperCase()}) for ${singleMatch.candidateActivityId || 'Unlinked'}.`,
       });
+
+      return singleMatch;
     } catch {
       addToast({
         type: 'error',
         title: 'Re-verification Failed',
         message: 'Could not re-verify match.',
       });
+      return null;
     } finally {
       setIsLoading(false);
     }
   };
+
 
 
   const handlePlannerAction = async (

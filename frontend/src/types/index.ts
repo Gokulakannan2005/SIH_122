@@ -490,3 +490,40 @@ export interface SihPsCoverageItem {
   targetStepNumber: number;
   status: 'demonstrated' | 'active';
 }
+
+export interface InstitutionalProjectMemory {
+  id: string;
+  name: string;
+  shortCode: string;
+  client: string;
+  location: string;
+  executionWindow: string;
+  status: 'active' | 'completed';
+  progress: number;
+  spi: string;
+  totalDelayDays: number;
+  recordsAnalyzed: number;
+  recurringDelayTriggers: {
+    trigger: string;
+    discipline: string;
+    impactDays: number;
+    recurrenceRate: string;
+    rootCause: string;
+  }[];
+  institutionalInsights: string[];
+  calibratedBaselineRule: string;
+  claimsPrevented: string;
+}
+
+export interface CrossProjectDelayPattern {
+  id: string;
+  category: string;
+  discipline: string;
+  totalDelayDaysAcrossProjects: number;
+  projectsImpacted: string[];
+  averageLagPerInstance: string;
+  recurrenceFrequency: string;
+  historicalTrend: string;
+  recommendation: string;
+}
+

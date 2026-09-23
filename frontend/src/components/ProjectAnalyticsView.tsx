@@ -157,23 +157,47 @@ export const ProjectAnalyticsView: React.FC = () => {
     });
   }, [effectiveSchedule]);
 
-  // 3. S-Curve Data Points Generator with Real Project Dates (Data Date: Sep 22, 2026)
+  // 3. S-Curve Data Points Generator with Guaranteed Monotonic Cumulative Progress
   const sCurveData = useMemo(() => {
-    const current = metrics.avgActualProgress || 68;
+    const curActual = Math.max(0, Math.min(100, metrics.avgActualProgress || 21));
+    const curPlanned = Math.max(curActual, Math.min(100, metrics.avgPlannedProgress || Math.round(curActual * 1.14)));
     const months = ['May 2026', 'Jun 2026', 'Jul 2026', 'Aug 2026', 'Sep 2026 (Data Date)', 'Oct 2026', 'Nov 2026', 'Dec 2026'];
     
+    // Pre-data date points (months 0..3) scaled monotonically up to curActual and curPlanned
+    const m0Planned = Math.max(3, Math.round(curPlanned * 0.16));
+    const m0Actual = Math.max(2, Math.round(curActual * 0.16));
+
+    const m1Planned = Math.max(m0Planned + 3, Math.round(curPlanned * 0.38));
+    const m1Actual = Math.max(m0Actual + 2, Math.round(curActual * 0.38));
+
+    const m2Planned = Math.max(m1Planned + 4, Math.round(curPlanned * 0.62));
+    const m2Actual = Math.max(m1Actual + 3, Math.round(curActual * 0.60));
+
+    const m3Planned = Math.max(m2Planned + 3, Math.round(curPlanned * 0.85));
+    const m3Actual = Math.max(m2Actual + 2, Math.round(curActual * 0.84));
+
+    // Post-data date points (months 5..7) progressing monotonically to 100%
+    const remainingPlanned = 100 - curPlanned;
+    const remainingForecast = 100 - curActual;
+
+    const m5Planned = Math.min(96, Math.round(curPlanned + remainingPlanned * 0.40));
+    const m5Forecast = Math.min(94, Math.round(curActual + remainingForecast * 0.35));
+
+    const m6Planned = Math.min(99, Math.round(curPlanned + remainingPlanned * 0.78));
+    const m6Forecast = Math.min(98, Math.round(curActual + remainingForecast * 0.72));
+
     const points = [
-      { month: months[0], planned: 12, actual: 12, milestone: 'Site Mobilization' },
-      { month: months[1], planned: 28, actual: 27, milestone: 'Foundation Pours' },
-      { month: months[2], planned: 45, actual: 44, milestone: 'Steel Erection' },
-      { month: months[3], planned: 60, actual: 58, milestone: 'Equipment Rigging' },
-      { month: months[4], planned: 74, actual: current, milestone: 'Line 24-CW Spools' },
-      { month: months[5], planned: 85, actual: null, forecast: Math.min(100, current + 14), milestone: 'Hydrotesting' },
-      { month: months[6], planned: 94, actual: null, forecast: Math.min(100, current + 24), milestone: 'Loop Clearance' },
+      { month: months[0], planned: m0Planned, actual: m0Actual, forecast: null, milestone: 'Site Mobilization' },
+      { month: months[1], planned: m1Planned, actual: m1Actual, forecast: null, milestone: 'Foundation Pours' },
+      { month: months[2], planned: m2Planned, actual: m2Actual, forecast: null, milestone: 'Steel Erection' },
+      { month: months[3], planned: m3Planned, actual: m3Actual, forecast: null, milestone: 'Equipment Rigging' },
+      { month: months[4], planned: curPlanned, actual: curActual, forecast: curActual, milestone: 'Line 24-CW Spools' },
+      { month: months[5], planned: m5Planned, actual: null, forecast: m5Forecast, milestone: 'Hydrotesting' },
+      { month: months[6], planned: m6Planned, actual: null, forecast: m6Forecast, milestone: 'Loop Clearance' },
       { month: months[7], planned: 100, actual: null, forecast: 100, milestone: 'Pre-Commissioning' },
     ];
     return points;
-  }, [metrics.avgActualProgress]);
+  }, [metrics.avgActualProgress, metrics.avgPlannedProgress]);
 
   // 4. Critical Path Milestones & Baseline Float Health
   const criticalMilestones = [
@@ -208,12 +232,20 @@ export const ProjectAnalyticsView: React.FC = () => {
   const plannedPath = sCurveData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.planned)}`).join(' ');
   const actualPoints = sCurveData.filter(d => d.actual !== null);
   const actualPath = actualPoints.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.actual!)}`).join(' ');
-  const forecastPoints = sCurveData.filter(d => d.forecast !== null || d.actual !== null);
-  const forecastPath = forecastPoints.map((d, i) => {
-    const val = d.forecast !== undefined && d.forecast !== null ? d.forecast : d.actual!;
-    const originalIdx = sCurveData.indexOf(d);
-    return `${i === 0 ? 'M' : 'L'} ${getX(originalIdx)} ${getY(val)}`;
+  
+  // Forecast path strictly starts from Data Date (month index 4) through completion
+  const forecastIndices = [4, 5, 6, 7];
+  const forecastPath = forecastIndices.map((idx, i) => {
+    const pt = sCurveData[idx];
+    const val = pt.forecast !== null && pt.forecast !== undefined ? pt.forecast : (pt.actual ?? 100);
+    return `${i === 0 ? 'M' : 'L'} ${getX(idx)} ${getY(val)}`;
   }).join(' ');
+
+  // Gradient area paths
+  const actualAreaPath = actualPoints.length > 0
+    ? `${actualPath} L ${getX(actualPoints.length - 1)} ${getY(0)} L ${getX(0)} ${getY(0)} Z`
+    : '';
+  const plannedAreaPath = `${plannedPath} L ${getX(sCurveData.length - 1)} ${getY(0)} L ${getX(0)} ${getY(0)} Z`;
 
   // Donut chart calculations
   const donutData = [
@@ -482,7 +514,15 @@ export const ProjectAnalyticsView: React.FC = () => {
                 </g>
               ))}
 
-              {/* Forecast Dashed Line */}
+              {/* Shaded Area Fills under curves */}
+              {plannedAreaPath && (
+                <path d={plannedAreaPath} fill="url(#plannedAreaGrad)" pointerEvents="none" />
+              )}
+              {actualAreaPath && (
+                <path d={actualAreaPath} fill="url(#actualAreaGrad)" pointerEvents="none" />
+              )}
+
+              {/* Forecast Dashed Line (From Data Date to Completion) */}
               <path
                 d={forecastPath}
                 fill="none"
@@ -534,6 +574,7 @@ export const ProjectAnalyticsView: React.FC = () => {
               {sCurveData.map((d, i) => {
                 const x = getX(i);
                 const isCurrent = i === 4;
+                const isFuture = i > 4;
                 return (
                   <g key={d.month}>
                     <text
@@ -565,11 +606,11 @@ export const ProjectAnalyticsView: React.FC = () => {
                       r={3.5}
                       fill="#38bdf8"
                       style={{ cursor: 'pointer' }}
-                      onMouseEnter={() => setHoveredPoint({ x, y: getY(d.planned), label: d.month, planned: d.planned, actual: d.actual || d.planned })}
+                      onMouseEnter={() => setHoveredPoint({ x, y: getY(d.planned), label: `${d.month} (${d.milestone})`, planned: d.planned, actual: d.actual ?? d.forecast ?? d.planned })}
                       onMouseLeave={() => setHoveredPoint(null)}
                     />
 
-                    {/* Actual Point */}
+                    {/* Actual Physical Point */}
                     {d.actual !== null && (
                       <circle
                         cx={x}
@@ -579,7 +620,23 @@ export const ProjectAnalyticsView: React.FC = () => {
                         stroke="#ffffff"
                         strokeWidth="1.5"
                         style={{ cursor: 'pointer' }}
-                        onMouseEnter={() => setHoveredPoint({ x, y: getY(d.actual!), label: d.month, planned: d.planned, actual: d.actual! })}
+                        onMouseEnter={() => setHoveredPoint({ x, y: getY(d.actual!), label: `${d.month} (${d.milestone})`, planned: d.planned, actual: d.actual! })}
+                        onMouseLeave={() => setHoveredPoint(null)}
+                      />
+                    )}
+
+                    {/* Forecasted Catch-up Point for Future Months */}
+                    {isFuture && d.forecast !== null && d.forecast !== undefined && (
+                      <circle
+                        cx={x}
+                        cy={getY(d.forecast)}
+                        r={4}
+                        fill="#f59e0b"
+                        stroke="#ffffff"
+                        strokeWidth="1.5"
+                        strokeDasharray="2 1"
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => setHoveredPoint({ x, y: getY(d.forecast!), label: `${d.month} (Projected Catch-up)`, planned: d.planned, actual: d.forecast! })}
                         onMouseLeave={() => setHoveredPoint(null)}
                       />
                     )}

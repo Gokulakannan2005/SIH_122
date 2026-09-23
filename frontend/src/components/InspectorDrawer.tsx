@@ -102,21 +102,56 @@ export const InspectorDrawer: React.FC = () => {
     );
   });
 
+  // Dynamic working update reflecting live unsaved edited fields
+  const workingUpdate: typeof update = useMemo(() => ({
+    ...update,
+    extractedDescription: editDesc,
+    area: editArea,
+    eventStatus: editStatus,
+    reportDate: editDate,
+  }), [update, editDesc, editArea, editStatus, editDate]);
+
   const selectedActivityObj = schedule.find(a => a.activityId === selectedActivityId);
 
-  // Dynamic multi-factor evaluation for selected activity
-  const dynamicEvaluation = selectedActivityObj ? evaluateMatch(update, selectedActivityObj) : null;
+  // Dynamic multi-factor evaluation for selected activity using live edited fields!
+  const dynamicEvaluation = selectedActivityObj ? evaluateMatch(workingUpdate, selectedActivityObj) : null;
   const activeScoreBreakdown = dynamicEvaluation?.scoreBreakdown || match.scoreBreakdown;
   const activeConfidence = dynamicEvaluation?.score ?? match.confidenceScore;
   const activeReasons = dynamicEvaluation?.reasons?.length ? dynamicEvaluation.reasons : match.matchReasons;
 
   // Calculate schedule variance if linked
-  const varianceDays = selectedActivityObj && update.reportDate
-    ? diffDaysBetweenDates(selectedActivityObj.plannedStart, update.reportDate)
+  const varianceDays = selectedActivityObj && (editDate || update.reportDate)
+    ? diffDaysBetweenDates(selectedActivityObj.plannedStart, editDate || update.reportDate)
     : null;
 
-  const saveEdits = () => {
-    handleEditUpdate(update.id, {
+  const [isReanalyzing, setIsReanalyzing] = useState(false);
+
+  // Dedicated Re-analyse Action: Immediately saves edited fields & triggers AI matching
+  const handleReanalyze = async () => {
+    setIsReanalyzing(true);
+    try {
+      const updatedFields = {
+        extractedDescription: editDesc,
+        area: editArea,
+        eventStatus: editStatus,
+        reportDate: editDate,
+      };
+
+      const freshMatch = await reverifyMatch(update.id, updatedFields);
+      if (freshMatch?.candidateActivityId) {
+        setSelectedActivityId(freshMatch.candidateActivityId);
+      }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2500);
+    } catch (err) {
+      console.error('Re-analysis error:', err);
+    } finally {
+      setIsReanalyzing(false);
+    }
+  };
+
+  const saveEdits = async () => {
+    await handleEditUpdate(update.id, {
       extractedDescription: editDesc,
       area: editArea,
       eventStatus: editStatus,
@@ -362,10 +397,23 @@ export const InspectorDrawer: React.FC = () => {
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Edit3 size={13} style={{ color: 'var(--brand-primary)' }} /> Update Field Parameters
                   </span>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={saveEdits}>
-                    <Save size={12} />
-                    <span>{saveSuccess ? 'Saved!' : 'Save Edits'}</span>
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={saveEdits} title="Save edits to field record">
+                      <Save size={12} />
+                      <span>{saveSuccess ? 'Saved!' : 'Save'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={handleReanalyze}
+                      disabled={isReanalyzing}
+                      style={{ gap: 4, fontWeight: 700 }}
+                      title="Save edits and re-run AI matching engine immediately"
+                    >
+                      <Sparkles size={12} className={isReanalyzing ? 'animate-spin' : ''} />
+                      <span>{isReanalyzing ? 'Re-analysing...' : 'Re-analyse'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -401,6 +449,16 @@ export const InspectorDrawer: React.FC = () => {
                       <option value="Completed">Completed</option>
                     </select>
                   </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '0.725rem' }}>Report Date (YYYY-MM-DD):</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={editDate}
+                    onChange={e => setEditDate(e.target.value)}
+                  />
                 </div>
               </div>
             )}
@@ -590,23 +648,25 @@ export const InspectorDrawer: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
-                onClick={() => reverifyMatch(update.id)}
+                onClick={handleReanalyze}
+                disabled={isReanalyzing}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.45rem',
-                  padding: '0.4rem 0.85rem',
+                  padding: '0.45rem 0.95rem',
                   borderRadius: 6,
                   border: '1px solid var(--brand-primary)',
                   background: 'rgba(14, 165, 233, 0.12)',
                   color: 'var(--brand-primary)',
                   fontSize: '0.75rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
+                  fontWeight: 800,
+                  cursor: isReanalyzing ? 'wait' : 'pointer',
                 }}
+                title="Save changes and re-run AI matching engine"
               >
-                <Sparkles size={13} />
-                <span>Re-verify Match with AI</span>
+                <Sparkles size={13} className={isReanalyzing ? 'animate-spin' : ''} />
+                <span>{isReanalyzing ? 'Re-analysing with AI...' : 'Re-analyse Match with AI'}</span>
               </button>
             </div>
           </div>

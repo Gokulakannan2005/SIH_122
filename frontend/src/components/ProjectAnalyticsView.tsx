@@ -93,7 +93,14 @@ export const ProjectAnalyticsView: React.FC = () => {
     // Field updates count
     const updatesList = Array.isArray(siteUpdates) ? siteUpdates : [];
     const totalUpdates = updatesList.length;
-    const pendingReview = updatesList.filter(u => u.status === 'Draft' || u.status === 'Unassigned').length;
+    let pendingReview = 0;
+    updatesList.forEach(u => {
+      const dec = plannerDecisions ? plannerDecisions[u.id] : undefined;
+      const match = matchResults ? (matchResults as any)[u.id] : undefined;
+      const isApproved = dec?.status === 'approved' || (!dec && match?.category === 'ready' && (match?.confidenceScore || 0) >= 90);
+      const isUnplanned = dec?.status === 'unplanned' || (!dec && match?.category === 'unplanned');
+      if (!isApproved && !isUnplanned) pendingReview++;
+    });
 
     return {
       totalActivities,

@@ -341,7 +341,7 @@ export const ProjectInfoView: React.FC = () => {
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={() => exportPrimaveraP6XER(enrichedSchedule)}
+                onClick={() => exportPrimaveraP6XER(enrichedSchedule, siteUpdates, plannerDecisions)}
                 title="Export Primavera P6 XER file"
                 style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem' }}
               >
@@ -1145,7 +1145,7 @@ export const ProjectInfoView: React.FC = () => {
                                     {linkedUpdates.map(u => {
                                       const dec = plannerDecisions[u.id];
                                       const m = matchResults[u.id];
-                                      const hasImg = u.images && u.images.length > 0;
+                                      const firstImg = u.images && u.images.length > 0 ? u.images[0] : null;
 
                                       return (
                                         <div
@@ -1171,9 +1171,9 @@ export const ProjectInfoView: React.FC = () => {
                                             <span style={{ fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                               &ldquo;{u.extractedDescription || u.rawText}&rdquo;
                                             </span>
-                                            {hasImg && (
+                                            {firstImg && (
                                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#0284c7', fontSize: '0.7rem', fontWeight: 700 }}>
-                                                <Camera size={11} /> {u.images[0].confirmedTag || 'Photo Attached'}
+                                                <Camera size={11} /> {firstImg.confirmedTag || 'Photo Attached'}
                                               </span>
                                             )}
                                           </div>

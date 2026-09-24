@@ -158,15 +158,15 @@ export const formatDisplayDate = (dateStr?: string): string => {
 /**
  * User-friendly Variance Badge Text (e.g. "+3d Slip", "-1d Ahead", "On Time")
  */
-export const formatVarianceBadge = (varianceDays: number = 0): { label: string; type: 'delayed' | 'ahead' | 'ontrack' } => {
+export const formatVarianceBadge = (varianceDays: number = 0): { label: string; type: 'delayed' | 'ahead' | 'ontrack'; className: string } => {
   if (varianceDays > 0) {
-    return { label: `Delayed by ${varianceDays} ${varianceDays === 1 ? 'Day' : 'Days'}`, type: 'delayed' };
+    return { label: `Delayed by ${varianceDays} ${varianceDays === 1 ? 'Day' : 'Days'}`, type: 'delayed', className: 'status-unplanned' };
   }
   if (varianceDays < 0) {
     const absDays = Math.abs(varianceDays);
-    return { label: `Early by ${absDays} ${absDays === 1 ? 'Day' : 'Days'}`, type: 'ahead' };
+    return { label: `Early by ${absDays} ${absDays === 1 ? 'Day' : 'Days'}`, type: 'ahead', className: 'status-ready' };
   }
-  return { label: 'On Schedule', type: 'ontrack' };
+  return { label: 'On Schedule', type: 'ontrack', className: 'status-review' };
 };
 
 /**

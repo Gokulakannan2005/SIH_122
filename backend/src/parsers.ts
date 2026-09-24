@@ -16,6 +16,8 @@ export interface ScheduleActivity {
   progressPercent?: number;
   varianceDays?: number;
   status?: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed';
+  l5Code?: string;
+  taskHash?: string;
 }
 
 export type EventStatus = 'Started' | 'Completed' | 'In Progress';
@@ -36,6 +38,8 @@ export interface SiteUpdate {
   supervisor?: string;
   lineEvidence?: string | number;
   isExplicitUnplanned?: boolean;
+  l5Code?: string;
+  taskHash?: string;
 }
 
 /**

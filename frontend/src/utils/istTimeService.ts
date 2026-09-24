@@ -9,6 +9,7 @@ export interface ISTTelemetry {
   dateIsoString: string; // YYYY-MM-DD
   dateFormatted: string; // e.g. "21 Sep 2026"
   timeFormatted: string; // e.g. "23:15:30 IST"
+  formattedIST: string; // e.g. "21 Sep 2026 • 23:15:30 IST"
   shiftName: string; // e.g. "Shift B (16:00 - 00:00)"
   shiftCode: 'A' | 'B' | 'N';
   shiftHours: string;
@@ -69,6 +70,7 @@ export function getISTTelemetry(dateInput?: Date): ISTTelemetry {
     dateIsoString,
     dateFormatted,
     timeFormatted,
+    formattedIST: `${dateFormatted} • ${timeFormatted}`,
     shiftName,
     shiftCode,
     shiftHours,

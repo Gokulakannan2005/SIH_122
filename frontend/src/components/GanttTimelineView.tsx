@@ -286,7 +286,7 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({
         statusBadge,
         activeMilestone: act.activityName,
         crew: `${act.discipline.slice(0, 4)} Crew-${index + 1}`,
-        manpower: act.progress === 100 ? 0 : 8 + ((index * 2) % 10),
+        manpower: actProg === 100 ? 0 : 8 + ((index * 2) % 10),
         lastUpdated: 'Live IST synced',
         linkedPhotosCount: (index % 4) + 1,
         activityId: act.activityId,
@@ -304,13 +304,14 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({
   const dynamicMilestones = useMemo(() => {
     if (!activities || activities.length === 0) return MILESTONE_PHASES;
     return activities.slice(0, 5).map((act, idx) => {
-      const isDone = act.progress === 100 || act.status === 'Completed';
+      const prog = act.status === 'Completed' ? 100 : (typeof act.progressPercent === 'number' ? act.progressPercent : 0);
+      const isDone = prog >= 100 || act.status === 'Completed';
       const isDel = (act.varianceDays || 0) > 0 || act.status === 'Delayed';
       const status: ProjectMilestonePhase['status'] = isDone ? 'completed' : isDel ? 'in-review' : 'active';
       return {
         phaseNum: idx + 1,
         name: act.activityName,
-        progress: act.progress,
+        progress: prog,
         status,
         statusText: isDel ? `Delayed ${act.varianceDays || 2}d against baseline buffer` : isDone ? '100% verified complete' : `Scheduled finish: ${act.plannedFinish}`,
         duration: `${act.plannedDurationDays || 14} Days`,

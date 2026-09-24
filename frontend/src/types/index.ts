@@ -185,6 +185,8 @@ export interface ScheduleActivity {
   varianceDays?: number;
   status?: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed';
   criticalPath?: boolean;
+  plannedDurationDays?: number;
+  delayRisk?: 'Low' | 'Medium' | 'High';
 }
 
 export type EventStatus = 'Started' | 'Completed' | 'In Progress';

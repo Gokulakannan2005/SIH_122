@@ -68,7 +68,7 @@ export const ProjectAnalyticsView: React.FC = () => {
     const totalActivities = effectiveSchedule.length;
     const completed = effectiveSchedule.filter(a => a.status === 'Completed' || getActProgress(a) >= 100).length;
     const inProgress = effectiveSchedule.filter(a => a.status === 'In Progress' || (getActProgress(a) > 0 && getActProgress(a) < 100)).length;
-    const delayed = effectiveSchedule.filter(a => a.delayRisk === 'High' || (a.varianceDays && a.varianceDays < -3) || (a.varianceDays && a.varianceDays > 0 && a.status === 'Delayed')).length;
+    const delayed = effectiveSchedule.filter(a => (a.varianceDays || 0) > 0 || a.status === 'Delayed' || a.delayRisk === 'High').length;
     const notStarted = Math.max(0, totalActivities - completed - inProgress);
 
     // Calculate weighted actual vs planned progress
@@ -124,7 +124,7 @@ export const ProjectAnalyticsView: React.FC = () => {
       const prog = getActProgress(act);
       map[disc].sumActual += prog;
       map[disc].sumPlanned += Math.min(100, Math.max(prog + 10, 50));
-      if (act.delayRisk === 'High' || (act.varianceDays && act.varianceDays < -3)) {
+      if ((act.varianceDays || 0) > 0 || act.status === 'Delayed' || act.delayRisk === 'High') {
         map[disc].delayed += 1;
       }
     });

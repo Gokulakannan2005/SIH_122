@@ -199,10 +199,10 @@ export const ProjectInfoView: React.FC = () => {
   // Project Health Metrics
   const projectMetrics = useMemo(() => {
     const total = enrichedSchedule.length;
-    const completed = enrichedSchedule.filter(a => a.status === 'Completed').length;
+    const completed = enrichedSchedule.filter(a => a.status === 'Completed' || (typeof a.progressPercent === 'number' && a.progressPercent >= 100)).length;
     const delayed = enrichedSchedule.filter(a => (a.varianceDays || 0) > 0 || a.status === 'Delayed').length;
-    const inProgress = enrichedSchedule.filter(a => a.status === 'In Progress').length;
-    const overallProgress = total > 0 ? Math.round(enrichedSchedule.reduce((acc, a) => acc + (a.progressPercent || 0), 0) / total) : 0;
+    const inProgress = enrichedSchedule.filter(a => a.status === 'In Progress' || ((a.progressPercent || 0) > 0 && (a.progressPercent || 0) < 100)).length;
+    const overallProgress = total > 0 ? Math.round(enrichedSchedule.reduce((acc, a) => acc + (a.status === 'Completed' ? 100 : (a.progressPercent || 0)), 0) / total) : 0;
     const totalEvidenceCount = Object.values(activityLinkedUpdatesMap).reduce((acc, arr) => acc + arr.length, 0);
 
     return {

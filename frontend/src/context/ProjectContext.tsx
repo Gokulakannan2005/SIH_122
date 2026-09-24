@@ -1455,26 +1455,28 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return match?.category === 'ready' && match.candidateActivityId === act.activityId;
       });
 
-      let status: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed' = 'Not Started';
-      let actualStart: string | undefined = undefined;
-      let actualFinish: string | undefined = undefined;
-      let progressPercent = 0;
-      let varianceDays = 0;
+      let status: 'Not Started' | 'In Progress' | 'Completed' | 'Delayed' = (act.status as any) || 'Not Started';
+      let actualStart: string | undefined = act.actualStart;
+      let actualFinish: string | undefined = act.actualFinish;
+      let progressPercent = typeof act.progressPercent === 'number'
+        ? act.progressPercent
+        : (act.status === 'Completed' ? 100 : 0);
+      let varianceDays = act.varianceDays || 0;
 
       if (linked.length > 0) {
         const hasCompleted = linked.some(u => u.eventStatus === 'Completed');
         const hasStarted = linked.some(u => u.eventStatus === 'Started' || u.eventStatus === 'In Progress');
 
         const dates = linked.map(u => u.reportDate).filter(Boolean).sort();
-        actualStart = dates[0];
+        if (!actualStart && dates[0]) actualStart = dates[0];
 
         if (hasCompleted) {
           status = 'Completed';
-          actualFinish = dates[dates.length - 1];
+          actualFinish = dates[dates.length - 1] || actualFinish || new Date().toISOString().split('T')[0];
           progressPercent = 100;
         } else if (hasStarted) {
           status = 'In Progress';
-          progressPercent = Math.min(85, Math.max(25, linked.length * 25));
+          progressPercent = Math.max(progressPercent, Math.min(85, Math.max(25, linked.length * 25)));
         }
       }
 

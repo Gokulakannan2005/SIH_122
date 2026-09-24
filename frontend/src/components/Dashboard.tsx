@@ -58,11 +58,11 @@ export const Dashboard: React.FC = () => {
       s => (s.varianceDays || 0) > 0 || s.status === 'Delayed'
     ).length;
     const inProgress = enrichedSchedule.filter(
-      s => (s.progressPercent || 0) > 0 && (s.progressPercent || 0) < 100
+      s => s.status === 'In Progress' || ((s.progressPercent || 0) > 0 && (s.progressPercent || 0) < 100)
     ).length;
     const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
     const overallProgress = total > 0
-      ? Math.round(enrichedSchedule.reduce((acc, act) => acc + (act.progressPercent || 0), 0) / total)
+      ? Math.round(enrichedSchedule.reduce((acc, act) => acc + (act.status === 'Completed' ? 100 : (act.progressPercent || 0)), 0) / total)
       : 0;
 
     return { total, completed, delayed, inProgress, completionPct, overallProgress };

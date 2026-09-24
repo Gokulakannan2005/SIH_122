@@ -247,8 +247,9 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({
     if (!activities || activities.length === 0) return WORKFRONT_ZONES;
 
     return activities.slice(0, 8).map((act, index) => {
+      const actProg = act.status === 'Completed' ? 100 : (typeof act.progressPercent === 'number' ? act.progressPercent : (typeof (act as any).actualProgress === 'number' ? (act as any).actualProgress : 0));
       const isDel = (act.varianceDays || 0) > 0 || act.status === 'Delayed';
-      const isComp = act.progress === 100 || act.status === 'Completed';
+      const isComp = actProg >= 100 || act.status === 'Completed';
       const isAhd = (act.varianceDays || 0) < 0;
 
       const statusKey: WorkfrontZone['status'] = isDel
@@ -275,7 +276,7 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({
         name: `${act.area || 'Zone'}: ${act.activityName}`,
         areaCode: act.area || 'Field',
         discipline: act.discipline,
-        progress: act.progress,
+        progress: actProg,
         status: statusKey,
         statusText: isDel
           ? `Delayed by ${act.varianceDays || 2} days against baseline`

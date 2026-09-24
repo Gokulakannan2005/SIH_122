@@ -35,6 +35,7 @@ export const HomeIntroductionView: React.FC = () => {
     setActiveTab,
     startGuidedDemo,
     schedule,
+    enrichedSchedule,
     siteUpdates,
     matchResults,
     plannerDecisions,
@@ -46,13 +47,24 @@ export const HomeIntroductionView: React.FC = () => {
   const istClock = useLiveISTClock();
   const isSupervisor = currentRole === 'supervisor';
 
-  // Metrics
+  // Helper to accurately extract progress percentage
+  const getActProgress = (a: any): number => {
+    if (a.status === 'Completed' || a.progressPercent === 100) return 100;
+    if (typeof a.progressPercent === 'number') return a.progressPercent;
+    if (typeof a.actualProgress === 'number') return a.actualProgress;
+    return 0;
+  };
+
+  // Metrics incorporating live reconciled actuals
   const metrics = useMemo(() => {
-    const total = schedule.length;
-    const completed = schedule.filter(a => a.progress === 100 || a.status === 'Completed').length;
-    const delayed = schedule.filter(a => (a.varianceDays || 0) > 0 || a.status === 'Delayed').length;
-    const inProgress = schedule.filter(a => a.progress > 0 && a.progress < 100).length;
-    const overallProgress = total > 0 ? Math.round(schedule.reduce((acc, a) => acc + (a.progress || 0), 0) / total) : 0;
+    const list = enrichedSchedule && enrichedSchedule.length > 0 ? enrichedSchedule : schedule;
+    const total = list.length;
+    const completed = list.filter(a => a.status === 'Completed' || getActProgress(a) >= 100).length;
+    const delayed = list.filter(a => (a.varianceDays || 0) > 0 || a.status === 'Delayed').length;
+    const inProgress = list.filter(a => a.status === 'In Progress' || (getActProgress(a) > 0 && getActProgress(a) < 100)).length;
+    const overallProgress = total > 0
+      ? Math.round(list.reduce((acc, a) => acc + getActProgress(a), 0) / total)
+      : 0;
 
     let pendingReview = 0;
     siteUpdates.forEach(u => {
@@ -64,7 +76,7 @@ export const HomeIntroductionView: React.FC = () => {
     });
 
     return { total, completed, delayed, inProgress, overallProgress, pendingReview };
-  }, [schedule, siteUpdates, plannerDecisions, matchResults]);
+  }, [enrichedSchedule, schedule, siteUpdates, plannerDecisions, matchResults]);
 
   // Top pending items for planner quick triage
   const pendingUpdates = useMemo(() => {
@@ -79,8 +91,9 @@ export const HomeIntroductionView: React.FC = () => {
 
   // Supervisor shift assigned tasks
   const shiftTasks = useMemo(() => {
-    return schedule.filter(a => a.progress < 100).slice(0, 5);
-  }, [schedule]);
+    const list = enrichedSchedule && enrichedSchedule.length > 0 ? enrichedSchedule : schedule;
+    return list.filter(a => getActProgress(a) < 100 && a.status !== 'Completed').slice(0, 5);
+  }, [enrichedSchedule, schedule]);
 
   // Recent submissions
   const recentSubmissions = useMemo(() => {
@@ -319,10 +332,10 @@ export const HomeIntroductionView: React.FC = () => {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                         <div style={{ flex: 1, height: 5, background: 'var(--border-subtle)', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ width: `${task.progress}%`, height: '100%', background: '#0284c7' }} />
+                          <div style={{ width: `${getActProgress(task)}%`, height: '100%', background: getActProgress(task) >= 100 ? '#10b981' : '#0284c7' }} />
                         </div>
                         <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-secondary)' }}>
-                          {task.progress}%
+                          {getActProgress(task)}%
                         </span>
                       </div>
                     </div>

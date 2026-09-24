@@ -59,3 +59,7 @@ coverage/
 __pycache__/
 *.pyc
 
+# Local Presenter & Demo Scripts (Not Tracked in Git)
+demo_scripts/
+
+
